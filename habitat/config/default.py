@@ -4,9 +4,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import yacs.config
 from typing import List, Optional, Union
 
-import yacs.config
 
 # from habitat.config import Config as CN # type: ignore
 
@@ -143,6 +143,7 @@ _C.TASK.SPL.TYPE = "SPL"
 # -----------------------------------------------------------------------------
 _C.TASK.SOFT_SPL = CN()
 _C.TASK.SOFT_SPL.TYPE = "SoftSPL"
+_C.TASK.SPL.MAX_COLLISIONS = _C.ENVIRONMENT.MAX_EPISODE_STEPS
 # -----------------------------------------------------------------------------
 # TopDownMap MEASUREMENT
 # -----------------------------------------------------------------------------
@@ -225,8 +226,8 @@ _C.SIMULATOR.DEFAULT_AGENT_ID = 0
 SIMULATOR_SENSOR = CN()
 SIMULATOR_SENSOR.HEIGHT = 480
 SIMULATOR_SENSOR.WIDTH = 640
-SIMULATOR_SENSOR.HFOV = 90  # horizontal field of view in degrees
-SIMULATOR_SENSOR.POSITION = [0, 1.25, 0]
+SIMULATOR_SENSOR.HFOV = 45  # horizontal field of view in degrees
+SIMULATOR_SENSOR.POSITION = [0, 0.61, 0]
 SIMULATOR_SENSOR.ORIENTATION = [0.0, 0.0, 0.0]  # Euler's angles
 # -----------------------------------------------------------------------------
 # RGB SENSOR

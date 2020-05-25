@@ -4,37 +4,24 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Dict, List, Optional, Type, Union
-
 import attr
 import numpy as np
 from gym import spaces
-
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (
-    EmbodiedTask,
-    Measure,
-    SimulatorTaskAction,
-)
+from habitat.core.embodied_task import (EmbodiedTask, Measure,
+                                        SimulatorTaskAction)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (
-    AgentState,
-    RGBSensor,
-    Sensor,
-    SensorTypes,
-    ShortestPathPoint,
-    Simulator,
-)
+from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
+                                    ShortestPathPoint, Simulator)
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (
-    quaternion_from_coeff,
-    quaternion_rotate_vector,
-)
+from habitat.utils.geometry_utils import (quaternion_from_coeff,
+                                          quaternion_rotate_vector)
 from habitat.utils.visualizations import fog_of_war, maps
+from typing import Any, Dict, List, Optional, Type, Union
 
 cv2 = try_cv2_import()
 
@@ -519,14 +506,22 @@ class Success(Measure):
             DistanceToGoal.cls_uuid
         ].get_metric()
 
-        if (
-            hasattr(task, "is_stop_called")
-            and task.is_stop_called
-            and distance_to_target < self._config.SUCCESS_DISTANCE
-        ):
-            self._metric = 1.0
+        eval_as_gibson=False
+        if eval_as_gibson:
+            if (distance_to_target < self._config.SUCCESS_DISTANCE
+            ):
+                self._metric = 1.0
+            else:
+                self._metric = 0.0
         else:
-            self._metric = 0.0
+            if (
+                hasattr(task, "is_stop_called")
+                and task.is_stop_called
+                and distance_to_target < self._config.SUCCESS_DISTANCE
+            ):
+                self._metric = 1.0
+            else:
+                self._metric = 0.0
 
 
 @registry.register_measure

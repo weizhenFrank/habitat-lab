@@ -4,15 +4,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from enum import Enum
-from typing import Dict
-
 import attr
-
 import habitat_sim
+from enum import Enum
 from habitat.core.registry import registry
 from habitat.core.simulator import ActionSpaceConfiguration, Config
 from habitat.core.utils import Singleton
+from typing import Dict
 
 
 class _DefaultHabitatSimActions(Enum):
@@ -187,5 +185,39 @@ class HabitatSimPyRobotActionSpaceConfiguration(ActionSpaceConfiguration):
             "_right": habitat_sim.ActionSpec(
                 "turn_right",
                 habitat_sim.ActuationSpec(amount=self.config.TURN_ANGLE),
+            ),
+        }
+
+@registry.register_action_space_configuration(name="regressionnoisy")
+class HabitatSimRegressionActionSpaceConfiguration(ActionSpaceConfiguration):
+    def get(self):
+        return {
+            SimulatorActions.STOP: habitat_sim.ActionSpec("stop"),
+            SimulatorActions.MOVE_FORWARD: habitat_sim.ActionSpec(
+                "regression_move_forward",
+                habitat_sim.RegressionActuationSpec(
+                    amount=self.config.FORWARD_STEP_SIZE,
+                    robot=self.config.NOISE_MODEL.ROBOT,
+                    controller=self.config.NOISE_MODEL.CONTROLLER,
+                    noise_multiplier=self.config.NOISE_MODEL.NOISE_MULTIPLIER,
+                ),
+            ),
+            SimulatorActions.TURN_LEFT: habitat_sim.ActionSpec(
+                "regression_turn_left",
+                habitat_sim.RegressionActuationSpec(
+                    amount=self.config.TURN_ANGLE,
+                    robot=self.config.NOISE_MODEL.ROBOT,
+                    controller=self.config.NOISE_MODEL.CONTROLLER,
+                    noise_multiplier=self.config.NOISE_MODEL.NOISE_MULTIPLIER,
+                ),
+            ),
+            SimulatorActions.TURN_RIGHT: habitat_sim.ActionSpec(
+                "regression_turn_right",
+                habitat_sim.RegressionActuationSpec(
+                    amount=self.config.TURN_ANGLE,
+                    robot=self.config.NOISE_MODEL.ROBOT,
+                    controller=self.config.NOISE_MODEL.CONTROLLER,
+                    noise_multiplier=self.config.NOISE_MODEL.NOISE_MULTIPLIER,
+                ),
             ),
         }
