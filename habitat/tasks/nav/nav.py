@@ -506,7 +506,7 @@ class Success(Measure):
             DistanceToGoal.cls_uuid
         ].get_metric()
 
-        eval_as_gibson=False
+        eval_as_gibson=True
         if eval_as_gibson:
             if (distance_to_target < self._config.SUCCESS_DISTANCE
             ):
