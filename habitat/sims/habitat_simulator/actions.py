@@ -192,8 +192,8 @@ class HabitatSimPyRobotActionSpaceConfiguration(ActionSpaceConfiguration):
 class HabitatSimRegressionActionSpaceConfiguration(ActionSpaceConfiguration):
     def get(self):
         return {
-            SimulatorActions.STOP: habitat_sim.ActionSpec("stop"),
-            SimulatorActions.MOVE_FORWARD: habitat_sim.ActionSpec(
+            HabitatSimActions.STOP: habitat_sim.ActionSpec("stop"),
+            HabitatSimActions.MOVE_FORWARD: habitat_sim.ActionSpec(
                 "regression_move_forward",
                 habitat_sim.RegressionActuationSpec(
                     amount=self.config.FORWARD_STEP_SIZE,
@@ -202,7 +202,7 @@ class HabitatSimRegressionActionSpaceConfiguration(ActionSpaceConfiguration):
                     noise_multiplier=self.config.NOISE_MODEL.NOISE_MULTIPLIER,
                 ),
             ),
-            SimulatorActions.TURN_LEFT: habitat_sim.ActionSpec(
+            HabitatSimActions.TURN_LEFT: habitat_sim.ActionSpec(
                 "regression_turn_left",
                 habitat_sim.RegressionActuationSpec(
                     amount=self.config.TURN_ANGLE,
@@ -211,7 +211,7 @@ class HabitatSimRegressionActionSpaceConfiguration(ActionSpaceConfiguration):
                     noise_multiplier=self.config.NOISE_MODEL.NOISE_MULTIPLIER,
                 ),
             ),
-            SimulatorActions.TURN_RIGHT: habitat_sim.ActionSpec(
+           HabitatSimActions.TURN_RIGHT: habitat_sim.ActionSpec(
                 "regression_turn_right",
                 habitat_sim.RegressionActuationSpec(
                     amount=self.config.TURN_ANGLE,

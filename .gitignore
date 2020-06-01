@@ -87,3 +87,7 @@ data
 
 # vim
 *.swp
+
+*.mp4
+*.sh
+*.yaml

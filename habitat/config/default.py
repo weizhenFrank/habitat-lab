@@ -32,6 +32,7 @@ _C.SEED = 100
 _C.ENVIRONMENT = CN()
 _C.ENVIRONMENT.MAX_EPISODE_STEPS = 1000
 _C.ENVIRONMENT.MAX_EPISODE_SECONDS = 10000000
+_C.ENVIRONMENT.GENERATE_ON_FLY = False
 _C.ENVIRONMENT.ITERATOR_OPTIONS = CN()
 _C.ENVIRONMENT.ITERATOR_OPTIONS.CYCLE = True
 _C.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = True
@@ -170,6 +171,15 @@ _C.TASK.TOP_DOWN_MAP.DRAW_GOAL_AABBS = True
 _C.TASK.COLLISIONS = CN()
 _C.TASK.COLLISIONS.TYPE = "Collisions"
 # -----------------------------------------------------------------------------
+# EPISODE DISTANCE MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.EPISODE_DISTANCE = CN()
+_C.TASK.EPISODE_DISTANCE.TYPE = "EpisodeDistance"
+# -----------------------------------------------------------------------------
+# BASE STATE MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.BASE_STATE = CN()
+_C.TASK.BASE_STATE.TYPE = "BaseState"
 # -----------------------------------------------------------------------------
 # # EQA TASK
 # -----------------------------------------------------------------------------
@@ -217,7 +227,7 @@ _C.SIMULATOR.SCENE = (
     "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
 )
 _C.SIMULATOR.SEED = _C.SEED
-_C.SIMULATOR.TURN_ANGLE = 10  # angle to rotate left or right in degrees
+_C.SIMULATOR.TURN_ANGLE = 30  # angle to rotate left or right in degrees
 _C.SIMULATOR.TILT_ANGLE = 15  # angle to tilt the camera up or down in degrees
 _C.SIMULATOR.DEFAULT_AGENT_ID = 0
 # -----------------------------------------------------------------------------
@@ -251,8 +261,8 @@ _C.SIMULATOR.SEMANTIC_SENSOR.TYPE = "HabitatSimSemanticSensor"
 # AGENT
 # -----------------------------------------------------------------------------
 _C.SIMULATOR.AGENT_0 = CN()
-_C.SIMULATOR.AGENT_0.HEIGHT = 1.5
-_C.SIMULATOR.AGENT_0.RADIUS = 0.1
+_C.SIMULATOR.AGENT_0.HEIGHT = 0.61
+_C.SIMULATOR.AGENT_0.RADIUS = 0.1755
 _C.SIMULATOR.AGENT_0.MASS = 32.0
 _C.SIMULATOR.AGENT_0.LINEAR_ACCELERATION = 20.0
 _C.SIMULATOR.AGENT_0.ANGULAR_ACCELERATION = 4 * 3.14
@@ -277,7 +287,7 @@ _C.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID = 0
 # for the caveats that results in
 _C.SIMULATOR.HABITAT_SIM_V0.GPU_GPU = False
 # Whether or not the agent slides on collisions
-_C.SIMULATOR.HABITAT_SIM_V0.ALLOW_SLIDING = True
+_C.SIMULATOR.HABITAT_SIM_V0.ALLOW_SLIDING = False
 _C.SIMULATOR.HABITAT_SIM_V0.ENABLE_PHYSICS = False
 _C.SIMULATOR.HABITAT_SIM_V0.PHYSICS_CONFIG_FILE = (
     "./data/default.phys_scene_config.json"

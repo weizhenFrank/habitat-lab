@@ -283,6 +283,71 @@ class Env:
         self._sim.seed(seed)
         self._task.seed(seed)
 
+    def otf_episode(
+        self,
+        shortest_path_success_distance=0.2,
+        num_retries_per_target=10,
+        max_tries_target=1000,
+        closest_dist_limit=0.2,
+        furthest_dist_limit=30,
+        geodesic_to_euclid_min_ratio=1.1,
+    ):
+        from habitat.datasets.pointnav.pointnav_generator import (
+            is_compatible_episode,
+            _create_episode,
+            ISLAND_RADIUS_LIMIT,
+        )
+
+        count_tries_target = 0
+
+        while count_tries_target < max_tries_target:
+            count_tries_target += 1
+
+            target_position = self._sim.sample_navigable_point()
+            if self._sim.island_radius(target_position) < ISLAND_RADIUS_LIMIT:
+                continue
+
+            for _ in range(num_retries_per_target):
+                source_position = self._sim.sample_navigable_point()
+
+                is_compatible, dist = is_compatible_episode(
+                    s=source_position,
+                    t=target_position,
+                    sim=self._sim,
+                    near_dist=closest_dist_limit,
+                    far_dist=furthest_dist_limit,
+                    geodesic_to_euclid_ratio=geodesic_to_euclid_min_ratio,
+                )
+
+                if is_compatible:
+                    angle = np.random.uniform(0, 2 * np.pi)
+                    source_rotation = [
+                        0,
+                        np.sin(angle / 2),
+                        0,
+                        np.cos(angle / 2),
+                    ]
+                    shortest_paths = None
+
+                    if self._current_episode_index is None:
+                        self._current_episode_index = 0
+                    else:
+                        self._current_episode_index += 1
+
+                    episode = _create_episode(
+                        episode_id=self._current_episode_index,
+                        scene_id=self.current_episode.scene_id,
+                        start_position=source_position,
+                        start_rotation=source_rotation,
+                        target_position=target_position,
+                        shortest_paths=shortest_paths,
+                        radius=shortest_path_success_distance,
+                        info={"geodesic_distance": dist},
+                    )
+                    return episode
+
+        raise ValueError("Unable to generate a valid source-target pair")
+
     def reconfigure(self, config: Config) -> None:
         self._config = config
 
@@ -293,6 +358,15 @@ class Env:
         self._config.freeze()
 
         self._sim.reconfigure(self._config.SIMULATOR)
+
+        if self._config.ENVIRONMENT.GENERATE_ON_FLY is True:
+            self._current_episode = self.otf_episode()
+            self._config.defrost()
+            self._config.SIMULATOR = self._task.overwrite_sim_config(
+                self._config.SIMULATOR, self.current_episode
+            )
+            self._config.freeze()
+            self._sim.reconfigure(self._config.SIMULATOR)
 
     def render(self, mode="rgb") -> np.ndarray:
         return self._sim.render(mode)

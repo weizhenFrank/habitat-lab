@@ -8,7 +8,8 @@ import quaternion
 import torch
 from evaluate_reality import load_model
 from gym.spaces.dict_space import Dict as SpaceDict
-from habitat.tasks.utils import cartesian_to_polar, quaternion_rotate_vector
+from habitat.tasks.utils import cartesian_to_polar
+from habitat.utils.geometry_utils import quaternion_rotate_vector
 from habitat.utils.visualizations.utils import (images_to_video,
                                                 observations_to_image)
 from habitat_baselines.common.baseline_registry import baseline_registry
@@ -32,34 +33,10 @@ def quat_to_rad(rotation):
 def create_state(position, rotation):
     rotation_mp3d_habitat = quat_from_two_vectors(geo.GRAVITY, np.array([0, 0, -1]))
     pt_mp3d = quat_rotate_vector(rotation_mp3d_habitat, position) # That point in the mp3d scene mesh coordinate frame.
-    metric = [pt_mp3d[0], pt_mp3d[1]]
+    state_xyt = [pt_mp3d[0], pt_mp3d[1]]
     theta = quat_to_rad(rotation)
-    metric.append(theta)
-    return metric
-
-@habitat.registry.register_measure
-class BaseState(habitat.Measure):
-    def __init__(self, sim, config):
-        # This measure only needs the config
-        self._config = config
-        self._sim = sim
-
-        super().__init__()
-
-    # Defines the name of the measure in the measurements dictionary
-    def _get_uuid(self):
-        return "base_state"
-
-    # This is called whenver the environment is reset
-    def reset_metric(self, episode):
-        self._metric = create_state(self._sim.get_agent_state().position.tolist(), self._sim.get_agent_state().rotation)        
-
-    # This is called whenver an action is taken in the environment
-    def update_metric(self, episode, action):
-        self._metric = {'xyt' : create_state(self._sim.get_agent_state().position.tolist(), self._sim.get_agent_state().rotation),
-                        'position': self._sim.get_agent_state().position.tolist(),
-                        'rotation': self._sim.get_agent_state().rotation 
-                        } 
+    state_xyt.append(theta)
+    return state_xyt
 
 def create_traj_labels(input_arr):
     r, c = input_arr.shape
@@ -165,8 +142,8 @@ def main():
     args = parser.parse_args()
 
     # Check torch version
-    vtorch = "1.2.0"
-    assert torch.__version__ == vtorch, "Please use torch {}".format(vtorch)
+#    vtorch = "1.2.0"
+#x    assert torch.__version__ == vtorch, "Please use torch {}".format(vtorch)
 
     if args.noisy:
         cfg_file = "habitat_baselines/config/pointnav/ddppo_pointnav_coda_noisy.yaml"
@@ -204,7 +181,7 @@ def main():
     else:
         config.SENSORS = args.sensors.split(",")
     config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
-    # config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOFTSPL")
+    config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOFT_SPL")
     config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
     config.TASK_CONFIG.TASK.MEASUREMENTS.append("EPISODE_DISTANCE")
     config.freeze()
@@ -216,8 +193,8 @@ def main():
         config.defrost()
         config.SENSORS=["DEPTH_SENSOR"]
         config.freeze()
-        envs2 = construct_envs(config, get_env_class(config.ENV_NAME))
-        sensors_obs = envs2.observation_spaces[0]
+        envs = construct_envs(config, get_env_class(config.ENV_NAME))
+        sensors_obs = envs.observation_spaces[0]
 
     device = (
         torch.device("cuda:{}".format(config.TORCH_GPU_ID))
@@ -236,8 +213,9 @@ def main():
         device=device,
     )
     model.eval()
+    print('METRICS: ', config.TASK_CONFIG.TASK.MEASUREMENTS)
 
-    metric_name = config.TASK_CONFIG.TASK.MEASUREMENTS[0]
+    metric_name = "SPL"
     metric_cfg = getattr(config.TASK_CONFIG.TASK, metric_name)
     measure_type = baseline_registry.get_measure(metric_cfg.TYPE)
     assert measure_type is not None, "invalid measurement type {}".format(
@@ -245,6 +223,7 @@ def main():
     )
     metric_uuid = measure_type(None, None)._get_uuid()
 
+    print('METRIC UUID: ', metric_uuid)
     observations = envs.reset()
     
     batch = batch_obs(observations, device)
@@ -343,13 +322,13 @@ def main():
             ) in stats_episodes:
                 envs_to_pause.append(i)
             # x, y, t, a
-            # input_row = prev_base_state + [actions[i][0].cpu().detach().tolist()]
-            input_row = prev_base_state + [actions[i][0].cpu().detach().tolist()] + [int(infos[i]["collisions"]["is_collision"])]
-            curr_state = infos[i]["base_state"]['xyt']
+            input_row = prev_base_state + [actions[i][0].cpu().detach().tolist()]
+            #input_row = prev_base_state + [actions[i][0].cpu().detach().tolist()] + [int(infos[i]["collisions"]["is_collision"])]
+            curr_state = create_state(infos[i]["base_state"]['position'], infos[i]["base_state"]['rotation'])
             delta_row = np.subtract(curr_state, prev_base_state)
             prev_base_state = curr_state
 
-            print(input_row)
+            print(input_row + [int(infos[i]["collisions"]["is_collision"])])
             if int(infos[i]["collisions"]["is_collision"]) == 0:
                 final_input_arr = np.vstack((final_input_arr, input_row))
                 tmp_labels_arr = np.vstack((tmp_labels_arr, delta_row))
@@ -426,7 +405,7 @@ def main():
                     metric_value = episode_stats[metric_uuid]
                     video_name = (
                         f"episode_{current_episodes[i].episode_id}"
-                        f"{metric_name}_{metric_value:.2f}"
+                        f"_{metric_name}_{metric_value:.2f}"
                     )
                     images_to_video(
                         rgb_frames[i], config.VIDEO_DIR, video_name

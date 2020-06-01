@@ -654,6 +654,71 @@ class Collisions(Measure):
             self._metric["count"] += 1
             self._metric["is_collision"] = True
 
+@registry.register_measure
+class EpisodeDistance(Measure):
+    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+        self._previous_position = None
+        self._start_end_episode_distance = None
+        self._agent_episode_distance = None
+        self._sim = sim
+        self._config = config
+
+        super().__init__()
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return "episode_distance"
+
+    def reset_metric(self, episode, *args: Any, **kwargs: Any):
+        self._previous_position = self._sim.get_agent_state().position.tolist()
+        self._start_end_episode_distance = episode.info["geodesic_distance"]
+        self._goal = episode.goals[0].position
+        self._agent_episode_distance = 0.0
+        self._metric = None
+
+    def _euclidean_distance(self, position_a, position_b):
+        return np.linalg.norm(
+            np.array(position_b) - np.array(position_a), ord=2
+        )
+
+    def update_metric(self, episode, action, *args: Any, **kwargs: Any):
+        current_position = self._sim.get_agent_state().position.tolist()
+
+        self._agent_episode_distance += self._euclidean_distance(
+            current_position, self._previous_position
+        )
+
+        self._previous_position = current_position
+
+        self._metric = {
+            "agent_episode_distance": self._agent_episode_distance,
+            "start_end_episode_distance": self._start_end_episode_distance,
+            "goal_distance": self._euclidean_distance(
+                current_position, self._goal
+            ),
+        }
+
+@registry.register_measure
+class BaseState(Measure):
+    def __init__(self, sim, config, *args: Any, **kwargs: Any):
+        # This measure only needs the config
+        self._config = config
+        self._sim = sim
+
+        super().__init__()
+
+    # Defines the name of the measure in the measurements dictionary
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "base_state"
+
+    # This is called whenver the environment is reset
+    def reset_metric(self, episode, *args: Any, **kwargs: Any):
+        self._metric = None
+
+    # This is called whenver an action is taken in the environment
+    def update_metric(self, episode, action, *args: Any, **kwargs: Any):
+        self._metric = {'position': self._sim.get_agent_state().position.tolist(),
+                        'rotation': self._sim.get_agent_state().rotation
+                        }
 
 @registry.register_measure
 class TopDownMap(Measure):

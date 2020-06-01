@@ -436,7 +436,7 @@ class DDPPOTrainer(PPOTrainer):
                     # checkpoint model
                     if update % self.config.CHECKPOINT_INTERVAL == 0:
                         self.save_checkpoint(
-                            f"ckpt.{count_checkpoints}.pth",
+                            f"ckpt.{count_checkpoints}.{deltas['reward'] / deltas['count']}.pth",
                             dict(step=count_steps),
                         )
                         count_checkpoints += 1
