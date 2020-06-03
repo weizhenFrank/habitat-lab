@@ -236,7 +236,7 @@ _C.SIMULATOR.DEFAULT_AGENT_ID = 0
 SIMULATOR_SENSOR = CN()
 SIMULATOR_SENSOR.HEIGHT = 480
 SIMULATOR_SENSOR.WIDTH = 640
-SIMULATOR_SENSOR.HFOV = 45  # horizontal field of view in degrees
+SIMULATOR_SENSOR.HFOV = 70  # horizontal field of view in degrees
 SIMULATOR_SENSOR.POSITION = [0, 0.61, 0]
 SIMULATOR_SENSOR.ORIENTATION = [0.0, 0.0, 0.0]  # Euler's angles
 # -----------------------------------------------------------------------------

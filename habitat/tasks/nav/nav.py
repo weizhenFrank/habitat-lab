@@ -497,6 +497,7 @@ class Success(Measure):
         task.measurements.check_measure_dependencies(
             self.uuid, [DistanceToGoal.cls_uuid]
         )
+        self._count_collisions = 0
         self.update_metric(episode=episode, task=task, *args, **kwargs)
 
     def update_metric(
@@ -506,9 +507,13 @@ class Success(Measure):
             DistanceToGoal.cls_uuid
         ].get_metric()
 
-        eval_as_gibson=False
+        if self._sim.previous_step_collided:
+            self._count_collisions += 1
+
+        eval_as_gibson=True
         if eval_as_gibson:
             if (distance_to_target < self._config.SUCCESS_DISTANCE
+                and self._count_collisions <= self._config.MAX_COLLISIONS
             ):
                 self._metric = 1.0
             else:
@@ -518,6 +523,7 @@ class Success(Measure):
                 hasattr(task, "is_stop_called")
                 and task.is_stop_called
                 and distance_to_target < self._config.SUCCESS_DISTANCE
+                and self._count_collisions <= self._config.MAX_COLLISIONS
             ):
                 self._metric = 1.0
             else:

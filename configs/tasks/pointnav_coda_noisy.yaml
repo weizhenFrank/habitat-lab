@@ -9,21 +9,23 @@ SIMULATOR:
     GPU_DEVICE_ID: 0
     ALLOW_SLIDING: False
   RGB_SENSOR:
-    WIDTH: 256
-    HEIGHT: 256
-    HFOV: 45
-    POSITION: [0,0.6096,0]
+    WIDTH: 640
+    HEIGHT: 360
+    HFOV: 70
+    NOISE_MODEL: "GaussianNoiseModel"
+    NOISE_MODEL_KWARGS:
+      intensity_constant: 0.1
   DEPTH_SENSOR:
-    WIDTH: 256
-    HEIGHT: 256
-    HFOV: 45
-    POSITION: [0,0.6096,0]
-  TURN_ANGLE: 30
+    WIDTH: 640
+    HEIGHT: 360
+    HFOV: 70
+    NOISE_MODEL: "RedwoodDepthNoiseModel"
   ACTION_SPACE_CONFIG: 'pyrobotnoisy'
   NOISE_MODEL:
     ROBOT: "LoCoBot"
     CONTROLLER: 'Proportional'
     NOISE_MULTIPLIER: 1.0
+  TURN_ANGLE: 30
 TASK:
   TYPE: Nav-v0
   SUCCESS_DISTANCE: 0.2
@@ -34,7 +36,7 @@ TASK:
     DIMENSIONALITY: 2
   GOAL_SENSOR_UUID: pointgoal_with_gps_compass
 
-  MEASUREMENTS: ['SPL', 'SOFT_SPL']
+  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SOFT_SPL']
   SPL:
     TYPE: SPL
     SUCCESS_DISTANCE: 0.2
@@ -43,5 +45,5 @@ TASK:
 DATASET:
   TYPE: PointNav-v1
   SPLIT: coda_hard_p1
-  SCENES_DIR: /srv/share3/jtruong33/develop/sim2real/data/scene_datasets
-  DATA_PATH: /srv/share3/jtruong33/develop/sim2real/data/datasets/pointnav/coda/{split}/{split}.json.gz
+  SCENES_DIR: data/scene_datasets
+  DATA_PATH: data/datasets/pointnav/coda/{split}/{split}.json.gz
