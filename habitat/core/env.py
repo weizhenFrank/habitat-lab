@@ -49,6 +49,7 @@ class Env:
     _task: EmbodiedTask
     _max_episode_seconds: int
     _max_episode_steps: int
+    _max_collision_count: int
     _elapsed_steps: int
     _episode_start_time: Optional[float]
     _episode_over: bool
@@ -120,7 +121,9 @@ class Env:
             self._config.ENVIRONMENT.MAX_EPISODE_SECONDS
         )
         self._max_episode_steps = self._config.ENVIRONMENT.MAX_EPISODE_STEPS
+        self._max_collision_count = self._config.TASK.SUCCESS.MAX_COLLISIONS
         self._elapsed_steps = 0
+        self._collision_count = 0
         self._episode_start_time: Optional[float] = None
         self._episode_over = False
 
@@ -189,11 +192,16 @@ class Env:
             and self._max_episode_seconds <= self._elapsed_seconds
         ):
             return True
+        elif (
+            self._max_collision_count < self._collision_count
+        ):
+            return True
         return False
 
     def _reset_stats(self) -> None:
         self._episode_start_time = time.time()
         self._elapsed_steps = 0
+        self._collision_count = 0
         self._episode_over = False
 
     def reset(self) -> Observations:
@@ -226,6 +234,7 @@ class Env:
     def _update_step_stats(self) -> None:
         self._elapsed_steps += 1
         self._episode_over = not self._task.is_episode_active
+        self._collision_count = self._task.measurements.get_metrics()["collisions"]["count"]
         if self._past_limit():
             self._episode_over = True
 

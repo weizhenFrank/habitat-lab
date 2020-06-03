@@ -13,9 +13,9 @@ in habitat. Customized environments should be registered using
 from typing import Optional, Type
 
 import habitat
-from habitat import Config, Dataset
+from habitat import Config, Dataset, logger
 from habitat_baselines.common.baseline_registry import baseline_registry
-
+from habitat.tasks.nav.nav import ProximitySensor
 
 def get_env_class(env_name: str) -> Type[habitat.RLEnv]:
     r"""Return environment class based on name.
@@ -63,6 +63,12 @@ class NavRLEnv(habitat.RLEnv):
         reward = self._rl_config.SLACK_REWARD
 
         current_measure = self._env.get_metrics()[self._reward_measure_name]
+        if ProximitySensor.cls_uuid in observations:
+            d_proximity = observations[ProximitySensor.cls_uuid][0]
+            #logger.info("proximity: {}".format(d_proximity))
+            thresh = 0.2
+            if d_proximity < thresh:
+                reward += -5 * (thresh - d_proximity)
 
         reward += self._previous_measure - current_measure
         self._previous_measure = current_measure
