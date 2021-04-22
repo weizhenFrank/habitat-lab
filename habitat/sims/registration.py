@@ -8,6 +8,7 @@ from habitat.core.logging import logger
 from habitat.core.registry import registry
 from habitat.sims.habitat_simulator import _try_register_habitat_sim
 from habitat.sims.pyrobot import _try_register_pyrobot
+from habitat.sims.igibson_challenge import _try_register_igibson_socialnav
 
 
 def make_sim(id_sim, **kwargs):
@@ -21,3 +22,4 @@ def make_sim(id_sim, **kwargs):
 
 _try_register_habitat_sim()
 _try_register_pyrobot()
+_try_register_igibson_socialnav()

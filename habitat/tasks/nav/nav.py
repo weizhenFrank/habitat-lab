@@ -1257,3 +1257,25 @@ class NavigationTask(EmbodiedTask):
 
     def _check_episode_is_active(self, *args: Any, **kwargs: Any) -> bool:
         return not getattr(self, "is_stop_called", False)
+
+
+@registry.register_task(name="SocialNav-v0")
+class SocialNavigationTask(NavigationTask):
+    def reset(self, episode: Episode):
+        observations = super().reset(episode)
+        return observations
+# '_config', '_sim', '_dataset', 'measurements', 'sensor_suite', 
+# 'actions', '_action_keys', 'is_stop_called'
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -139,7 +139,13 @@ class PPOTrainer(BaseRLTrainer):
         observation_space = apply_obs_transforms_obs_space(
             observation_space, self.obs_transforms
         )
-
+        from gym.spaces import Dict, Box
+        observation_space = Dict(
+            {
+                'depth': Box(low=0., high=1., shape=(256,256,1)),
+                'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
+            }
+        )
         self.actor_critic = policy.from_config(
             self.config, observation_space, self.policy_action_space
         )
