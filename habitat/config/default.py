@@ -168,11 +168,35 @@ _C.TASK.TOP_DOWN_MAP.DRAW_VIEW_POINTS = True
 _C.TASK.TOP_DOWN_MAP.DRAW_GOAL_POSITIONS = True
 # Axes aligned bounding boxes
 _C.TASK.TOP_DOWN_MAP.DRAW_GOAL_AABBS = True
+
+# -----------------------------------------------------------------------------
+# SocialTopDownMap MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.SOCIAL_TOP_DOWN_MAP = CN()
+_C.TASK.SOCIAL_TOP_DOWN_MAP.TYPE = "SocialTopDownMap"
+_C.TASK.SOCIAL_TOP_DOWN_MAP.MAX_EPISODE_STEPS = _C.ENVIRONMENT.MAX_EPISODE_STEPS
+_C.TASK.SOCIAL_TOP_DOWN_MAP.MAP_PADDING = 3
+_C.TASK.SOCIAL_TOP_DOWN_MAP.MAP_RESOLUTION = 1024
+_C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_SOURCE = True
+_C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_BORDER = True
+_C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_SHORTEST_PATH = True
+_C.TASK.SOCIAL_TOP_DOWN_MAP.FOG_OF_WAR = CN()
+_C.TASK.SOCIAL_TOP_DOWN_MAP.FOG_OF_WAR.DRAW = True
+_C.TASK.SOCIAL_TOP_DOWN_MAP.FOG_OF_WAR.VISIBILITY_DIST = 5.0
+_C.TASK.SOCIAL_TOP_DOWN_MAP.FOG_OF_WAR.FOV = 90
+_C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_VIEW_POINTS = True
+_C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_GOAL_POSITIONS = True
+_C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_GOAL_AABBS = True
 # -----------------------------------------------------------------------------
 # COLLISIONS MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.TASK.COLLISIONS = CN()
 _C.TASK.COLLISIONS.TYPE = "Collisions"
+# -----------------------------------------------------------------------------
+# HUMAN_COLLISION MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.HUMAN_COLLISION = CN()
+_C.TASK.HUMAN_COLLISION.TYPE = "HumanCollision"
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # # EQA TASK
