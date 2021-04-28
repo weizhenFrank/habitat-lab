@@ -286,7 +286,6 @@ class EmbodiedTask:
 
         for action_instance in self.actions.values():
             action_instance.reset(episode=episode, task=self)
-
         return observations
 
     def step(self, action: Dict[str, Any], episode: Episode):

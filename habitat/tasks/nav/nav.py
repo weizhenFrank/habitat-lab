@@ -1129,6 +1129,12 @@ class VelocityAction(SimulatorTaskAction):
 
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
         task.is_stop_called = False  # type: ignore
+        if not self._sim.get_existing_object_ids():
+            obj_templates_mgr = self._sim.get_object_template_manager()
+            self._sim.people_template_ids = obj_templates_mgr.load_configs(
+                "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
+            )
+            self._sim.reset_people()
 
     def step(
         self,
@@ -1169,10 +1175,14 @@ class VelocityAction(SimulatorTaskAction):
         )
 
         # Stop is called if both linear/angular speed are below their threshold
-        if (
-            abs(linear_velocity) < self.min_abs_lin_speed
-            and abs(angular_velocity) < self.min_abs_ang_speed
-        ):
+        # if (
+        #     abs(linear_velocity) < self.min_abs_lin_speed
+        #     and abs(angular_velocity) < self.min_abs_ang_speed
+        # ):
+        distance_to_target = (
+            task.measurements.measures['distance_to_goal'].get_metric()
+        )
+        if distance_to_target < 0.2:
             task.is_stop_called = True  # type: ignore
             return self._sim.get_observations_at(position=None, rotation=None)
 

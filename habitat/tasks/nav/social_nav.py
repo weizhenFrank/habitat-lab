@@ -12,11 +12,12 @@ from habitat.utils.visualizations import maps
 @registry.register_task(name="SocialNav-v0")
 class SocialNavigationTask(NavigationTask):
     def reset(self, episode: Episode):
-        observations = super().reset(episode)
+        self._sim.reset_people()
         episode.people_paths = [
             p.waypoints
             for p in self._sim.people
         ]
+        observations = super().reset(episode)
         return observations
 
     def step(self, action: Dict[str, Any], episode: Episode):
@@ -30,6 +31,7 @@ class SocialNavigationTask(NavigationTask):
         ), f"Can't find '{action_name}' action in {self.actions.keys()}."
 
         task_action = self.actions[action_name]
+
 
         # Move people
         for p in self._sim.people:

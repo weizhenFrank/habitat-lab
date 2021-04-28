@@ -46,73 +46,143 @@ class iGibsonSocialNav(HabitatSim):
         self.people_template_ids = obj_templates_mgr.load_configs(
             "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
         )
+        self.person_ids = []
 
-    def reset(self) -> Observations:
-        sim_obs = super().reset()
-        if self._update_agents_state():
-            sim_obs = self.get_sensor_observations()
-
+    def reset_people(self):
         agent_position = self.get_agent_state().position
+        obj_templates_mgr = self.get_object_template_manager()
 
-        # Remove humans
-        for id_ in self.get_existing_object_ids():
-            self.remove_object(id_)
-        self.people = []
+        # Check if humans have been erased (sim was reset)
+        if not self.get_existing_object_ids():
+            self.person_ids = []
+            for person_template_id in self.people_template_ids:
+                self.person_ids.append(self.add_object(person_template_id))
 
         # Spawn humans
-        num_people = random.choice([2,3,4])
-        min_path_dist = 8
+        min_path_dist = 3
         max_level = 0.6
-        obj_templates_mgr = self.get_object_template_manager()
-        agent_y = self.get_agent_state(0).position[1]
-        for _ in range(num_people):
-            person_template_id = random.choice(self.people_template_ids)
-            person_id = self.add_object(person_template_id)
-
+        agent_x, agent_y, agent_z = self.get_agent_state(0).position
+        self.people = []
+        for person_id in self.person_ids:
             valid_walk = False
             while not valid_walk:
                 start = np.array(self.sample_navigable_point())
                 goal = np.array(self.sample_navigable_point())
-                distance = np.sqrt(
-                    (start[0]-goal[0])**2
-                    +(start[2]-goal[2])**2
-                )
+                distance = self.geodesic_distance(start, goal)
                 valid_distance = distance > min_path_dist
                 valid_level = (
                     abs(start[1]-agent_position[1]) < max_level
                     and abs(goal[1]-agent_position[1]) < max_level
                 )
-                valid_walk = valid_distance and valid_level
+                sp = habitat_sim.nav.ShortestPath()
+                sp.requested_start = start
+                sp.requested_end   = goal
+                found_path = self.pathfinder.find_path(sp)
+                valid_start = np.sqrt(
+                    (start[0]-agent_x)**2
+                    +(start[2]-agent_z)**2
+                ) > 0.6
+                valid_walk = (
+                    valid_distance and valid_level
+                    and found_path and valid_start
+                )
+                if not valid_distance:
+                    min_path_dist *= 0.95
 
-            start[1] += 0.9 # to get feet on ground, else they sink into floor
-            goal[1] += 0.9
+            waypoints = sp.points
             heading = np.random.rand()*2*np.pi-np.pi
             rotation = np.quaternion(np.cos(heading),0,np.sin(heading),0)
             rotation = np.normalized(rotation)
             rotation = mn.Quaternion(
                 rotation.imag, rotation.real
             )
-            self.set_translation(start, person_id)
+            self.set_translation([start[0], start[1]+0.9, start[2]], person_id)
             self.set_rotation(rotation, person_id)
             self.set_object_motion_type(
                 habitat_sim.physics.MotionType.KINEMATIC,
                 person_id
             )
-            spf = ShortestPathFollowerv2(sim=self, object_id=person_id)
-            spf.get_waypoints(start, goal)
+            spf = ShortestPathFollowerv2(
+                sim=self,
+                object_id=person_id,
+                waypoints=waypoints
+            )
             self.people.append(spf)
 
-        self._prev_sim_obs = sim_obs
-        return self._sensor_suite.get_observations(sim_obs)
+    # def reset_people(self):
+    #     agent_position = self.get_agent_state().position
 
-MAX_ANG = np.deg2rad(10)
+    #     obj_templates_mgr = self.get_object_template_manager()
+    #     self.people_template_ids = obj_templates_mgr.load_configs(
+    #         "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
+    #     )
+
+    #     # Remove humans
+    #     for id_ in self.get_existing_object_ids():
+    #         self.remove_object(id_)
+    #     self.people = []
+
+    #     # Spawn humans
+    #     num_people = random.choice([2,3,4])
+    #     min_path_dist = 2
+    #     max_level = 0.6
+    #     obj_templates_mgr = self.get_object_template_manager()
+    #     agent_y = self.get_agent_state(0).position[1]
+    #     for _ in range(num_people):
+    #         person_template_id = random.choice(self.people_template_ids)
+    #         person_id = self.add_object(person_template_id)
+
+    #         valid_walk = False
+    #         while not valid_walk:
+    #             start = np.array(self.sample_navigable_point())
+    #             goal = np.array(self.sample_navigable_point())
+    #             distance = np.sqrt(
+    #                 (start[0]-goal[0])**2
+    #                 +(start[2]-goal[2])**2
+    #             )
+    #             valid_distance = distance > min_path_dist
+    #             valid_level = (
+    #                 abs(start[1]-agent_position[1]) < max_level
+    #                 and abs(goal[1]-agent_position[1]) < max_level
+    #             )
+    #             sp = habitat_sim.nav.ShortestPath()
+    #             sp.requested_start = start
+    #             sp.requested_end   = goal
+    #             found_path = self.pathfinder.find_path(sp)
+    #             valid_walk = valid_distance and valid_level and found_path
+
+    #         waypoints = sp.points
+    #         waypoints = [i+np.array([0.0, 0.9, 0.0]) for i in waypoints]            
+
+    #         heading = np.random.rand()*2*np.pi-np.pi
+    #         rotation = np.quaternion(np.cos(heading),0,np.sin(heading),0)
+    #         rotation = np.normalized(rotation)
+    #         rotation = mn.Quaternion(
+    #             rotation.imag, rotation.real
+    #         )
+    #         self.set_translation(start, person_id)
+    #         self.set_rotation(rotation, person_id)
+    #         self.set_object_motion_type(
+    #             habitat_sim.physics.MotionType.KINEMATIC,
+    #             person_id
+    #         )
+    #         spf = ShortestPathFollowerv2(
+    #             sim=self,
+    #             object_id=person_id,
+    #             waypoints=waypoints
+    #         )
+    #         self.people.append(spf)
+
+
+MAX_ANG = np.deg2rad(50)
 MAX_LIN = 0.25
 
 class ShortestPathFollowerv2:
     def __init__(
         self,
         sim,
-        object_id
+        object_id,
+        waypoints
     ):
         self._sim = sim
         self.object_id = object_id
@@ -123,17 +193,12 @@ class ShortestPathFollowerv2:
         self.vel_control.lin_vel_is_local    = True
         self.vel_control.ang_vel_is_local    = True
 
-    def get_waypoints(self, start, goal):
-        sp = habitat_sim.nav.ShortestPath()
-        sp.requested_start = start
-        sp.requested_end   = goal
-        self._sim.pathfinder.find_path(sp)
-        self.waypoints = list(sp.points)+list(sp.points)[::-1][1:-1]
+        self.waypoints = list(waypoints)+list(waypoints)[::-1][1:-1]
         self.next_waypoint_idx = 1
         self.done_turning = False
-        self.current_position = start
+        self.current_position = waypoints[0]
 
-        return sp.points
+        self.max_linear_vel = np.random.rand()*(0.1)+0.1
 
     def step(self, time_step=1):
         waypoint_idx = self.next_waypoint_idx % len(self.waypoints)
@@ -175,12 +240,12 @@ class ShortestPathFollowerv2:
             distance = np.sqrt(
                 (translation[0]-waypoint[0])**2+(translation[2]-waypoint[2])**2
             )
-            if MAX_LIN*time_step*1.2 >= distance:
+            if self.max_linear_vel*time_step*1.2 >= distance:
                 linear_velocity = distance / time_step
                 self.done_turning = False
                 self.next_waypoint_idx += 1
             else:
-                linear_velocity = MAX_LIN
+                linear_velocity = self.max_linear_vel
 
             self.vel_control.angular_velocity = np.zeros(3)
             self.vel_control.linear_velocity = np.array([
