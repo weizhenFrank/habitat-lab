@@ -37,6 +37,9 @@ import magnum as mn
 import math
 import numpy as np
 
+MAX_ANG = np.deg2rad(90)
+MAX_LIN = 0.50
+TIME_STEP = 0.1
 
 @registry.register_simulator(name="iGibsonSocialNav")
 class iGibsonSocialNav(HabitatSim):
@@ -109,73 +112,6 @@ class iGibsonSocialNav(HabitatSim):
             )
             self.people.append(spf)
 
-    # def reset_people(self):
-    #     agent_position = self.get_agent_state().position
-
-    #     obj_templates_mgr = self.get_object_template_manager()
-    #     self.people_template_ids = obj_templates_mgr.load_configs(
-    #         "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
-    #     )
-
-    #     # Remove humans
-    #     for id_ in self.get_existing_object_ids():
-    #         self.remove_object(id_)
-    #     self.people = []
-
-    #     # Spawn humans
-    #     num_people = random.choice([2,3,4])
-    #     min_path_dist = 2
-    #     max_level = 0.6
-    #     obj_templates_mgr = self.get_object_template_manager()
-    #     agent_y = self.get_agent_state(0).position[1]
-    #     for _ in range(num_people):
-    #         person_template_id = random.choice(self.people_template_ids)
-    #         person_id = self.add_object(person_template_id)
-
-    #         valid_walk = False
-    #         while not valid_walk:
-    #             start = np.array(self.sample_navigable_point())
-    #             goal = np.array(self.sample_navigable_point())
-    #             distance = np.sqrt(
-    #                 (start[0]-goal[0])**2
-    #                 +(start[2]-goal[2])**2
-    #             )
-    #             valid_distance = distance > min_path_dist
-    #             valid_level = (
-    #                 abs(start[1]-agent_position[1]) < max_level
-    #                 and abs(goal[1]-agent_position[1]) < max_level
-    #             )
-    #             sp = habitat_sim.nav.ShortestPath()
-    #             sp.requested_start = start
-    #             sp.requested_end   = goal
-    #             found_path = self.pathfinder.find_path(sp)
-    #             valid_walk = valid_distance and valid_level and found_path
-
-    #         waypoints = sp.points
-    #         waypoints = [i+np.array([0.0, 0.9, 0.0]) for i in waypoints]            
-
-    #         heading = np.random.rand()*2*np.pi-np.pi
-    #         rotation = np.quaternion(np.cos(heading),0,np.sin(heading),0)
-    #         rotation = np.normalized(rotation)
-    #         rotation = mn.Quaternion(
-    #             rotation.imag, rotation.real
-    #         )
-    #         self.set_translation(start, person_id)
-    #         self.set_rotation(rotation, person_id)
-    #         self.set_object_motion_type(
-    #             habitat_sim.physics.MotionType.KINEMATIC,
-    #             person_id
-    #         )
-    #         spf = ShortestPathFollowerv2(
-    #             sim=self,
-    #             object_id=person_id,
-    #             waypoints=waypoints
-    #         )
-    #         self.people.append(spf)
-
-
-MAX_ANG = np.deg2rad(50)
-MAX_LIN = 0.25
 
 class ShortestPathFollowerv2:
     def __init__(
@@ -200,7 +136,7 @@ class ShortestPathFollowerv2:
 
         self.max_linear_vel = np.random.rand()*(0.1)+0.1
 
-    def step(self, time_step=1):
+    def step(self, time_step=TIME_STEP):
         waypoint_idx = self.next_waypoint_idx % len(self.waypoints)
         waypoint = np.array(self.waypoints[waypoint_idx])
 

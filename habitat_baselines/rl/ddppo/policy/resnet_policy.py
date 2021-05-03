@@ -296,7 +296,6 @@ class PointNavResNetNet(Net):
                 make_backbone=getattr(resnet, backbone),
                 normalize_visual_inputs=normalize_visual_inputs,
             )
-
             self.goal_visual_fc = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(
@@ -321,7 +320,8 @@ class PointNavResNetNet(Net):
             self.visual_fc = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(
-                    np.prod(self.visual_encoder.output_shape), hidden_size
+                    7680, hidden_size
+                    # np.prod(self.visual_encoder.output_shape), hidden_size
                 ),
                 nn.ReLU(True),
             )

@@ -6,7 +6,10 @@
 
 from typing import List, Tuple, Union
 
-import magnum as mn
+try:
+    import magnum as mn
+except ModuleNotFoundError:
+    pass
 import numpy as np
 import quaternion
 

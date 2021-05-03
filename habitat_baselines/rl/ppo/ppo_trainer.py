@@ -142,7 +142,8 @@ class PPOTrainer(BaseRLTrainer):
         from gym.spaces import Dict, Box
         observation_space = Dict(
             {
-                'depth': Box(low=0., high=1., shape=(256,256,1)),
+                # 'depth': Box(low=0., high=1., shape=(256,256,1)),
+                'depth': self.envs.observation_spaces[0].spaces['depth'],
                 'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
             }
         )

@@ -52,6 +52,11 @@ def is_compatible_episode(
     geodesic_to_euclid_ratio: float,
 ) -> Union[Tuple[bool, float], Tuple[bool, int]]:
     euclid_dist = np.power(np.power(np.array(s) - np.array(t), 2).sum(0), 0.5)
+
+    # IGIBSON EDIT: avoid episodes on the room
+    if s[1] > 1.0:
+        return False, 0
+
     if np.abs(s[1] - t[1]) > 0.5:  # check height difference to assure s and
         #  t are from same floor
         return False, 0
