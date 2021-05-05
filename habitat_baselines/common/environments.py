@@ -64,11 +64,29 @@ class NavRLEnv(habitat.RLEnv):
 
         current_measure = self._env.get_metrics()[self._reward_measure_name]
 
-        reward += self._previous_measure - current_measure
+        if (
+            observations.get("num_steps", -1.0) == -1.0
+            or self._rl_config.FULL_GEODESIC_DECAY == -1.0
+        ):
+            reward += self._previous_measure - current_measure
+        else:
+            reward += (
+                self._previous_measure - current_measure
+            ) * max(
+                0,
+                (
+                    1 - observations["num_steps"]
+                    / self._rl_config.FULL_GEODESIC_DECAY
+                )
+            )
+
         self._previous_measure = current_measure
 
         if self._episode_success():
             reward += self._rl_config.SUCCESS_REWARD
+
+        if observations.get("hit_navmesh", False):
+            reward -= self._rl_config.COLLISION_PENALTY
 
         return reward
 

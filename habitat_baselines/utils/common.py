@@ -522,6 +522,7 @@ def delete_folder(path: str) -> None:
 
 def action_to_velocity_control(
     action: torch.Tensor,
+    num_steps: float = -1,
 ) -> Union[int, str, Dict[str, Any]]:
     lin_vel, ang_vel = torch.clip(action, min=-1, max=1)
     step_action = {
@@ -534,4 +535,6 @@ def action_to_velocity_control(
             },
         }
     }
+    if num_steps != -1:
+        step_action["action"]["action_args"]["num_steps"] = num_steps
     return step_action

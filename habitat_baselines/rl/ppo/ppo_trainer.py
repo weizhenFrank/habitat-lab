@@ -466,7 +466,9 @@ class PPOTrainer(BaseRLTrainer):
             range(env_slice.start, env_slice.stop), actions.unbind(0)
         ):
             if self.config.RL.POLICY.action_distribution_type == "gaussian":
-                step_action = action_to_velocity_control(act)
+                step_action = action_to_velocity_control(
+                    act, num_steps=self.num_steps_done
+                )
             else:
                 step_action = act.item()
             self.envs.async_step_at(index_env, step_action)

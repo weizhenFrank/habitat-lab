@@ -608,6 +608,40 @@ class SPL(Measure):
 
 
 @registry.register_measure
+class SCT(SPL):
+    r"""Success weighted by Completion Time
+    """
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return "sct"
+
+    def reset_metric(self, episode, task, *args: Any, **kwargs: Any):
+        task.measurements.check_measure_dependencies(
+            self.uuid, [DistanceToGoal.cls_uuid, Success.cls_uuid]
+        )
+
+        self._num_steps_taken = 0
+        self._was_last_success = False
+        self._start_end_episode_distance = task.measurements.measures[
+            DistanceToGoal.cls_uuid
+        ].get_metric()
+        self.update_metric(episode=episode, task=task, *args, **kwargs)
+
+    def update_metric(
+        self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
+    ):
+        ep_success = task.measurements.measures[Success.cls_uuid].get_metric()
+        if not ep_success or not self._was_last_success:
+            self._num_steps_taken += 1 
+        self._was_last_success = ep_success
+        
+        oracle_time = (
+            self._start_end_episode_distance / self._config.HOLONOMIC_VELOCITY
+        )
+        agent_time = self._num_steps_taken*self._config.TIME_STEP
+        self._metric = ep_success * (oracle_time / max(oracle_time, agent_time))
+
+
+@registry.register_measure
 class SoftSPL(SPL):
     r"""Soft SPL
 
@@ -1253,6 +1287,9 @@ class VelocityAction(SimulatorTaskAction):
 
         # TODO: Make a better way to flag collisions
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
+        agent_observations["hit_navmesh"] = collided
+        if kwargs.get('num_steps', -1) != -1:
+            agent_observations["num_steps"] = kwargs["num_steps"]
 
         return agent_observations
 
