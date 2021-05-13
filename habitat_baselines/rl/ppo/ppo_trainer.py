@@ -93,7 +93,13 @@ class PPOTrainer(BaseRLTrainer):
         self._is_distributed = get_distrib_size()[2] > 1
         self._obs_batching_cache = ObservationBatchingCache()
 
-        if config.RL.POLICY.action_distribution_type == "gaussian":
+        self.discrete_actions = (
+            self.config.TASK_CONFIG.TASK.ACTIONS.VELOCITY_CONTROL.DISCRETE_ACTIONS
+        )
+        if (
+            config.RL.POLICY.action_distribution_type == "gaussian"
+            or len(self.discrete_actions) > 0
+        ):
             config.defrost()
             config.TASK_CONFIG.TASK.POSSIBLE_ACTIONS = ["VELOCITY_CONTROL"]
             config.freeze()
@@ -142,7 +148,6 @@ class PPOTrainer(BaseRLTrainer):
         from gym.spaces import Dict, Box
         observation_space = Dict(
             {
-                # 'depth': Box(low=0., high=1., shape=(256,256,1)),
                 'depth': self.envs.observation_spaces[0].spaces['depth'],
                 'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
             }
@@ -265,8 +270,16 @@ class PPOTrainer(BaseRLTrainer):
             action_shape = 2
             discrete_actions = False
         else:
-            self.policy_action_space = self.envs.action_spaces[0]
-            action_shape = -1
+            if len(self.discrete_actions) > 0:
+                self.policy_action_space = ActionSpace(
+                    {
+                        str(i): EmptySpace()
+                        for i in range(len(self.discrete_actions))
+                    }
+                )
+            else:
+                self.policy_action_space = self.envs.action_spaces[0]
+            action_shape = 1
             discrete_actions = True
 
         ppo_cfg = self.config.RL.PPO
@@ -468,6 +481,14 @@ class PPOTrainer(BaseRLTrainer):
             if self.config.RL.POLICY.action_distribution_type == "gaussian":
                 step_action = action_to_velocity_control(
                     act, num_steps=self.num_steps_done
+                )
+            elif len(self.discrete_actions) > 0:
+                act2 = torch.tensor(
+                    self.discrete_actions[act.item()],
+                    device='cpu',
+                )
+                step_action = action_to_velocity_control(
+                    act2, num_steps=self.num_steps_done
                 )
             else:
                 step_action = act.item()
@@ -913,7 +934,7 @@ class PPOTrainer(BaseRLTrainer):
         if len(self.config.VIDEO_OPTION) > 0:
             config.defrost()
             # config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
-            config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
+            # config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 
@@ -932,7 +953,15 @@ class PPOTrainer(BaseRLTrainer):
             action_shape = 2
             action_type = torch.float
         else:
-            self.policy_action_space = self.envs.action_spaces[0]
+            if len(self.discrete_actions) > 0:
+                self.policy_action_space = ActionSpace(
+                    {
+                        str(i): EmptySpace()
+                        for i in range(len(self.discrete_actions))
+                    }
+                )
+            else:
+                self.policy_action_space = self.envs.action_spaces[0]
             action_shape = 1
             action_type = torch.long
 
@@ -1011,7 +1040,8 @@ class PPOTrainer(BaseRLTrainer):
                     test_recurrent_hidden_states,
                     prev_actions,
                     not_done_masks,
-                    deterministic=False,
+                    # deterministic=False,
+                    deterministic=True,
                 )
 
                 prev_actions.copy_(actions)  # type: ignore
@@ -1023,6 +1053,16 @@ class PPOTrainer(BaseRLTrainer):
             if self.config.RL.POLICY.action_distribution_type == "gaussian":
                 step_data = [
                     action_to_velocity_control(a)
+                    for a in actions.to(device="cpu")
+                ]
+            elif len(self.discrete_actions) > 0:
+                step_data = [
+                    action_to_velocity_control(
+                        torch.tensor(
+                            self.discrete_actions[a.item()],
+                            device='cpu',
+                        )
+                    )
                     for a in actions.to(device="cpu")
                 ]
             else:
@@ -1086,6 +1126,7 @@ class PPOTrainer(BaseRLTrainer):
                             checkpoint_idx=checkpoint_index,
                             metrics=self._extract_scalars_from_info(infos[i]),
                             tb_writer=writer,
+                            fps=30,
                         )
 
                         rgb_frames[i] = []
@@ -1126,12 +1167,15 @@ class PPOTrainer(BaseRLTrainer):
                 / num_episodes
             )
 
-        for k, v in aggregated_stats.items():
-            logger.info(f"Average episode {k}: {v:.4f}")
-
         step_id = checkpoint_index
         if "extra_state" in ckpt_dict and "step" in ckpt_dict["extra_state"]:
             step_id = ckpt_dict["extra_state"]["step"]
+
+        with open(checkpoint_path+'.txt', 'w') as f:
+            f.write(f"{step_id}\n")
+            for k, v in aggregated_stats.items():
+                logger.info(f"Average episode {k}: {v:.4f}")
+                f.write(f"Average episode {k}: {v:.4f}\n")
 
         writer.add_scalars(
             "eval_reward",

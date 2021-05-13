@@ -1,5 +1,5 @@
 # import collections
-from typing import Union
+from typing import Union, Optional, List
 
 # from habitat.core.dataset import Dataset
 # from habitat.core.embodied_task import Action, EmbodiedTask, Measure
@@ -50,6 +50,8 @@ class iGibsonSocialNav(HabitatSim):
             "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
         )
         self.person_ids = []
+        self.people_mask = config.get('PEOPLE_MASK', False)
+        
 
     def reset_people(self):
         agent_position = self.get_agent_state().position
@@ -112,6 +114,52 @@ class iGibsonSocialNav(HabitatSim):
             )
             self.people.append(spf)
 
+    def get_observations_at(
+        self,
+        position: Optional[List[float]] = None,
+        rotation: Optional[List[float]] = None,
+        keep_agent_at_new_pose: bool = False,
+    ) -> Optional[Observations]:
+        observations = super().get_observations_at(
+            position,
+            rotation,
+            keep_agent_at_new_pose,
+        )
+
+        if observations is None:
+            return None
+
+        if not self.people_mask:
+            return observations
+
+        '''
+        Get pixels of just people
+        '''
+        # 'Remove' people
+        all_pos = []
+        for person_id in self.get_existing_object_ids():
+            pos = self.get_translation(person_id)
+            all_pos.append(pos)
+            self.set_translation([pos[0], pos[1]+10, pos[2]], person_id)
+
+        # Refresh observations
+        no_ppl_observations = super().get_observations_at(
+            position=position,
+            rotation=rotation,
+            keep_agent_at_new_pose=True,
+        )
+
+        # Remove non-people pixels
+        observations['people'] = observations['depth'].copy()
+        observations['people'][
+            observations['people'] == no_ppl_observations['depth']
+        ] = 0
+
+        # Put people back
+        for pos, person_id in zip(all_pos, self.get_existing_object_ids()):
+            self.set_translation(pos, person_id)
+
+        return observations
 
 class ShortestPathFollowerv2:
     def __init__(

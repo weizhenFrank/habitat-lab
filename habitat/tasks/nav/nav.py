@@ -1288,6 +1288,7 @@ class VelocityAction(SimulatorTaskAction):
         # TODO: Make a better way to flag collisions
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
         agent_observations["hit_navmesh"] = collided
+        agent_observations["moving_backwards"] = linear_velocity < 0
         if kwargs.get('num_steps', -1) != -1:
             agent_observations["num_steps"] = kwargs["num_steps"]
 

@@ -80,6 +80,7 @@ ACTIONS.VELOCITY_CONTROL.ANG_VEL_RANGE = [-10.0, 10.0]  # deg per sec
 ACTIONS.VELOCITY_CONTROL.MIN_ABS_LIN_SPEED = 0.025  # meters per sec
 ACTIONS.VELOCITY_CONTROL.MIN_ABS_ANG_SPEED = 1.0  # deg per sec
 ACTIONS.VELOCITY_CONTROL.TIME_STEP = 1.0  # seconds
+ACTIONS.VELOCITY_CONTROL.DISCRETE_ACTIONS = []
 
 _C.TASK.ACTIONS = ACTIONS
 # -----------------------------------------------------------------------------

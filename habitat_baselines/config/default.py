@@ -69,6 +69,8 @@ _C.RL.SUCCESS_MEASURE = "spl"
 _C.RL.SUCCESS_REWARD = 2.5
 _C.RL.SLACK_REWARD = -0.01
 _C.RL.FULL_GEODESIC_DECAY = -1.0
+_C.RL.COLLISION_PENALTY = 0.0
+_C.RL.BACKWARDS_PENALTY = 0.0
 # -----------------------------------------------------------------------------
 # preemption CONFIG
 # -----------------------------------------------------------------------------

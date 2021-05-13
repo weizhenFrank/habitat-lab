@@ -88,6 +88,9 @@ class NavRLEnv(habitat.RLEnv):
         if observations.get("hit_navmesh", False):
             reward -= self._rl_config.COLLISION_PENALTY
 
+        if observations.get("moving_backwards", False):
+            reward -= self._rl_config.BACKWARDS_PENALTY
+
         return reward
 
     def _episode_success(self):
