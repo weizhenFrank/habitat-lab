@@ -146,14 +146,16 @@ class iGibsonSocialNav(HabitatSim):
         no_ppl_observations = super().get_observations_at(
             position=position,
             rotation=rotation,
-            keep_agent_at_new_pose=True,
+            keep_agent_at_new_pose=keep_agent_at_new_pose,
         )
 
         # Remove non-people pixels
-        observations['people'] = observations['depth'].copy()
-        observations['people'][
-            observations['people'] == no_ppl_observations['depth']
-        ] = 0
+        just_ppl = observations['depth'].copy()
+        just_ppl[just_ppl==no_ppl_observations['depth']] = 0
+        observations['depth'] = np.concatenate(
+            (observations['depth'], just_ppl),
+            2
+        )
 
         # Put people back
         for pos, person_id in zip(all_pos, self.get_existing_object_ids()):

@@ -110,7 +110,7 @@ class ResNetEncoder(nn.Module):
             spatial_size = observation_space.spaces["depth"].shape[0] // 2
         else:
             self._n_input_depth = 0
-
+            
         if normalize_visual_inputs:
             self.running_mean_and_var: nn.Module = RunningMeanAndVar(
                 self._n_input_depth + self._n_input_rgb

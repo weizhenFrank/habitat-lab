@@ -146,12 +146,26 @@ class PPOTrainer(BaseRLTrainer):
             observation_space, self.obs_transforms
         )
         from gym.spaces import Dict, Box
-        observation_space = Dict(
-            {
-                'depth': self.envs.observation_spaces[0].spaces['depth'],
-                'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
-            }
-        )
+        if self.config.TASK_CONFIG.SIMULATOR.get('PEOPLE_MASK', False):
+            observation_space = Dict(
+                {
+                    'depth': Box(
+                        low=0., high=1., shape=(
+                            self.envs.observation_spaces[0].spaces['depth'].shape[0],
+                            self.envs.observation_spaces[0].spaces['depth'].shape[1],
+                            2,
+                        )
+                    ),
+                    'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
+                }
+            )
+        else:
+            observation_space = Dict(
+                {
+                    'depth': self.envs.observation_spaces[0].spaces['depth'],
+                    'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
+                }
+            )
         self.actor_critic = policy.from_config(
             self.config, observation_space, self.policy_action_space
         )

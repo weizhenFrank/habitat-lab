@@ -18,6 +18,10 @@ class SocialNavigationTask(NavigationTask):
             for p in self._sim.people
         ]
         observations = super().reset(episode)
+        if self._sim.people_mask:
+            observations_ppl = self._sim.get_observations_at()
+            observations['depth'] = observations_ppl['depth']
+
         return observations
 
     def step(self, action: Dict[str, Any], episode: Episode):

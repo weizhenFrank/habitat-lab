@@ -212,7 +212,6 @@ def batch_obs(
                     batch_t[sensor_name] = cache.get(
                         len(observations), sensor_name, sensor, device
                     )
-
                 batch_t[sensor_name][i].copy_(sensor)
 
     if cache is None:
