@@ -468,9 +468,6 @@ def colorize_draw_agent_and_people_and_fit_to_height(
         agent_radius_px=min(top_down_map.shape[0:2]) // 32,
     )
 
-    if top_down_map.shape[0] > top_down_map.shape[1]:
-        top_down_map = np.rot90(top_down_map, 1)
-
     for pos in topdown_map_info["people_map_coord"]:
         top_down_map = draw_agent(
             image=top_down_map,
@@ -479,6 +476,9 @@ def colorize_draw_agent_and_people_and_fit_to_height(
             agent_radius_px=min(top_down_map.shape[0:2]) // 32,
             sprite=HUMAN_SPRITE
         )
+
+    if top_down_map.shape[0] > top_down_map.shape[1]:
+        top_down_map = np.rot90(top_down_map, 1)
 
     # scale top down map to align with rgb view
     old_h, old_w, _ = top_down_map.shape
