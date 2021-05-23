@@ -73,10 +73,11 @@ class PPOTrainer(BaseRLTrainer):
     agent: PPO
     actor_critic: Policy
 
-    def __init__(self, config=None):
-        resume_state = load_resume_state(config)
-        if resume_state is not None:
-            config = resume_state["config"]
+    def __init__(self, config=None, runtype='train'):
+        if runtype == 'train':
+            resume_state = load_resume_state(config)
+            if resume_state is not None:
+                config = resume_state["config"]
 
         super().__init__(config)
         self.actor_critic = None
@@ -948,7 +949,7 @@ class PPOTrainer(BaseRLTrainer):
         if len(self.config.VIDEO_OPTION) > 0:
             config.defrost()
             # config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
-            # config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
+            config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 

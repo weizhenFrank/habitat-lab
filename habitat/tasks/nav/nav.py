@@ -1166,11 +1166,17 @@ class VelocityAction(SimulatorTaskAction):
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
         task.is_stop_called = False  # type: ignore
         if not self._sim.get_existing_object_ids():
-            obj_templates_mgr = self._sim.get_object_template_manager()
-            self._sim.people_template_ids = obj_templates_mgr.load_configs(
-                "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
-            )
-            self._sim.reset_people()
+            if self._sim.social_nav:
+                obj_templates_mgr = self._sim.get_object_template_manager()
+                self._sim.people_template_ids = obj_templates_mgr.load_configs(
+                    "/private/home/naokiyokoyama/gc/datasets/person_meshes"
+                )
+                self._sim.reset_people()
+            elif self._sim.interactive_nav:
+                geodesic_distance = task.measurements.measures[
+                    'distance_to_goal'
+                ].get_metric()
+                self._sim.reset_objects(geodesic_distance)
 
     def step(
         self,

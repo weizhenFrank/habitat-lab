@@ -198,6 +198,7 @@ _C.TASK.COLLISIONS.TYPE = "Collisions"
 # -----------------------------------------------------------------------------
 _C.TASK.HUMAN_COLLISION = CN()
 _C.TASK.HUMAN_COLLISION.TYPE = "HumanCollision"
+_C.TASK.HUMAN_COLLISION.TERMINATION_RADIUS = 0.3
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # # EQA TASK

@@ -54,7 +54,7 @@ def execute_exp(config: Config, run_type: str) -> None:
 
     trainer_init = baseline_registry.get_trainer(config.TRAINER_NAME)
     assert trainer_init is not None, f"{config.TRAINER_NAME} is not supported"
-    trainer = trainer_init(config)
+    trainer = trainer_init(config, runtype=run_type)
 
     if run_type == "train":
         trainer.train()

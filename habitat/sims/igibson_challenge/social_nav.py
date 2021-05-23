@@ -47,10 +47,12 @@ class iGibsonSocialNav(HabitatSim):
         super().__init__(config=config)
         obj_templates_mgr = self.get_object_template_manager()
         self.people_template_ids = obj_templates_mgr.load_configs(
-            "/coc/testnvme/nyokoyama3/flash_datasets/igibson_challenge/person_meshes"
+            "/private/home/naokiyokoyama/gc/datasets/person_meshes"
         )
         self.person_ids = []
         self.people_mask = config.get('PEOPLE_MASK', False)
+        self.social_nav = True
+        self.interactive_nav = False
         
 
     def reset_people(self):
@@ -146,16 +148,14 @@ class iGibsonSocialNav(HabitatSim):
         no_ppl_observations = super().get_observations_at(
             position=position,
             rotation=rotation,
-            keep_agent_at_new_pose=keep_agent_at_new_pose,
+            keep_agent_at_new_pose=True,
         )
 
         # Remove non-people pixels
-        just_ppl = observations['depth'].copy()
-        just_ppl[just_ppl==no_ppl_observations['depth']] = 0
-        observations['depth'] = np.concatenate(
-            (observations['depth'], just_ppl),
-            2
-        )
+        observations['people'] = observations['depth'].copy()
+        observations['people'][
+            observations['people'] == no_ppl_observations['depth']
+        ] = 0
 
         # Put people back
         for pos, person_id in zip(all_pos, self.get_existing_object_ids()):

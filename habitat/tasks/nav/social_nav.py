@@ -18,10 +18,6 @@ class SocialNavigationTask(NavigationTask):
             for p in self._sim.people
         ]
         observations = super().reset(episode)
-        if self._sim.people_mask:
-            observations_ppl = self._sim.get_observations_at()
-            observations['depth'] = observations_ppl['depth']
-
         return observations
 
     def step(self, action: Dict[str, Any], episode: Episode):
@@ -142,7 +138,7 @@ class HumanCollision(Measure):
                 (p.current_position[0]-agent_pos[0])**2
                 +(p.current_position[2]-agent_pos[2])**2
             )
-            if distance < 0.3:
+            if distance < self._config.TERMINATION_RADIUS:
                 self._metric = True
                 break
 
