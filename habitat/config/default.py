@@ -312,6 +312,7 @@ _C.SIMULATOR.HABITAT_SIM_V0.ENABLE_PHYSICS = False
 _C.SIMULATOR.HABITAT_SIM_V0.PHYSICS_CONFIG_FILE = (
     "./data/default.physics_config.json"
 )
+_C.SIMULATOR.NUM_PEOPLE = 1
 # -----------------------------------------------------------------------------
 # PYROBOT
 # -----------------------------------------------------------------------------

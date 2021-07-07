@@ -52,7 +52,9 @@ class BaseTrainer:
 
         ckpt_cmd_opts = checkpoint_config.CMD_TRAILING_OPTS
         eval_cmd_opts = config.CMD_TRAILING_OPTS
-
+        checkpoint_config.defrost()
+        checkpoint_config.TOTAL_NUM_STEPS = float(checkpoint_config.TOTAL_NUM_STEPS)
+        checkpoint_config.freeze()
         try:
             config.merge_from_other_cfg(checkpoint_config)
             config.merge_from_other_cfg(self.config)
@@ -202,6 +204,8 @@ class BaseRLTrainer(BaseTrainer):
         if self.config.NUM_UPDATES != -1:
             return self.num_updates_done / self.config.NUM_UPDATES
         else:
+            if self.OVERRIDE_TOTAL_NUM_STEPS is not None:
+                return self.num_steps_done / self.OVERRIDE_TOTAL_NUM_STEPS
             return self.num_steps_done / self.config.TOTAL_NUM_STEPS
 
     def is_done(self) -> bool:
@@ -211,6 +215,11 @@ class BaseRLTrainer(BaseTrainer):
         needs_checkpoint = False
         if self.config.NUM_CHECKPOINTS != -1:
             checkpoint_every = 1 / self.config.NUM_CHECKPOINTS
+            print('ckpt stuff')
+            print(
+                self._last_checkpoint_percent + checkpoint_every,
+                self.percent_done()
+            )
             if (
                 self._last_checkpoint_percent + checkpoint_every
                 < self.percent_done()

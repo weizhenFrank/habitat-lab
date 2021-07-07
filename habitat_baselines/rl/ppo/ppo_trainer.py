@@ -76,8 +76,18 @@ class PPOTrainer(BaseRLTrainer):
     def __init__(self, config=None, runtype='train'):
         if runtype == 'train':
             resume_state = load_resume_state(config)
+            self.OVERRIDE_TOTAL_NUM_STEPS = None
             if resume_state is not None:
-                config = resume_state["config"]
+                if 'OVERRIDE' in config:
+                    self.OVERRIDE_NUM_CHECKPOINTS = config.OVERRIDE.NUM_CHECKPOINTS
+                    self.OVERRIDE_TOTAL_NUM_STEPS = config.OVERRIDE.TOTAL_NUM_STEPS
+                    config = resume_state["config"]
+                    config.defrost()
+                    config.NUM_CHECKPOINTS = self.OVERRIDE_NUM_CHECKPOINTS
+                    config.TOTAL_NUM_STEPS = self.OVERRIDE_TOTAL_NUM_STEPS
+                    config.freeze()
+                else:
+                    config = resume_state["config"]
 
         super().__init__(config)
         self.actor_critic = None
@@ -777,16 +787,14 @@ class PPOTrainer(BaseRLTrainer):
             self.pth_time = requeue_stats["pth_time"]
             self.num_steps_done = requeue_stats["num_steps_done"]
             self.num_updates_done = requeue_stats["num_updates_done"]
-            self._last_checkpoint_percent = requeue_stats[
-                "_last_checkpoint_percent"
-            ]
+            if self.OVERRIDE_TOTAL_NUM_STEPS is None:
+                self._last_checkpoint_percent = requeue_stats[
+                    "_last_checkpoint_percent"
+                ]
+            else:
+                self._last_checkpoint_percent = self.percent_done()
             count_checkpoints = requeue_stats["count_checkpoints"]
             prev_time = requeue_stats["prev_time"]
-
-            self._last_checkpoint_percent = requeue_stats[
-                "_last_checkpoint_percent"
-            ]
-
             self.running_episode_stats = requeue_stats["running_episode_stats"]
             self.window_episode_stats.update(
                 requeue_stats["window_episode_stats"]
@@ -948,8 +956,10 @@ class PPOTrainer(BaseRLTrainer):
 
         if len(self.config.VIDEO_OPTION) > 0:
             config.defrost()
-            # config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
-            config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
+            if config.TASK_CONFIG.TASK.TYPE == 'InteractiveNav-v0':
+                config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
+            else:
+                config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 

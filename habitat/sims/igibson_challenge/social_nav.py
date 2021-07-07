@@ -51,6 +51,7 @@ class iGibsonSocialNav(HabitatSim):
         )
         self.person_ids = []
         self.people_mask = config.get('PEOPLE_MASK', False)
+        self.num_people = config.get('NUM_PEOPLE', 1)
         self.social_nav = True
         self.interactive_nav = False
         
@@ -62,8 +63,9 @@ class iGibsonSocialNav(HabitatSim):
         # Check if humans have been erased (sim was reset)
         if not self.get_existing_object_ids():
             self.person_ids = []
-            for person_template_id in self.people_template_ids:
-                self.person_ids.append(self.add_object(person_template_id))
+            for _ in range(self.num_people):
+                for person_template_id in self.people_template_ids:
+                    self.person_ids.append(self.add_object(person_template_id))
 
         # Spawn humans
         min_path_dist = 3
@@ -88,7 +90,7 @@ class iGibsonSocialNav(HabitatSim):
                 valid_start = np.sqrt(
                     (start[0]-agent_x)**2
                     +(start[2]-agent_z)**2
-                ) > 0.6
+                ) > 0.5
                 valid_walk = (
                     valid_distance and valid_level
                     and found_path and valid_start

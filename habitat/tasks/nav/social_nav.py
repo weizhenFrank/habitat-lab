@@ -132,13 +132,13 @@ class HumanCollision(Measure):
         *args: Any,
         **kwargs: Any
     ):
+        agent_pos = self._sim.get_agent_state().position
         for p in self._sim.people:
-            agent_pos = self._sim.get_agent_state().position
             distance = np.sqrt(
                 (p.current_position[0]-agent_pos[0])**2
                 +(p.current_position[2]-agent_pos[2])**2
             )
-            if distance < self._config.TERMINATION_RADIUS:
+            if distance < self._config.get('TERMINATION_RADIUS', 0.3):
                 self._metric = True
                 break
 

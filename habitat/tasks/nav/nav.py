@@ -1172,11 +1172,6 @@ class VelocityAction(SimulatorTaskAction):
                     "/private/home/naokiyokoyama/gc/datasets/person_meshes"
                 )
                 self._sim.reset_people()
-            elif self._sim.interactive_nav:
-                geodesic_distance = task.measurements.measures[
-                    'distance_to_goal'
-                ].get_metric()
-                self._sim.reset_objects(geodesic_distance)
 
     def step(
         self,
@@ -1313,3 +1308,12 @@ class NavigationTask(EmbodiedTask):
 
     def _check_episode_is_active(self, *args: Any, **kwargs: Any) -> bool:
         return not getattr(self, "is_stop_called", False)
+
+
+@registry.register_task(name="InteractiveNav-v0")
+class InteractiveNavigationTask(NavigationTask):
+    def reset(self, episode):
+        self._sim.reset_objects(episode)
+        observations = super().reset(episode)
+        return observations
+

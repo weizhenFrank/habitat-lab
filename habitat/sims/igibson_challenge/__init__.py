@@ -20,9 +20,15 @@ def _try_register_igibson_socialnav():
         from habitat.sims.igibson_challenge.social_nav import (
             iGibsonSocialNav
         )  # noqa: F401
+        from habitat.sims.igibson_challenge.interactive_nav import (
+            iGibsonInteractiveNav
+        )  # noqa: F401
     else:
-
         @registry.register_simulator(name="iGibsonSocialNav")
+        class iGibsonSocialNavImportError(Simulator):
+            def __init__(self, *args, **kwargs):
+                raise habitat_sim_import_error
+        @registry.register_simulator(name="iGibsonInteractiveNav")
         class iGibsonSocialNavImportError(Simulator):
             def __init__(self, *args, **kwargs):
                 raise habitat_sim_import_error
