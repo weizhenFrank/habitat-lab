@@ -265,7 +265,7 @@ def poll_checkpoint_folder(
     # return None
     models_paths = list(
         filter(
-            lambda x: not os.path.isfile(x+'.done'), 
+            lambda x: not os.path.isfile(x+'.done'),
             glob.glob(os.path.join(checkpoint_folder, '*.pth'))
         )
     )
@@ -535,6 +535,7 @@ def delete_folder(path: str) -> None:
 
 def action_to_velocity_control(
     action: torch.Tensor,
+    allow_sliding: bool = None,
     num_steps: float = -1,
 ) -> Union[int, str, Dict[str, Any]]:
     lin_vel, ang_vel = torch.clip(action, min=-1, max=1)
@@ -544,7 +545,7 @@ def action_to_velocity_control(
             "action_args": {
                 "linear_velocity": lin_vel.item(),
                 "angular_velocity": ang_vel.item(),
-                "allow_sliding": True,
+                "allow_sliding": allow_sliding,
             },
         }
     }
