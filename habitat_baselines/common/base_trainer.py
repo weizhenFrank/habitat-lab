@@ -215,11 +215,7 @@ class BaseRLTrainer(BaseTrainer):
         needs_checkpoint = False
         if self.config.NUM_CHECKPOINTS != -1:
             checkpoint_every = 1 / self.config.NUM_CHECKPOINTS
-            print('ckpt stuff')
-            print(
-                self._last_checkpoint_percent + checkpoint_every,
-                self.percent_done()
-            )
+
             if (
                 self._last_checkpoint_percent + checkpoint_every
                 < self.percent_done()
