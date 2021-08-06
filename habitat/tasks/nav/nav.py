@@ -631,9 +631,9 @@ class SCT(SPL):
     ):
         ep_success = task.measurements.measures[Success.cls_uuid].get_metric()
         if not ep_success or not self._was_last_success:
-            self._num_steps_taken += 1 
+            self._num_steps_taken += 1
         self._was_last_success = ep_success
-        
+
         oracle_time = (
             self._start_end_episode_distance / self._config.HOLONOMIC_VELOCITY
         )
@@ -1152,7 +1152,11 @@ class VelocityAction(SimulatorTaskAction):
         self.min_ang_vel, self.max_ang_vel = config.ANG_VEL_RANGE
         self.min_abs_lin_speed = config.MIN_ABS_LIN_SPEED
         self.min_abs_ang_speed = config.MIN_ABS_ANG_SPEED
+        self.must_call_stop = config.MUST_CALL_STOP
         self.time_step = config.TIME_STEP
+
+        # For acceleration penalty
+        self.prev_ang_vel = 0.0
 
     @property
     def action_space(self):
@@ -1165,6 +1169,7 @@ class VelocityAction(SimulatorTaskAction):
 
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
         task.is_stop_called = False  # type: ignore
+        self.prev_ang_vel = 0.0
         if not self._sim.get_existing_object_ids():
             if self._sim.social_nav:
                 obj_templates_mgr = self._sim.get_object_template_manager()
@@ -1177,8 +1182,8 @@ class VelocityAction(SimulatorTaskAction):
         self,
         *args: Any,
         task: EmbodiedTask,
-        linear_velocity: float,
-        angular_velocity: float,
+        lin_vel: float,
+        ang_vel: float,
         time_step: Optional[float] = None,
         allow_sliding: Optional[bool] = None,
         **kwargs: Any,
@@ -1187,9 +1192,9 @@ class VelocityAction(SimulatorTaskAction):
         provided amount of time
 
         Args:
-            linear_velocity: between [-1,1], scaled according to
+            lin_vel: between [-1,1], scaled according to
                              config.LIN_VEL_RANGE
-            angular_velocity: between [-1,1], scaled according to
+            ang_vel: between [-1,1], scaled according to
                              config.ANG_VEL_RANGE
             time_step: amount of time to move the agent for
             allow_sliding: whether the agent will slide on collision
@@ -1200,35 +1205,38 @@ class VelocityAction(SimulatorTaskAction):
             time_step = self.time_step
 
         # Convert from [-1, 1] to [0, 1] range
-        linear_velocity = (linear_velocity + 1.0) / 2.0
-        angular_velocity = (angular_velocity + 1.0) / 2.0
+        lin_vel = (lin_vel + 1.0) / 2.0
+        ang_vel = (ang_vel + 1.0) / 2.0
 
         # Scale actions
-        linear_velocity = self.min_lin_vel + linear_velocity * (
+        lin_vel = self.min_lin_vel + lin_vel * (
             self.max_lin_vel - self.min_lin_vel
         )
-        angular_velocity = self.min_ang_vel + angular_velocity * (
+        ang_vel = self.min_ang_vel + ang_vel * (
             self.max_ang_vel - self.min_ang_vel
         )
+        ang_vel = np.deg2rad(ang_vel)
 
-        # Stop is called if both linear/angular speed are below their threshold
-        # if (
-        #     abs(linear_velocity) < self.min_abs_lin_speed
-        #     and abs(angular_velocity) < self.min_abs_ang_speed
-        # ):
-        distance_to_target = (
-            task.measurements.measures['distance_to_goal'].get_metric()
-        )
-        if distance_to_target < 0.2:
+        if (
+            self.must_call_stop and (
+                abs(lin_vel) < self.min_abs_lin_speed
+                and abs(ang_vel) < self.min_abs_ang_speed
+            )
+            or not self.must_call_stop
+            and task.measurements.measures['distance_to_goal'].get_metric()
+            < 0.2
+        ):
             task.is_stop_called = True  # type: ignore
-            return self._sim.get_observations_at(position=None, rotation=None)
+            return self._sim.get_observations_at(
+                position=None,
+                rotation=None,
+            )
 
-        angular_velocity = np.deg2rad(angular_velocity)
         self.vel_control.linear_velocity = np.array(
-            [0.0, 0.0, -linear_velocity]
+            [0.0, 0.0, -lin_vel]
         )
         self.vel_control.angular_velocity = np.array(
-            [0.0, angular_velocity, 0.0]
+            [0.0, ang_vel, 0.0]
         )
         agent_state = self._sim.get_agent_state()
 
@@ -1289,9 +1297,14 @@ class VelocityAction(SimulatorTaskAction):
         # TODO: Make a better way to flag collisions
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
         agent_observations["hit_navmesh"] = collided
-        agent_observations["moving_backwards"] = linear_velocity < 0
+        agent_observations["moving_backwards"] = lin_vel < 0
+        agent_observations["ang_accel"] = (
+            ang_vel - self.prev_ang_vel
+        ) / self.time_step
         if kwargs.get('num_steps', -1) != -1:
             agent_observations["num_steps"] = kwargs["num_steps"]
+
+        self.prev_ang_vel = ang_vel
 
         return agent_observations
 

@@ -110,7 +110,7 @@ class ResNetEncoder(nn.Module):
             spatial_size = observation_space.spaces["depth"].shape[0] // 2
         else:
             self._n_input_depth = 0
-            
+
         if normalize_visual_inputs:
             self.running_mean_and_var: nn.Module = RunningMeanAndVar(
                 self._n_input_depth + self._n_input_rgb
@@ -320,7 +320,7 @@ class PointNavResNetNet(Net):
             self.visual_fc = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(
-                    7680, hidden_size
+                    4560, hidden_size
                     # np.prod(self.visual_encoder.output_shape), hidden_size
                 ),
                 nn.ReLU(True),

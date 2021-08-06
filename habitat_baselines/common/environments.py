@@ -81,7 +81,7 @@ class NavRLEnv(habitat.RLEnv):
                 )
             )
 
-        sim = self._env._sim 
+        sim = self._env._sim
         if 'PROXIMITY_PENALTY' in self._rl_config:
             agent_pos = sim.get_agent_state().position
             if sim.social_nav:
@@ -113,6 +113,13 @@ class NavRLEnv(habitat.RLEnv):
 
         if observations.get("moving_backwards", False):
             reward -= self._rl_config.BACKWARDS_PENALTY
+
+        if 'ang_accel' in observations:
+            reward -= min(
+                abs(observations['ang_accel'])
+                * self._rl_config.ANG_ACCEL_PENALTY_COEFF,
+                self._rl_config.MAX_ANG_ACCEL_PENALTY,
+            )
 
         return reward
 

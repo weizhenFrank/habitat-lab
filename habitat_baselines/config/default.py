@@ -18,6 +18,7 @@ CONFIG_FILE_SEPARATOR = ","
 # EXPERIMENT CONFIG
 # -----------------------------------------------------------------------------
 _C = CN()
+_C.JUNK = False
 # task config can be a list of conifgs like "A.yaml,B.yaml"
 _C.BASE_TASK_CONFIG_PATH = "configs/tasks/pointnav.yaml"
 _C.TASK_CONFIG = CN()  # task_config will be stored as a config node
@@ -29,6 +30,7 @@ _C.TORCH_GPU_ID = 0
 _C.VIDEO_OPTION = ["disk", "tensorboard"]
 _C.TENSORBOARD_DIR = "tb"
 _C.VIDEO_DIR = "video_dir"
+_C.JSON_DIR = ""
 _C.TEST_EPISODE_COUNT = -1
 _C.EVAL_CKPT_PATH_DIR = "data/checkpoints"  # path to ckpt or path to ckpts dir
 _C.NUM_ENVIRONMENTS = 16
@@ -71,6 +73,8 @@ _C.RL.SLACK_REWARD = -0.01
 _C.RL.FULL_GEODESIC_DECAY = -1.0
 _C.RL.COLLISION_PENALTY = 0.0
 _C.RL.BACKWARDS_PENALTY = 0.0
+_C.RL.ANG_ACCEL_PENALTY_COEFF = 0.0
+_C.RL.MAX_ANG_ACCEL_PENALTY = 0.0
 # -----------------------------------------------------------------------------
 # preemption CONFIG
 # -----------------------------------------------------------------------------

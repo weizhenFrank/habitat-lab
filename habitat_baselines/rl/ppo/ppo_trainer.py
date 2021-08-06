@@ -12,6 +12,7 @@ from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import json
 import torch
 import tqdm
 from gym import spaces
@@ -1048,6 +1049,7 @@ class PPOTrainer(BaseRLTrainer):
 
         pbar = tqdm.tqdm(total=number_of_eval_episodes)
         self.actor_critic.eval()
+        all_episode_stats = {}
         while (
             len(stats_episodes) < number_of_eval_episodes
             and self.envs.num_envs > 0
@@ -1142,6 +1144,12 @@ class PPOTrainer(BaseRLTrainer):
                         )
                     ] = episode_stats
 
+                    episode_stats['num_steps'] = len(rgb_frames[i])
+
+                    all_episode_stats[
+                        current_episodes[i].episode_id
+                    ] = episode_stats
+
                     if len(self.config.VIDEO_OPTION) > 0:
                         generate_video(
                             video_option=self.config.VIDEO_OPTION,
@@ -1154,7 +1162,7 @@ class PPOTrainer(BaseRLTrainer):
                             fps=30,
                         )
 
-                        rgb_frames[i] = []
+                    rgb_frames[i] = []
 
                 # episode continues
                 elif len(self.config.VIDEO_OPTION) > 0:
@@ -1163,6 +1171,8 @@ class PPOTrainer(BaseRLTrainer):
                         {k: v[i] for k, v in batch.items()}, infos[i]
                     )
                     rgb_frames[i].append(frame)
+                else:
+                    rgb_frames[i].append(None)
 
             not_done_masks = not_done_masks.to(device=self.device)
             (
@@ -1196,11 +1206,23 @@ class PPOTrainer(BaseRLTrainer):
         if "extra_state" in ckpt_dict and "step" in ckpt_dict["extra_state"]:
             step_id = ckpt_dict["extra_state"]["step"]
 
-        with open(checkpoint_path+'.txt', 'w') as f:
-            f.write(f"{step_id}\n")
-            for k, v in aggregated_stats.items():
-                logger.info(f"Average episode {k}: {v:.4f}")
-                f.write(f"Average episode {k}: {v:.4f}\n")
+        # with open(checkpoint_path+'.txt', 'w') as f:
+        #     f.write(f"{step_id}\n")
+        for k, v in aggregated_stats.items():
+            logger.info(f"Average episode {k}: {v:.4f}")
+                # f.write(f"Average episode {k}: {v:.4f}\n")
+
+        # Save JSON file
+        all_episode_stats['agg_stats'] = aggregated_stats
+        json_dir = self.config.JSON_DIR
+        if json_dir != '':
+            os.makedirs(json_dir, exist_ok=True)
+            json_path = os.path.join(
+                json_dir,
+                f"{os.path.basename(checkpoint_path[:-4]).replace('.','_')}.json",
+            )
+            with open(json_path, 'w') as f:
+                json.dump(all_episode_stats, f)
 
         writer.add_scalars(
             "eval_reward",
