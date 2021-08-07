@@ -1158,6 +1158,8 @@ class VelocityAction(SimulatorTaskAction):
         # For acceleration penalty
         self.prev_ang_vel = 0.0
 
+        self.robot_id = 0
+
     @property
     def action_space(self):
         return spaces.Box(
@@ -1177,6 +1179,15 @@ class VelocityAction(SimulatorTaskAction):
                     "/private/home/naokiyokoyama/gc/datasets/person_meshes"
                 )
                 self._sim.reset_people()
+        # if not self._sim.get_existing_articulated_object_ids():
+
+        try:
+            self._sim.get_articulated_object_root_state(self.robot_id)
+        except:
+            robot_file = "/private/home/naokiyokoyama/delme/habitat-sim/data/URDF_demo_assets/spot_arm/urdf/spot_arm.urdf"
+            obj_templates_mgr = self._sim.get_object_template_manager()
+            robot_template_id = obj_templates_mgr.load_configs(robot_file)
+            self.robot_id = self._sim.add_object(robot_template_id)
 
     def step(
         self,
@@ -1199,8 +1210,6 @@ class VelocityAction(SimulatorTaskAction):
             time_step: amount of time to move the agent for
             allow_sliding: whether the agent will slide on collision
         """
-        if allow_sliding is None:
-            allow_sliding = self._sim.config.sim_cfg.allow_sliding  # type: ignore
         if time_step is None:
             time_step = self.time_step
 
@@ -1260,33 +1269,30 @@ class VelocityAction(SimulatorTaskAction):
             time_step, current_rigid_state
         )
 
-        # snap rigid state to navmesh and set state to object/agent
-        if allow_sliding:
-            step_fn = self._sim.pathfinder.try_step  # type: ignore
-        else:
-            step_fn = self._sim.pathfinder.try_step_no_sliding  # type: ignore
+        """See if goal state causes interpenetration with surroundings"""
+        # Save current rigid state
+        curr_rs = self._sim.get_articulated_object_root_state(self.robot_id)
 
-        final_position = step_fn(
-            agent_state.position, goal_rigid_state.translation
+        # Calculate next rigid state off agent rigid state
+        next_rs = RigidState()
+        next_rs.rotation = goal_rigid_state.rotation
+        next_rs.translation = np.array(goal_rigid_state.translation) + np.array(
+            0.0, 0.65, 0.0,
         )
+
+        # Check if next rigid state causes interpenetration
+        self._sim.set_articulated_object_root_state(self.robot_id, next_rs)
+        if self._sim.contact_test(self.robot_id):
+            # Interpenetration occurred. Revert to last rigid state.
+            self._sim.set_articulated_object_root_state(self.robot_id, curr_rs)
+            collided = True
+            goal_rigid_state = curr_rs
+
         final_rotation = [
             *goal_rigid_state.rotation.vector,
             goal_rigid_state.rotation.scalar,
         ]
-
-        # Check if a collision occured
-        dist_moved_before_filter = (
-            goal_rigid_state.translation - agent_state.position
-        ).dot()
-        dist_moved_after_filter = (final_position - agent_state.position).dot()
-
-        # NB: There are some cases where ||filter_end - end_pos|| > 0 when a
-        # collision _didn't_ happen. One such case is going up stairs.  Instead,
-        # we check to see if the the amount moved after the application of the
-        # filter is _less_ than the amount moved before the application of the
-        # filter.
-        EPS = 1e-5
-        collided = (dist_moved_after_filter + EPS) < dist_moved_before_filter
+        final_position = goal_rigid_state.translation
 
         agent_observations = self._sim.get_observations_at(
             position=final_position,
