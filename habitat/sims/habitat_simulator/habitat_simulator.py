@@ -335,6 +335,8 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             self.habitat_config.ACTION_SPACE_CONFIG
         )(self.habitat_config).get()
 
+        sim_config.enable_physics = True
+
         return habitat_sim.Configuration(sim_config, [agent_config])
 
     @property
