@@ -1158,7 +1158,7 @@ class VelocityAction(SimulatorTaskAction):
         # For acceleration penalty
         self.prev_ang_vel = 0.0
 
-        self.robot_id = 0
+        self.robot_id = None
 
     @property
     def action_space(self):
@@ -1172,22 +1172,31 @@ class VelocityAction(SimulatorTaskAction):
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
         task.is_stop_called = False  # type: ignore
         self.prev_ang_vel = 0.0
-        if not self._sim.get_existing_object_ids():
-            if self._sim.social_nav:
-                obj_templates_mgr = self._sim.get_object_template_manager()
-                self._sim.people_template_ids = obj_templates_mgr.load_configs(
-                    "/private/home/naokiyokoyama/gc/datasets/person_meshes"
-                )
-                self._sim.reset_people()
-        # if not self._sim.get_existing_articulated_object_ids():
+        # if not self._sim.get_existing_object_ids():
+        #     if self._sim.social_nav:
+        #         obj_templates_mgr = self._sim.get_object_template_manager()
+        #         self._sim.people_template_ids = obj_templates_mgr.load_configs(
+        #             "/private/home/naokiyokoyama/gc/datasets/person_meshes"
+        #         )
+        #         self._sim.reset_people()
 
-        try:
-            self._sim.get_articulated_object_root_state(self.robot_id)
-        except:
+        # If robot was never spawned or was removed with previous scene
+        if self.robot_id is None or self.robot_id.object_id == -1:
             robot_file = "/private/home/naokiyokoyama/delme/habitat-sim/data/URDF_demo_assets/spot_arm/urdf/spot_arm.urdf"
-            obj_templates_mgr = self._sim.get_object_template_manager()
-            robot_template_id = obj_templates_mgr.load_configs(robot_file)
-            self.robot_id = self._sim.add_object(robot_template_id)
+            ao_mgr = self._sim.get_articulated_object_manager()
+            self.robot_id = ao_mgr.add_articulated_object_from_urdf(
+                robot_file, fixed_base=False
+            )
+
+        self.robot_id.joint_positions = np.deg2rad(np.array([
+            0., -170., 0,
+            135., 0. -45.,
+            0., 0., 0.,
+            0., 45, -90,
+            0., 45, -90,
+            0., 45, -90,
+            0., 45, -90,
+        ]))
 
     def step(
         self,
@@ -1270,35 +1279,81 @@ class VelocityAction(SimulatorTaskAction):
         )
 
         """See if goal state causes interpenetration with surroundings"""
-        # Save current rigid state
-        curr_rs = self._sim.get_articulated_object_root_state(self.robot_id)
 
         # Calculate next rigid state off agent rigid state
-        next_rs = RigidState()
-        next_rs.rotation = goal_rigid_state.rotation
-        next_rs.translation = np.array(goal_rigid_state.translation) + np.array(
-            0.0, 0.65, 0.0,
+
+        def cartesian_to_polar(x, y):
+            rho = np.sqrt(x ** 2 + y ** 2)
+            phi = np.arctan2(y, x)
+            return rho, phi
+
+        def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
+            r"""Rotates a vector by a quaternion
+            Args:
+                quaternion: The quaternion to rotate by
+                v: The vector to rotate
+            Returns:
+                np.array: The rotated vector
+            """
+            vq = np.quaternion(0, 0, 0, 0)
+            vq.imag = v
+            return (quat * vq * quat.inverse()).imag
+
+        def quat_to_rad(rotation):
+            heading_vector = quaternion_rotate_vector(
+                rotation.inverse(), np.array([0, 0, -1])
+            )
+            phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+            return phi
+
+        heading = np.quaternion(goal_rigid_state.rotation.scalar, *goal_rigid_state.rotation.vector)
+        heading = -quat_to_rad(heading) + np.pi / 2
+
+        next_rs = mn.Matrix4.rotation_y(
+            mn.Rad(-heading),
+        ).__matmul__(
+            mn.Matrix4.rotation(
+                mn.Rad(np.pi),
+                mn.Vector3((0.0, 1.0, 0.0)),
+            )
+        ).__matmul__(
+            mn.Matrix4.rotation(
+                mn.Rad(-np.pi / 2.0),
+                mn.Vector3((1.0, 0.0, 0.0)),
+            )
         )
 
-        # Check if next rigid state causes interpenetration
-        self._sim.set_articulated_object_root_state(self.robot_id, next_rs)
-        if self._sim.contact_test(self.robot_id):
-            # Interpenetration occurred. Revert to last rigid state.
-            self._sim.set_articulated_object_root_state(self.robot_id, curr_rs)
-            collided = True
-            goal_rigid_state = curr_rs
+        next_rs.translation = np.array(goal_rigid_state.translation) + np.array([
+            0.0, 0.425, 0.0,
+        ])
 
-        final_rotation = [
-            *goal_rigid_state.rotation.vector,
-            goal_rigid_state.rotation.scalar,
-        ]
-        final_position = goal_rigid_state.translation
+        # Check if next rigid state causes interpenetration
+        curr_rs = self.robot_id.transformation
+        self.robot_id.transformation = next_rs
+        collided = self._sim.contact_test(self.robot_id.object_id)
+        if collided:
+            # Interpenetration occurred. Revert to last rigid state.
+            self.robot_id.transformation = curr_rs
+            final_rotation = [
+                *current_rigid_state.rotation.vector,
+                current_rigid_state.rotation.scalar,
+            ]
+            final_position = current_rigid_state.translation
+        else:
+            final_rotation = [
+                *goal_rigid_state.rotation.vector,
+                goal_rigid_state.rotation.scalar,
+            ]
+            final_position = goal_rigid_state.translation
+
 
         agent_observations = self._sim.get_observations_at(
             position=final_position,
             rotation=final_rotation,
             keep_agent_at_new_pose=True,
         )
+
+        collided = False
 
         # TODO: Make a better way to flag collisions
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
