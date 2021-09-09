@@ -99,6 +99,7 @@ class BaseTrainer:
         with TensorboardWriter(
             self.config.TENSORBOARD_DIR, flush_secs=self.flush_secs
         ) as writer:
+            print('self.config.EVAL_CKPT_PATH_DIR',self.config.EVAL_CKPT_PATH_DIR)
             if os.path.isfile(self.config.EVAL_CKPT_PATH_DIR):
                 # evaluate singe checkpoint
                 proposed_index = get_checkpoint_id(

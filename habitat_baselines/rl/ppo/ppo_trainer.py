@@ -287,13 +287,10 @@ class PPOTrainer(BaseRLTrainer):
         self._init_envs()
 
         if self.config.RL.POLICY.action_distribution_type == "gaussian":
-            self.policy_action_space = ActionSpace(
-                {
-                    "linear_velocity": EmptySpace(),
-                    "angular_velocity": EmptySpace(),
-                }
-            )
-            action_shape = 2
+            self.policy_action_space = self.envs.action_spaces[0][
+                "VELOCITY_CONTROL"
+            ]
+            action_shape = self.policy_action_space.n
             discrete_actions = False
         else:
             if len(self.discrete_actions) > 0:
@@ -957,10 +954,10 @@ class PPOTrainer(BaseRLTrainer):
 
         if len(self.config.VIDEO_OPTION) > 0:
             config.defrost()
-            if config.TASK_CONFIG.TASK.TYPE == 'InteractiveNav-v0':
-                config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
-            else:
+            if config.TASK_CONFIG.TASK.TYPE == 'SocialNav-v0':
                 config.TASK_CONFIG.TASK.MEASUREMENTS.append("SOCIAL_TOP_DOWN_MAP")
+            else:
+                config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 
@@ -970,13 +967,10 @@ class PPOTrainer(BaseRLTrainer):
         self._init_envs(config)
 
         if self.config.RL.POLICY.action_distribution_type == "gaussian":
-            self.policy_action_space = ActionSpace(
-                {
-                    "linear_velocity": EmptySpace(),
-                    "angular_velocity": EmptySpace(),
-                }
-            )
-            action_shape = 2
+            self.policy_action_space = self.envs.action_spaces[0][
+                "VELOCITY_CONTROL"
+            ]
+            action_shape = self.policy_action_space.n
             action_type = torch.float
         else:
             if len(self.discrete_actions) > 0:

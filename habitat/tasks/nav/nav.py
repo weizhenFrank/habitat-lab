@@ -33,6 +33,7 @@ from habitat.core.simulator import (
     ShortestPathPoint,
     Simulator,
 )
+from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.tasks.utils import cartesian_to_polar
@@ -1155,6 +1156,11 @@ class VelocityAction(SimulatorTaskAction):
         self.must_call_stop = config.MUST_CALL_STOP
         self.time_step = config.TIME_STEP
 
+        # Horizontal velocity
+        self.min_hor_vel, self.max_hor_vel = config.HOR_VEL_RANGE
+        self.has_hor_vel = self.min_hor_vel != 0.0 and self.max_hor_vel != 0.0
+        self.min_abs_hor_speed = config.MIN_ABS_HOR_SPEED
+
         # For acceleration penalty
         self.prev_ang_vel = 0.0
 
@@ -1162,23 +1168,31 @@ class VelocityAction(SimulatorTaskAction):
 
     @property
     def action_space(self):
-        return spaces.Box(
-            low=np.array([self.min_lin_vel, self.min_lin_vel]),
-            high=np.array([self.max_lin_vel, self.max_lin_vel]),
-            shape=(2,),
-            dtype=np.float,
-        )
+        action_dict = {
+            "linear_velocity": spaces.Box(
+                low=np.array([self.min_lin_vel]),
+                high=np.array([self.max_lin_vel]),
+                dtype=np.float32,
+            ),
+            "angular_velocity": spaces.Box(
+                low=np.array([self.min_ang_vel]),
+                high=np.array([self.max_ang_vel]),
+                dtype=np.float32,
+            ),
+        }
+        
+        if self.has_hor_vel:
+            action_dict['horizontal_velocity'] = spaces.Box(
+                low=np.array([self.min_hor_vel]),
+                high=np.array([self.max_hor_vel]),
+                dtype=np.float32,
+            )
+        
+        return ActionSpace(action_dict)
 
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
         task.is_stop_called = False  # type: ignore
         self.prev_ang_vel = 0.0
-        # if not self._sim.get_existing_object_ids():
-        #     if self._sim.social_nav:
-        #         obj_templates_mgr = self._sim.get_object_template_manager()
-        #         self._sim.people_template_ids = obj_templates_mgr.load_configs(
-        #             "/private/home/naokiyokoyama/gc/datasets/person_meshes"
-        #         )
-        #         self._sim.reset_people()
 
         # If robot was never spawned or was removed with previous scene
         if self.robot_id is None or self.robot_id.object_id == -1:
@@ -1204,6 +1218,7 @@ class VelocityAction(SimulatorTaskAction):
         task: EmbodiedTask,
         lin_vel: float,
         ang_vel: float,
+        hor_vel: Optional[float] = 0.0,
         time_step: Optional[float] = None,
         allow_sliding: Optional[bool] = None,
         **kwargs: Any,
@@ -1219,12 +1234,14 @@ class VelocityAction(SimulatorTaskAction):
             time_step: amount of time to move the agent for
             allow_sliding: whether the agent will slide on collision
         """
+
         if time_step is None:
             time_step = self.time_step
 
         # Convert from [-1, 1] to [0, 1] range
         lin_vel = (lin_vel + 1.0) / 2.0
         ang_vel = (ang_vel + 1.0) / 2.0
+        hor_vel = (hor_vel + 1.0) / 2.0
 
         # Scale actions
         lin_vel = self.min_lin_vel + lin_vel * (
@@ -1234,11 +1251,15 @@ class VelocityAction(SimulatorTaskAction):
             self.max_ang_vel - self.min_ang_vel
         )
         ang_vel = np.deg2rad(ang_vel)
+        hor_vel = self.min_hor_vel + hor_vel * (
+            self.max_hor_vel - self.min_hor_vel
+        )
 
         if (
             self.must_call_stop and (
                 abs(lin_vel) < self.min_abs_lin_speed
                 and abs(ang_vel) < self.min_abs_ang_speed
+                and abs(hor_vel) < self.min_abs_hor_speed
             )
             or not self.must_call_stop
             and task.measurements.measures['distance_to_goal'].get_metric()
@@ -1251,12 +1272,13 @@ class VelocityAction(SimulatorTaskAction):
             )
 
         self.vel_control.linear_velocity = np.array(
-            [0.0, 0.0, -lin_vel]
+            [hor_vel, 0.0, -lin_vel]
         )
         self.vel_control.angular_velocity = np.array(
             [0.0, ang_vel, 0.0]
         )
         agent_state = self._sim.get_agent_state()
+
 
         # TODO: Sometimes the rotation given by get_agent_state is off by 1e-4
         # in terms of if the quaternion it represents is normalized, which
@@ -1277,6 +1299,36 @@ class VelocityAction(SimulatorTaskAction):
         goal_rigid_state = self.vel_control.integrate_transform(
             time_step, current_rigid_state
         )
+
+        """Check if point is on navmesh"""
+        final_position = self._sim.pathfinder.try_step_no_sliding(  # type: ignore
+            agent_state.position, goal_rigid_state.translation
+        )
+        # Check if a collision occured
+        dist_moved_before_filter = (
+            goal_rigid_state.translation - agent_state.position
+        ).dot()
+        dist_moved_after_filter = (final_position - agent_state.position).dot()
+
+        # NB: There are some cases where ||filter_end - end_pos|| > 0 when a
+        # collision _didn't_ happen. One such case is going up stairs.  Instead,
+        # we check to see if the the amount moved after the application of the
+        # filter is _less_ than the amount moved before the application of the
+        # filter.
+        EPS = 1e-5
+        collided = (dist_moved_after_filter + EPS) < dist_moved_before_filter
+        if collided:
+            agent_observations = self._sim.get_observations_at()
+            self._sim._prev_sim_obs["collided"] = True  # type: ignore
+            agent_observations["hit_navmesh"] = True
+            agent_observations["moving_backwards"] = False
+            agent_observations["moving_sideways"] = False
+            agent_observations["ang_accel"] = 0.0
+            if kwargs.get('num_steps', -1) != -1:
+                agent_observations["num_steps"] = kwargs["num_steps"]
+
+            self.prev_ang_vel = 0.0
+            return self._sim.get_observations_at()
 
         """See if goal state causes interpenetration with surroundings"""
 
@@ -1311,19 +1363,19 @@ class VelocityAction(SimulatorTaskAction):
 
         next_rs = mn.Matrix4.rotation_y(
             mn.Rad(-heading),
-        ).__matmul__(
+        ).__matmul__( # Rotate 180 deg yaw
             mn.Matrix4.rotation(
                 mn.Rad(np.pi),
                 mn.Vector3((0.0, 1.0, 0.0)),
             )
-        ).__matmul__(
+        ).__matmul__( # Rotate 90 deg roll
             mn.Matrix4.rotation(
                 mn.Rad(-np.pi / 2.0),
                 mn.Vector3((1.0, 0.0, 0.0)),
             )
         )
 
-        next_rs.translation = np.array(goal_rigid_state.translation) + np.array([
+        next_rs.translation = np.array(final_position) + np.array([
             0.0, 0.425, 0.0,
         ])
 
@@ -1334,18 +1386,24 @@ class VelocityAction(SimulatorTaskAction):
         if collided:
             # Interpenetration occurred. Revert to last rigid state.
             self.robot_id.transformation = curr_rs
-            final_rotation = [
-                *current_rigid_state.rotation.vector,
-                current_rigid_state.rotation.scalar,
-            ]
-            final_position = current_rigid_state.translation
-        else:
-            final_rotation = [
-                *goal_rigid_state.rotation.vector,
-                goal_rigid_state.rotation.scalar,
-            ]
-            final_position = goal_rigid_state.translation
 
+            agent_observations = self._sim.get_observations_at()
+            self._sim._prev_sim_obs["collided"] = True  # type: ignore
+            agent_observations["hit_navmesh"] = True
+            agent_observations["moving_backwards"] = False
+            agent_observations["moving_sideways"] = False
+            agent_observations["ang_accel"] = 0.0
+            if kwargs.get('num_steps', -1) != -1:
+                agent_observations["num_steps"] = kwargs["num_steps"]
+
+            self.prev_ang_vel = 0.0
+            return self._sim.get_observations_at()
+
+        final_rotation = [
+            *goal_rigid_state.rotation.vector,
+            goal_rigid_state.rotation.scalar,
+        ]
+        final_position = goal_rigid_state.translation
 
         agent_observations = self._sim.get_observations_at(
             position=final_position,
@@ -1353,12 +1411,11 @@ class VelocityAction(SimulatorTaskAction):
             keep_agent_at_new_pose=True,
         )
 
-        collided = False
-
         # TODO: Make a better way to flag collisions
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
         agent_observations["hit_navmesh"] = collided
         agent_observations["moving_backwards"] = lin_vel < 0
+        agent_observations["moving_sideways"] = abs(hor_vel) > self.min_abs_hor_speed
         agent_observations["ang_accel"] = (
             ang_vel - self.prev_ang_vel
         ) / self.time_step

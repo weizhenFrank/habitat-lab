@@ -538,13 +538,19 @@ def action_to_velocity_control(
     allow_sliding: bool = None,
     num_steps: float = -1,
 ) -> Union[int, str, Dict[str, Any]]:
-    lin_vel, ang_vel = torch.clip(action, min=-1, max=1)
+    if len(action) == 2:
+        lin_vel, ang_vel = torch.clip(action, min=-1, max=1)
+        hor_vel = 0.0
+    else:
+        lin_vel, ang_vel, hor_vel = torch.clip(action, min=-1, max=1)
+        hor_vel = hor_vel.item()
     step_action = {
         "action": {
             "action": "VELOCITY_CONTROL",
             "action_args": {
                 "lin_vel": lin_vel.item(),
                 "ang_vel": ang_vel.item(),
+                "hor_vel": hor_vel,
                 "allow_sliding": allow_sliding,
             },
         }
