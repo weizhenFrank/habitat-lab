@@ -1,21 +1,32 @@
 ENVIRONMENT:
   MAX_EPISODE_STEPS: 500
 SIMULATOR:
+  HABITAT_SIM_V0:
+    ALLOW_SLIDING: False
   AGENT_0:
     SENSORS: ['RGB_SENSOR']
     HEIGHT: 0.88
-    RADIUS: 0.5
+    RADIUS: 0.20
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
   RGB_SENSOR:
-    WIDTH: 256
-    HEIGHT: 256
+    WIDTH: 320
+    HEIGHT: 240
+    HFOV: 74  # horizontal field of view in degrees
+    ORIENTATION: [-0.7, 0, 0]  # Euler's angles
+    POSITION: [0.0, 1.2, 1.0]
   DEPTH_SENSOR:
-    WIDTH: 256
-    HEIGHT: 256
+    WIDTH: 320
+    HEIGHT: 240
+    HFOV: 74  # horizontal field of view in degrees
+    ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
+    POSITION: [0.0, 0.88, -0.425]
+  PEOPLE_LIN_SPEED: 0.5  # meters per sec
+  PEOPLE_ANG_SPEED: 90.0  # degrees per sec
+  TIME_STEP: 0.1  # policy period
 TASK:
   TYPE: Nav-v0
-  SUCCESS_DISTANCE: 0.2
+  SUCCESS_DISTANCE: 0.425
 
   SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR']
   POINTGOAL_WITH_GPS_COMPASS_SENSOR:
@@ -23,11 +34,24 @@ TASK:
     DIMENSIONALITY: 2
   GOAL_SENSOR_UUID: pointgoal_with_gps_compass
 
-  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL']
+  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SCT']
   SUCCESS:
-    SUCCESS_DISTANCE: 0.2
+    SUCCESS_DISTANCE: 0.425
+  TOP_DOWN_MAP:
+  #   TYPE: "SocialTopDownMap"
+    TYPE: "TopDownMap"
+  SCT:
+    TYPE: "SCT"
+    HOLONOMIC_VELOCITY: 0.5
+    TIME_STEP: 0.1
+  ACTIONS:
+    VELOCITY_CONTROL:
+      LIN_VEL_RANGE: [-0.5, 0.5]  # meters per sec
+      ANG_VEL_RANGE: [-90.0, 90.0]  # deg per sec
+      TIME_STEP: 0.1  # deg per sec
 
 DATASET:
   TYPE: PointNav-v1
   SPLIT: train
-  DATA_PATH: data/datasets/pointnav/gibson/v1/{split}/{split}.json.gz
+  DATA_PATH: /private/home/naokiyokoyama/datasets/pointnav_gibson_spot/{split}/{split}.json.gz
+  SCENES_DIR: /private/home/naokiyokoyama/datasets
