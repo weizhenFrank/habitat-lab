@@ -1180,14 +1180,14 @@ class VelocityAction(SimulatorTaskAction):
                 dtype=np.float32,
             ),
         }
-        
+
         if self.has_hor_vel:
             action_dict['horizontal_velocity'] = spaces.Box(
                 low=np.array([self.min_hor_vel]),
                 high=np.array([self.max_hor_vel]),
                 dtype=np.float32,
             )
-        
+
         return ActionSpace(action_dict)
 
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
@@ -1328,7 +1328,7 @@ class VelocityAction(SimulatorTaskAction):
                 agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
-            return self._sim.get_observations_at()
+            return agent_observations
 
         """See if goal state causes interpenetration with surroundings"""
 
@@ -1397,7 +1397,7 @@ class VelocityAction(SimulatorTaskAction):
                 agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
-            return self._sim.get_observations_at()
+            return agent_observations
 
         final_rotation = [
             *goal_rigid_state.rotation.vector,

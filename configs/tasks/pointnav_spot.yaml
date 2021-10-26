@@ -10,19 +10,17 @@ SIMULATOR:
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
   RGB_SENSOR:
-    WIDTH: 320
-    HEIGHT: 240
-    HFOV: 74  # horizontal field of view in degrees
-    ORIENTATION: [-0.7, 0, 0]  # Euler's angles
-    POSITION: [0.0, 1.2, 1.0]
-  DEPTH_SENSOR:
-    WIDTH: 320
-    HEIGHT: 240
-    HFOV: 74  # horizontal field of view in degrees
+    WIDTH: 383
+    HEIGHT: 255
+    HFOV: 172  # horizontal field of view in degrees
     ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
     POSITION: [0.0, 0.88, -0.425]
-  PEOPLE_LIN_SPEED: 0.5  # meters per sec
-  PEOPLE_ANG_SPEED: 90.0  # degrees per sec
+  DEPTH_SENSOR:
+    WIDTH: 383
+    HEIGHT: 255
+    HFOV: 172  # horizontal field of view in degrees
+    ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
+    POSITION: [0.0, 0.88, -0.425]
   TIME_STEP: 0.1  # policy period
 TASK:
   TYPE: Nav-v0
@@ -33,25 +31,20 @@ TASK:
     GOAL_FORMAT: "POLAR"
     DIMENSIONALITY: 2
   GOAL_SENSOR_UUID: pointgoal_with_gps_compass
-
-  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SCT']
+  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL']
   SUCCESS:
     SUCCESS_DISTANCE: 0.425
   TOP_DOWN_MAP:
-  #   TYPE: "SocialTopDownMap"
     TYPE: "TopDownMap"
-  SCT:
-    TYPE: "SCT"
-    HOLONOMIC_VELOCITY: 0.5
-    TIME_STEP: 0.1
   ACTIONS:
     VELOCITY_CONTROL:
-      LIN_VEL_RANGE: [-0.5, 0.5]  # meters per sec
-      ANG_VEL_RANGE: [-90.0, 90.0]  # deg per sec
-      TIME_STEP: 0.1  # deg per sec
+      LIN_VEL_RANGE: [-1.0, 1.0]  # meters per sec
+      ANG_VEL_RANGE: [-60.0, 60.0]  # deg per sec
+      HOR_VEL_RANGE: [-0.25, 0.25] # meters per sec
+      TIME_STEP: 1.0  # deg per sec
 
 DATASET:
   TYPE: PointNav-v1
   SPLIT: train
-  DATA_PATH: /private/home/naokiyokoyama/datasets/pointnav_gibson_spot/{split}/{split}.json.gz
-  SCENES_DIR: /private/home/naokiyokoyama/datasets
+  DATA_PATH: data/pointnav_gibson_spot/{split}/{split}.json.gz
+  SCENES_DIR: data/datasets

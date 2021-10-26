@@ -991,11 +991,12 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = self.agent.actor_critic
 
         observations = self.envs.reset()
+        print(observations[0]['depth'].shape)
         batch = batch_obs(
             observations, device=self.device, cache=self._obs_batching_cache
         )
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
+        print(batch['depth'].shape);exit()
         current_episode_reward = torch.zeros(
             self.envs.num_envs, 1, device="cpu"
         )
