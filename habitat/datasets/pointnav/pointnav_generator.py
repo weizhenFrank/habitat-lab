@@ -152,15 +152,32 @@ def generate_pointnav_episode(
     )
 
     # Set Spot's joints to default walking position
-    robot_id.joint_positions = np.deg2rad(np.array([
-        0., -170., 0,
-        135., 0. - 45.,
-        0., 0., 0.,
-        0., 45, -90,
-        0., 45, -90,
-        0., 45, -90,
-        0., 45, -90,
-    ]))
+    robot_id.joint_positions = np.deg2rad(
+        np.array(
+            [
+                0.0,
+                -170.0,
+                0,
+                135.0,
+                0.0 - 45.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                45,
+                -90,
+                0.0,
+                45,
+                -90,
+                0.0,
+                45,
+                -90,
+                0.0,
+                45,
+                -90,
+            ]
+        )
+    )
 
     # Rotation offset matrices
     roll_offset = mn.Matrix4.rotation(
@@ -199,7 +216,9 @@ def generate_pointnav_episode(
                 phi = np.arctan2(y, x)
                 return rho, phi
 
-            def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
+            def quaternion_rotate_vector(
+                quat: np.quaternion, v: np.array
+            ) -> np.array:
                 r"""Rotates a vector by a quaternion
                 Args:
                     quaternion: The quaternion to rotate by
@@ -215,7 +234,9 @@ def generate_pointnav_episode(
                 heading_vector = quaternion_rotate_vector(
                     rotation.inverse(), np.array([0, 0, -1])
                 )
-                phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+                phi = cartesian_to_polar(
+                    -heading_vector[2], heading_vector[0]
+                )[1]
                 return phi
 
             angle = np.random.uniform(0, 2 * np.pi)
@@ -225,12 +246,16 @@ def generate_pointnav_episode(
             heading = np.quaternion(source_rotation[-1], *source_rotation[:-1])
             heading = -quat_to_rad(heading) + np.pi / 2
 
-            robot_rigid_state = mn.Matrix4.rotation_y(
-                mn.Rad(-heading),
-            ).__matmul__(yaw_offset).__matmul__(roll_offset)
-            robot_rigid_state.translation = np.array(source_position) + np.array([
-                0.0, 0.425, 0.0,
-            ])
+            robot_rigid_state = (
+                mn.Matrix4.rotation_y(
+                    mn.Rad(-heading),
+                )
+                .__matmul__(yaw_offset)
+                .__matmul__(roll_offset)
+            )
+            robot_rigid_state.translation = np.array(
+                source_position
+            ) + np.array([0.0, 0.425, 0.0])
 
             robot_id.transformation = robot_rigid_state
             collided = sim.contact_test(robot_id.object_id)
