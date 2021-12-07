@@ -1191,6 +1191,215 @@ class Equirect2CubeMap(ProjectionTransformer):
         )
 
 
+from torchvision.transforms import (
+    RandomResizedCrop,
+    RandomErasing,
+    Compose,
+)
+import cv2
+
+
+@baseline_registry.register_obs_transformer(name="SPOT_DR")
+class SpotDr(ObservationTransformer):
+    """Domain randomization for fused Spot depth camera.
+    We inherit from CenterCropper to use its observation space transform
+    and its forward method.
+    """
+
+    def __init__(
+        self,
+        crop_size: Union[int, Tuple[int, int]],
+        crop_scale: Tuple[float, float],
+        erasing_scale: Tuple[float, float],
+        num_erasing: int,
+        trans_keys: Tuple[str] = ("rgb", "depth", "semantic"),
+    ):
+        """Args:
+        crop_size: output size for the resized crop
+        crop_scale: how large the cropped image should be
+        erasing_scale: how large erased blocks should be
+        num_erasing: how many black blocks to put in
+        trans_keys: list of keys it will try to transform from obs
+        """
+        super().__init__()
+        self._size = crop_size
+        self.random_crop = RandomResizedCrop(
+            size=crop_size, scale=crop_scale, ratio=(1.0, 1.0)
+        )
+
+        self.random_erasings = Compose(
+            [
+                RandomErasing(p=1.0, scale=erasing_scale)
+                for _ in range(num_erasing)
+            ]
+        )
+        self.transform = Compose([self.random_crop, self.random_erasings])
+
+        self.trans_keys = trans_keys
+
+    def _transform_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        # NHWC -> NCHW
+        obs = obs.permute(0, 3, 1, 2)
+        # obs = self.transform(obs)
+        obs = self.random_crop(obs)
+        mask = torch.where(
+            torch.rand_like(obs) > 0.15,
+            torch.ones_like(obs),
+            torch.zeros_like(obs),
+        )
+        obs *= mask
+
+        # NCHW -> NHWC
+        obs = obs.permute(0, 2, 3, 1)
+        return obs
+
+    @classmethod
+    def from_config(cls, config: Config):
+        spot_dr_config = config.RL.POLICY.OBS_TRANSFORMS.SPOT_DR
+        return cls(
+            crop_size=(spot_dr_config.HEIGHT, spot_dr_config.WIDTH),
+            crop_scale=spot_dr_config.CROP_SCALE,
+            erasing_scale=spot_dr_config.ERASING_SCALE,
+            num_erasing=spot_dr_config.NUM_ERASING,
+        )
+
+    def transform_observation_space(
+        self,
+        observation_space: spaces.Dict,
+    ):
+        size = self._size
+        observation_space = copy.deepcopy(observation_space)
+        if size:
+            for key in observation_space.spaces:
+                if (
+                    key in self.trans_keys
+                    and observation_space.spaces[key].shape[-3:-1] != size
+                ):
+                    h, w = get_image_height_width(
+                        observation_space.spaces[key], channels_last=True
+                    )
+                    logger.info(
+                        "SpotDr observation size of %s from %s to %s"
+                        % (key, (h, w), size)
+                    )
+
+                    observation_space.spaces[key] = overwrite_gym_box_shape(
+                        observation_space.spaces[key], size
+                    )
+        return observation_space
+
+    @torch.no_grad()
+    def forward(
+        self, observations: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        if self._size is not None:
+            observations.update(
+                {
+                    sensor: self._transform_obs(observations[sensor])
+                    for sensor in self.trans_keys
+                    if sensor in observations
+                }
+            )
+        return observations
+
+
+import time
+
+
+@baseline_registry.register_obs_transformer(name="SPOT_MASK")
+class SpotMask(ObservationTransformer):
+    """Apply binary mask to visual observations
+    We inherit from CenterCropper to use its observation space transform
+    and its forward method."""
+
+    def __init__(
+        self,
+        size: Tuple[int, int],
+        mask_path: str,
+        trans_keys: Tuple[str] = ("rgb", "depth", "semantic"),
+    ):
+        """Args:
+        mask_path: path to binary mask
+        trans_keys: list of keys it will try to transform from obs
+        """
+        super().__init__()
+
+        """ Create binary mask """
+        mask_img = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        mask_img = cv2.resize(mask_img, size[::-1])
+
+        # Keep the mask binary after resizing
+        mask_img = cv2.threshold(mask_img, 127, 255, cv2.THRESH_BINARY)[1]
+
+        # Convert from uint8 to float tensor
+        mask_img = np.array(mask_img, dtype=float) / 255
+        # self.torch_mask_img = torch.from_numpy(mask_img).unsqueeze(-1)
+        self.torch_mask_img = torch.FloatTensor(mask_img).unsqueeze(-1)
+
+        # For inherited self.transform_observation_space method
+        self.trans_keys = trans_keys
+        self._size = size
+
+    def _transform_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        if self.torch_mask_img.device != obs.device:
+            self.torch_mask_img = self.torch_mask_img.to(obs.device)
+        obs = obs * self.torch_mask_img
+
+        # np_obs = obs[0, ...].cpu().numpy()
+        # np_obs = np.array(np_obs * 255, dtype=np.uint8)
+        # f = f"/private/home/naokiyokoyama/test_depths/{str(time.time())[-6:]}.png"
+        # cv2.imwrite(f, np_obs)
+        # print(f)
+        return obs
+
+    @classmethod
+    def from_config(cls, config: Config):
+        spot_mask_config = config.RL.POLICY.OBS_TRANSFORMS.SPOT_MASK
+        return cls(
+            size=(spot_mask_config.HEIGHT, spot_mask_config.WIDTH),
+            mask_path=spot_mask_config.MASK_PATH,
+        )
+
+    def transform_observation_space(
+        self,
+        observation_space: spaces.Dict,
+    ):
+        size = self._size
+        observation_space = copy.deepcopy(observation_space)
+        if size:
+            for key in observation_space.spaces:
+                if (
+                    key in self.trans_keys
+                    and observation_space.spaces[key].shape[-3:-1] != size
+                ):
+                    h, w = get_image_height_width(
+                        observation_space.spaces[key], channels_last=True
+                    )
+                    logger.info(
+                        "SpotMask observation size of %s from %s to %s"
+                        % (key, (h, w), size)
+                    )
+
+                    observation_space.spaces[key] = overwrite_gym_box_shape(
+                        observation_space.spaces[key], size
+                    )
+        return observation_space
+
+    @torch.no_grad()
+    def forward(
+        self, observations: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        if self._size is not None:
+            observations.update(
+                {
+                    sensor: self._transform_obs(observations[sensor])
+                    for sensor in self.trans_keys
+                    if sensor in observations
+                }
+            )
+        return observations
+
+
 def get_active_obs_transforms(config: Config) -> List[ObservationTransformer]:
     active_obs_transforms = []
     if hasattr(config.RL.POLICY, "OBS_TRANSFORMS"):

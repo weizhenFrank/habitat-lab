@@ -995,7 +995,6 @@ class PPOTrainer(BaseRLTrainer):
             observations, device=self.device, cache=self._obs_batching_cache
         )
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
         current_episode_reward = torch.zeros(
             self.envs.num_envs, 1, device="cpu"
         )
