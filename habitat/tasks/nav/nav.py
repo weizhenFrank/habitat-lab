@@ -72,6 +72,33 @@ def merge_sim_episode_config(sim_config: Config, episode: Episode) -> Any:
     return sim_config
 
 
+def cartesian_to_polar(x, y):
+    rho = np.sqrt(x ** 2 + y ** 2)
+    phi = np.arctan2(y, x)
+    return rho, phi
+
+
+def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
+    r"""Rotates a vector by a quaternion
+    Args:
+        quaternion: The quaternion to rotate by
+        v: The vector to rotate
+    Returns:
+        np.array: The rotated vector
+    """
+    vq = np.quaternion(0, 0, 0, 0)
+    vq.imag = v
+    return (quat * vq * quat.inverse()).imag
+
+
+def quat_to_rad(rotation):
+    heading_vector = quaternion_rotate_vector(
+        rotation.inverse(), np.array([0, 0, -1])
+    )
+    phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+    return phi
+
+
 @attr.s(auto_attribs=True, kw_only=True)
 class NavigationGoal:
     r"""Base class for a goal specification hierarchy."""
@@ -1333,31 +1360,6 @@ class VelocityAction(SimulatorTaskAction):
         """See if goal state causes interpenetration with surroundings"""
 
         # Calculate next rigid state off agent rigid state
-
-        def cartesian_to_polar(x, y):
-            rho = np.sqrt(x ** 2 + y ** 2)
-            phi = np.arctan2(y, x)
-            return rho, phi
-
-        def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
-            r"""Rotates a vector by a quaternion
-            Args:
-                quaternion: The quaternion to rotate by
-                v: The vector to rotate
-            Returns:
-                np.array: The rotated vector
-            """
-            vq = np.quaternion(0, 0, 0, 0)
-            vq.imag = v
-            return (quat * vq * quat.inverse()).imag
-
-        def quat_to_rad(rotation):
-            heading_vector = quaternion_rotate_vector(
-                rotation.inverse(), np.array([0, 0, -1])
-            )
-            phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
-            return phi
-
         heading = np.quaternion(goal_rigid_state.rotation.scalar, *goal_rigid_state.rotation.vector)
         heading = -quat_to_rad(heading) + np.pi / 2
 

@@ -21,7 +21,12 @@ from numpy import float64
 
 from habitat.core.simulator import ShortestPathPoint
 from habitat.datasets.utils import get_action_shortest_path
-from habitat.tasks.nav.nav import NavigationEpisode, NavigationGoal
+from habitat.tasks.nav.nav import (
+    NavigationEpisode,
+    NavigationGoal,
+    quat_to_rad,
+)
+
 
 try:
     from habitat_sim.errors import GreedyFollowerError
@@ -101,6 +106,39 @@ def _create_episode(
     )
 
 
+def _spot_collided(source_rotation, source_position, robot_id, sim):
+    # Set Spot's joints to default walking position
+    robot_id.joint_positions = np.deg2rad(
+        [0, -150, 0, 120, 0, 75, 0, 0] + [0, 60, -120] * 4
+    )
+
+    # Rotation offset matrices
+    roll_offset = mn.Matrix4.rotation(
+        mn.Rad(-np.pi / 2.0),
+        mn.Vector3((1.0, 0.0, 0.0)),
+    )
+    yaw_offset = mn.Matrix4.rotation(
+        mn.Rad(np.pi),
+        mn.Vector3((0.0, 1.0, 0.0)),
+    )
+
+    # Move Spot model to source position and rotation
+    heading = np.quaternion(source_rotation[-1], *source_rotation[:-1])
+    heading = -quat_to_rad(heading) + np.pi / 2
+
+    robot_rigid_state = (
+        mn.Matrix4.rotation_y(mn.Rad(-heading)) @ yaw_offset @ roll_offset
+    )
+    robot_rigid_state.translation = np.array(source_position) + np.array(
+        [0.0, 0.5, 0.0]
+    )
+
+    robot_id.transformation = robot_rigid_state
+    collided = sim.contact_test(robot_id.object_id)
+
+    return collided
+
+
 def generate_pointnav_episode(
     sim: "HabitatSim",
     num_episodes: int = -1,
@@ -151,44 +189,6 @@ def generate_pointnav_episode(
         robot_file, fixed_base=False
     )
 
-    # Set Spot's joints to default walking position
-    robot_id.joint_positions = np.deg2rad(
-        np.array(
-            [
-                0.0,
-                -170.0,
-                0,
-                135.0,
-                0.0 - 45.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                45,
-                -90,
-                0.0,
-                45,
-                -90,
-                0.0,
-                45,
-                -90,
-                0.0,
-                45,
-                -90,
-            ]
-        )
-    )
-
-    # Rotation offset matrices
-    roll_offset = mn.Matrix4.rotation(
-        mn.Rad(-np.pi / 2.0),
-        mn.Vector3((1.0, 0.0, 0.0)),
-    )
-    yaw_offset = mn.Matrix4.rotation(
-        mn.Rad(np.pi),
-        mn.Vector3((0.0, 1.0, 0.0)),
-    )
-
     episode_count = 0
     while episode_count < num_episodes or num_episodes < 0:
         target_position = sim.sample_navigable_point()
@@ -210,55 +210,22 @@ def generate_pointnav_episode(
             if is_compatible:
                 break
         if is_compatible:
+            source_rotation, dest_rotation = [
+                [0, np.sin(angle / 2), 0, np.cos(angle / 2)]
+                for angle in [
+                    np.random.uniform(0, 2 * np.pi) for _ in range(2)
+                ]
+            ]
 
-            def cartesian_to_polar(x, y):
-                rho = np.sqrt(x ** 2 + y ** 2)
-                phi = np.arctan2(y, x)
-                return rho, phi
-
-            def quaternion_rotate_vector(
-                quat: np.quaternion, v: np.array
-            ) -> np.array:
-                r"""Rotates a vector by a quaternion
-                Args:
-                    quaternion: The quaternion to rotate by
-                    v: The vector to rotate
-                Returns:
-                    np.array: The rotated vector
-                """
-                vq = np.quaternion(0, 0, 0, 0)
-                vq.imag = v
-                return (quat * vq * quat.inverse()).imag
-
-            def quat_to_rad(rotation):
-                heading_vector = quaternion_rotate_vector(
-                    rotation.inverse(), np.array([0, 0, -1])
-                )
-                phi = cartesian_to_polar(
-                    -heading_vector[2], heading_vector[0]
-                )[1]
-                return phi
-
-            angle = np.random.uniform(0, 2 * np.pi)
-            source_rotation = [0, np.sin(angle / 2), 0, np.cos(angle / 2)]
-
-            # Move Spot model to source position and rotation
-            heading = np.quaternion(source_rotation[-1], *source_rotation[:-1])
-            heading = -quat_to_rad(heading) + np.pi / 2
-
-            robot_rigid_state = (
-                mn.Matrix4.rotation_y(
-                    mn.Rad(-heading),
-                )
-                .__matmul__(yaw_offset)
-                .__matmul__(roll_offset)
+            collided = any(
+                [
+                    _spot_collided(rot, pos, robot_id, sim)
+                    for rot, pos in [
+                        [source_rotation, source_position],
+                        [dest_rotation, target_position],
+                    ]
+                ]
             )
-            robot_rigid_state.translation = np.array(
-                source_position
-            ) + np.array([0.0, 0.425, 0.0])
-
-            robot_id.transformation = robot_rigid_state
-            collided = sim.contact_test(robot_id.object_id)
 
             if collided:
                 continue
@@ -288,7 +255,10 @@ def generate_pointnav_episode(
                 target_position=target_position,
                 shortest_paths=shortest_paths,
                 radius=shortest_path_success_distance,
-                info={"geodesic_distance": dist},
+                info={
+                    "geodesic_distance": dist,
+                    "goal_rotation": dest_rotation,
+                },
             )
 
             episode_count += 1
