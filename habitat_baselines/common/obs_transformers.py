@@ -1303,7 +1303,65 @@ class SpotDr(ObservationTransformer):
         return observations
 
 
-import time
+@baseline_registry.register_obs_transformer(name="PEPPER_NOISE")
+class PepperNoise(ObservationTransformer):
+    """Speckle noise"""
+
+    def __init__(
+        self,
+        noise_percent: float,
+        trans_keys: Tuple[str] = (
+            "rgb",
+            "depth",
+            "semantic",
+            "spot_left_depth",
+            "spot_left_rgb",
+            "spot_right_depth",
+            "spot_right_rgb",
+        ),
+    ):
+        """Args:
+        noise_percent: what percent of randomly selected pixel turn black
+        trans_keys: list of keys it will try to transform from obs
+        """
+        super().__init__()
+        self.trans_keys = trans_keys
+        self.noise_percent = noise_percent
+
+    def _transform_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        # NHWC -> NCHW
+        obs = obs.permute(0, 3, 1, 2)
+        obs *= torch.where(
+            torch.rand_like(obs) > self.noise_percent,
+            torch.ones_like(obs),
+            torch.zeros_like(obs),
+        )
+
+        # NCHW -> NHWC
+        obs = obs.permute(0, 2, 3, 1)
+        return obs
+
+    @classmethod
+    def from_config(cls, config: Config):
+        pepper_noise_config = config.RL.POLICY.OBS_TRANSFORMS.PEPPER_NOISE
+        return cls(pepper_noise_config.NOISE_PERCENT)
+
+    def transform_observation_space(self, observation_space: spaces.Dict):
+        # No transform needed
+        return observation_space
+
+    @torch.no_grad()
+    def forward(
+        self, observations: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        observations.update(
+            {
+                sensor: self._transform_obs(observations[sensor])
+                for sensor in self.trans_keys
+                if sensor in observations
+            }
+        )
+        return observations
 
 
 @baseline_registry.register_obs_transformer(name="SPOT_MASK")

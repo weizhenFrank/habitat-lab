@@ -1,0 +1,56 @@
+ENVIRONMENT:
+  MAX_EPISODE_STEPS: 500
+SIMULATOR:
+  HABITAT_SIM_V0:
+    ALLOW_SLIDING: False
+  AGENT_0:
+    SENSORS: ['DEPTH_SENSOR']
+    HEIGHT: 0.88
+    RADIUS: 0.3
+  RGB_SENSOR:
+    WIDTH: 383
+    HEIGHT: 255
+    HFOV: 172  # horizontal field of view in degrees
+    ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
+#    POSITION: [0.0, 0.88, -0.425]
+    POSITION: [0.0, 1.0, 0.425]
+  DEPTH_SENSOR:
+    WIDTH: 383
+    HEIGHT: 255
+    HFOV: 172  # horizontal field of view in degrees
+    ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
+#    POSITION: [0.0, 0.88, -0.425]
+    POSITION: [0.0, 0.5, -0.425]
+  TIME_STEP: 0.1  # policy period
+TASK:
+  TYPE: Nav-v0
+  SUCCESS_DISTANCE: 0.425
+
+  SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR', 'GOAL_HEADING_SENSOR']
+  POINTGOAL_WITH_GPS_COMPASS_SENSOR:
+    GOAL_FORMAT: "POLAR"
+    DIMENSIONALITY: 2
+  GOAL_HEADING_SENSOR:
+    TYPE: "GoalHeadingSensor"
+  GOAL_SENSOR_UUID: pointgoal_with_gps_compass
+  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL']
+  SUCCESS:
+    SUCCESS_DISTANCE: 0.425
+    NEED_GOAL_HEADING: True
+    HEADING_TOLERANCE: 10
+  TOP_DOWN_MAP:
+    TYPE: "TopDownMap"
+    MAP_RESOLUTION: 256
+  ACTIONS:
+    VELOCITY_CONTROL:
+      LIN_VEL_RANGE: [-0.5, 0.5]  # meters per sec
+      ANG_VEL_RANGE: [-30.0, 30.0]  # deg per sec
+      HOR_VEL_RANGE: [-0.5, 0.5] # meters per sec
+      TIME_STEP: 0.5  # sec per step
+      MUST_CALL_STOP: False
+
+DATASET:
+  TYPE: PointNav-v1
+  SPLIT: train
+  DATA_PATH: /private/home/naokiyokoyama/spot_nav/spot_goal_headings/{split}/{split}.json.gz
+  SCENES_DIR: /private/home/naokiyokoyama/datasets

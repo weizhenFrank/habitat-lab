@@ -15,8 +15,11 @@ from typing import Optional, Type
 import habitat
 from habitat import Config, Dataset
 from habitat_baselines.common.baseline_registry import baseline_registry
+from habitat.tasks.nav.nav import GoalHeadingSensor
+
 
 import numpy as np
+
 
 def get_env_class(env_name: str) -> Type[habitat.RLEnv]:
     r"""Return environment class based on name.
@@ -37,6 +40,8 @@ class NavRLEnv(habitat.RLEnv):
         self._core_env_config = config.TASK_CONFIG
         self._reward_measure_name = self._rl_config.REWARD_MEASURE
         self._success_measure_name = self._rl_config.SUCCESS_MEASURE
+        self._turn_reward_dist = self._rl_config.get("TURN_REWARD_DIST", 1.0)
+        self._turn_reward_coef = self._rl_config.get("TURN_REWARD_COEF", 0.0)
 
         self._previous_measure = None
         self._previous_action = None
@@ -65,43 +70,50 @@ class NavRLEnv(habitat.RLEnv):
 
         current_measure = self._env.get_metrics()[self._reward_measure_name]
 
+        # Reward approaching the goal heading too, if we're close enough
+        if GoalHeadingSensor.cls_uuid in observations:
+            too_far = current_measure > self._turn_reward_dist
+            if too_far:
+                heading_error = np.deg2rad(180)
+            else:
+                heading_error = abs(
+                    observations[GoalHeadingSensor.cls_uuid][0]
+                )
+            current_measure += heading_error * self._turn_reward_coef
+
         if (
             observations.get("num_steps", -1.0) == -1.0
             or self._rl_config.FULL_GEODESIC_DECAY == -1.0
         ):
             reward += self._previous_measure - current_measure
         else:
-            reward += (
-                self._previous_measure - current_measure
-            ) * max(
-                0,
-                (
-                    1 - observations["num_steps"]
-                    / self._rl_config.FULL_GEODESIC_DECAY
-                )
+            percent_decayed = (
+                observations["num_steps"] / self._rl_config.FULL_GEODESIC_DECAY
+            )
+            reward += (self._previous_measure - current_measure) * max(
+                0, 1 - percent_decayed
             )
 
-        sim = self._env._sim
-        if 'PROXIMITY_PENALTY' in self._rl_config:
-            agent_pos = sim.get_agent_state().position
-            if sim.social_nav:
-                for p in sim.people:
-                    distance = np.sqrt(
-                        (p.current_position[0]-agent_pos[0])**2
-                        +(p.current_position[2]-agent_pos[2])**2
-                    )
-                    if distance < self._rl_config.get('PENALTY_RADIUS', 1.5):
-                        reward -= self._rl_config.PROXIMITY_PENALTY
-                        break
-            elif sim.interactive_nav:
-                for p in sim.object_positions:
-                    distance = np.sqrt(
-                        (p[0]-agent_pos[0])**2
-                        +(p[2]-agent_pos[2])**2
-                    )
-                    if distance < self._rl_config.get('PENALTY_RADIUS', 1.5):
-                        reward -= self._rl_config.PROXIMITY_PENALTY
-                        break
+        # sim = self._env._sim
+        # if "PROXIMITY_PENALTY" in self._rl_config:
+        #     agent_pos = sim.get_agent_state().position
+        #     if sim.social_nav:
+        #         for p in sim.people:
+        #             distance = np.sqrt(
+        #                 (p.current_position[0] - agent_pos[0]) ** 2
+        #                 + (p.current_position[2] - agent_pos[2]) ** 2
+        #             )
+        #             if distance < self._rl_config.get("PENALTY_RADIUS", 1.5):
+        #                 reward -= self._rl_config.PROXIMITY_PENALTY
+        #                 break
+        #     elif sim.interactive_nav:
+        #         for p in sim.object_positions:
+        #             distance = np.sqrt(
+        #                 (p[0] - agent_pos[0]) ** 2 + (p[2] - agent_pos[2]) ** 2
+        #             )
+        #             if distance < self._rl_config.get("PENALTY_RADIUS", 1.5):
+        #                 reward -= self._rl_config.PROXIMITY_PENALTY
+        #                 break
 
         self._previous_measure = current_measure
 
@@ -111,14 +123,15 @@ class NavRLEnv(habitat.RLEnv):
         if observations.get("hit_navmesh", False):
             reward -= self._rl_config.COLLISION_PENALTY
 
+        # Penalize undesired movements
         if observations.get("moving_backwards", False):
             reward -= self._rl_config.BACKWARDS_PENALTY
         if observations.get("moving_sideways", False):
             reward -= self._rl_config.BACKWARDS_PENALTY
 
-        if 'ang_accel' in observations:
+        if "ang_accel" in observations:
             reward -= min(
-                abs(observations['ang_accel'])
+                abs(observations["ang_accel"])
                 * self._rl_config.ANG_ACCEL_PENALTY_COEFF,
                 self._rl_config.MAX_ANG_ACCEL_PENALTY,
             )

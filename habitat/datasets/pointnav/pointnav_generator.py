@@ -109,17 +109,17 @@ def _create_episode(
 def _spot_collided(source_rotation, source_position, robot_id, sim):
     # Set Spot's joints to default walking position
     robot_id.joint_positions = np.deg2rad(
-        [0, -150, 0, 120, 0, 75, 0, 0] + [0, 60, -120] * 4
+        [0, -180, 0, 135, 90, 0, -90, 0] + [0, 60, -120] * 4
     )
 
     # Rotation offset matrices
-    roll_offset = mn.Matrix4.rotation(
-        mn.Rad(-np.pi / 2.0),
-        mn.Vector3((1.0, 0.0, 0.0)),
-    )
     yaw_offset = mn.Matrix4.rotation(
         mn.Rad(np.pi),
         mn.Vector3((0.0, 1.0, 0.0)),
+    )
+    roll_offset = mn.Matrix4.rotation(
+        mn.Rad(-np.pi / 2.0),
+        mn.Vector3((1.0, 0.0, 0.0)),
     )
 
     # Move Spot model to source position and rotation
@@ -210,21 +210,15 @@ def generate_pointnav_episode(
             if is_compatible:
                 break
         if is_compatible:
-            source_rotation, dest_rotation = [
-                [0, np.sin(angle / 2), 0, np.cos(angle / 2)]
-                for angle in [
-                    np.random.uniform(0, 2 * np.pi) for _ in range(2)
-                ]
+            src_ang, dst_ang = [
+                np.random.uniform(0, 2 * np.pi) for _ in range(2)
             ]
-
-            collided = any(
-                [
-                    _spot_collided(rot, pos, robot_id, sim)
-                    for rot, pos in [
-                        [source_rotation, source_position],
-                        [dest_rotation, target_position],
-                    ]
-                ]
+            source_rotation = [0, np.sin(src_ang / 2), 0, np.cos(src_ang / 2)]
+            target_rotation = [0, np.sin(dst_ang / 2), 0, np.cos(dst_ang / 2)]
+            collided = _spot_collided(
+                source_rotation, source_position, robot_id, sim
+            ) or _spot_collided(
+                target_rotation, target_position, robot_id, sim
             )
 
             if collided:
@@ -257,7 +251,7 @@ def generate_pointnav_episode(
                 radius=shortest_path_success_distance,
                 info={
                     "geodesic_distance": dist,
-                    "goal_rotation": dest_rotation,
+                    "goal_rotation": target_rotation,
                 },
             )
 

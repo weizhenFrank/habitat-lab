@@ -14,6 +14,7 @@ from habitat.tasks.nav.nav import (
     ImageGoalSensor,
     IntegratedPointGoalGPSAndCompassSensor,
     PointGoalSensor,
+    GoalHeadingSensor,
 )
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.models.rnn_state_encoder import (
@@ -24,10 +25,13 @@ from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 
 
 class Policy(nn.Module, metaclass=abc.ABCMeta):
-    def __init__(
-        self, net, dim_actions, action_distribution_type="categorical"
-    ):
+    def __init__(self, net, dim_actions, policy_config=None):
         super().__init__()
+        if policy_config is not None:
+            action_distribution_type = policy_config.action_distribution_type
+        else:
+            action_distribution_type = "categorical"
+
         self.net = net
         self.dim_actions = dim_actions
         self.action_distribution_type = action_distribution_type
@@ -38,7 +42,9 @@ class Policy(nn.Module, metaclass=abc.ABCMeta):
             )
         elif action_distribution_type == "gaussian":
             self.action_distribution = GaussianNet(
-                self.net.output_size, self.dim_actions
+                self.net.output_size,
+                self.dim_actions,
+                policy_config.ACTION_DIST,
             )
         else:
             ValueError(
@@ -120,6 +126,7 @@ class PointNavBaselinePolicy(Policy):
         observation_space: spaces.Dict,
         action_space,
         hidden_size: int = 512,
+        policy_config=None,
         **kwargs,
     ):
         super().__init__(
@@ -129,6 +136,7 @@ class PointNavBaselinePolicy(Policy):
                 **kwargs,
             ),
             action_space.n,
+            policy_config=policy_config,
         )
 
     @classmethod
@@ -139,6 +147,7 @@ class PointNavBaselinePolicy(Policy):
             observation_space=observation_space,
             action_space=action_space,
             hidden_size=config.RL.PPO.hidden_size,
+            policy_config=config.RL.POLICY,
         )
 
 
@@ -195,6 +204,12 @@ class PointNavBaselineNet(Net):
             )
             self._n_input_goal = hidden_size
 
+        # Add heading sensor if available
+        if GoalHeadingSensor.cls_uuid in observation_space.spaces:
+            self._n_input_goal += observation_space.spaces[
+                GoalHeadingSensor.cls_uuid
+            ].shape[0]
+
         self._hidden_size = hidden_size
 
         self.visual_encoder = SimpleCNN(observation_space, hidden_size)
@@ -231,6 +246,10 @@ class PointNavBaselineNet(Net):
             target_encoding = self.goal_visual_encoder({"rgb": image_goal})
 
         x = [target_encoding]
+
+        # Append heading sensor if available
+        if GoalHeadingSensor.cls_uuid in observations:
+            x.append(observations[GoalHeadingSensor.cls_uuid])
 
         if not self.is_blind:
             perception_embed = self.visual_encoder(observations)

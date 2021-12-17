@@ -157,30 +157,10 @@ class PPOTrainer(BaseRLTrainer):
         observation_space = apply_obs_transforms_obs_space(
             observation_space, self.obs_transforms
         )
-        from gym.spaces import Dict, Box
-        if self.config.TASK_CONFIG.SIMULATOR.get('PEOPLE_MASK', False):
-            observation_space = Dict(
-                {
-                    'depth': Box(
-                        low=0., high=1., shape=(
-                            self.envs.observation_spaces[0].spaces['depth'].shape[0],
-                            self.envs.observation_spaces[0].spaces['depth'].shape[1],
-                            2,
-                        )
-                    ),
-                    'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
-                }
-            )
-        else:
-            observation_space = Dict(
-                {
-                    'depth': self.envs.observation_spaces[0].spaces['depth'],
-                    'pointgoal_with_gps_compass': self.envs.observation_spaces[0].spaces['pointgoal_with_gps_compass']
-                }
-            )
         self.actor_critic = policy.from_config(
             self.config, observation_space, self.policy_action_space
         )
+        print("Actor-critic architecture:", self.actor_critic)
         self.obs_space = observation_space
         self.actor_critic.to(self.device)
 
@@ -987,7 +967,14 @@ class PPOTrainer(BaseRLTrainer):
 
         self._setup_actor_critic_agent(ppo_cfg)
 
-        self.agent.load_state_dict(ckpt_dict["state_dict"])
+        try:
+            self.agent.load_state_dict(ckpt_dict["state_dict"])
+        except:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("WARNING!!! MODEL WEIGHTS WERE NOT LOADED")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         self.actor_critic = self.agent.actor_critic
 
         observations = self.envs.reset()
@@ -1060,8 +1047,8 @@ class PPOTrainer(BaseRLTrainer):
                     test_recurrent_hidden_states,
                     prev_actions,
                     not_done_masks,
-                    # deterministic=False,
-                    deterministic=True,
+                    deterministic=False,
+                    # deterministic=True,
                 )
 
                 prev_actions.copy_(actions)  # type: ignore

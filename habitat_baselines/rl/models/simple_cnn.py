@@ -22,13 +22,31 @@ class SimpleCNN(nn.Module):
     ):
         super().__init__()
 
-        if "rgb" in observation_space.spaces:
-            self._n_input_rgb = observation_space.spaces["rgb"].shape[2]
-        else:
-            self._n_input_rgb = 0
+        # HACK: Never use RGB for policies.
+        # if "rgb" in observation_space.spaces:
+        #     self._n_input_rgb = observation_space.spaces["rgb"].shape[2]
+        # else:
+        #     self._n_input_rgb = 0
+        self._n_input_rgb = 0
 
-        if "depth" in observation_space.spaces:
-            self._n_input_depth = observation_space.spaces["depth"].shape[2]
+        # Ensure both the single camera AND two camera setup is NOT being used
+        self.using_one_camera = "depth" in observation_space.spaces
+        self.using_two_cameras = any(
+            [k.endswith("_depth") for k in observation_space.spaces.keys()]
+        )
+        assert not (self.using_one_camera and self.using_two_cameras)
+
+        # Ensure both eyes are being used if at all
+        if self.using_two_cameras:
+            assert all(
+                [
+                    i in observation_space.spaces
+                    for i in ["spot_left_depth", "spot_right_depth"]
+                ]
+            )
+
+        if self.using_one_camera or self.using_two_cameras:
+            self._n_input_depth = 1
         else:
             self._n_input_depth = 0
 
@@ -43,9 +61,11 @@ class SimpleCNN(nn.Module):
                 observation_space.spaces["rgb"].shape[:2], dtype=np.float32
             )
         elif self._n_input_depth > 0:
-            cnn_dims = np.array(
-                observation_space.spaces["depth"].shape[:2], dtype=np.float32
-            )
+            depth_key = "depth" if self.using_one_camera else "spot_left_depth"
+            height, width = observation_space.spaces[depth_key].shape[:2]
+            if self.using_two_cameras:
+                width *= 2
+            cnn_dims = np.array([height, width], dtype=np.float32)
 
         if self.is_blind:
             self.cnn = nn.Sequential()
@@ -144,7 +164,19 @@ class SimpleCNN(nn.Module):
             cnn_input.append(rgb_observations)
 
         if self._n_input_depth > 0:
-            depth_observations = observations["depth"]
+            if self.using_one_camera:
+                depth_observations = observations["depth"]
+            elif self.using_two_cameras:
+                depth_observations = torch.cat(
+                    [
+                        # Spot is cross-eyed; right is on the left on the FOV
+                        observations["spot_right_depth"],
+                        observations["spot_left_depth"],
+                    ],
+                    dim=2,
+                )
+            else:
+                raise Exception("Not implemented")
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             depth_observations = depth_observations.permute(0, 3, 1, 2)
             cnn_input.append(depth_observations)

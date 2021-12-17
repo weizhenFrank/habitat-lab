@@ -9,6 +9,7 @@
 from typing import Any, List, Optional, Tuple, Dict
 
 import attr
+
 try:
     import magnum as mn
 except ModuleNotFoundError:
@@ -42,6 +43,11 @@ from habitat.utils.geometry_utils import (
     quaternion_rotate_vector,
 )
 from habitat.utils.visualizations import fog_of_war, maps
+from habitat.sims.habitat_simulator.habitat_simulator import (
+    HabitatSimRGBSensor,
+    HabitatSimDepthSensor,
+)
+
 try:
     from habitat_sim.bindings import RigidState
     from habitat_sim.physics import VelocityControl
@@ -52,6 +58,15 @@ cv2 = try_cv2_import()
 
 
 MAP_THICKNESS_SCALAR: int = 128
+
+
+def _quat_to_xy_heading(quat):
+    direction_vector = np.array([0, 0, -1])
+
+    heading_vector = quaternion_rotate_vector(quat, direction_vector)
+
+    phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+    return np.array([phi], dtype=np.float32)
 
 
 def merge_sim_episode_config(sim_config: Config, episode: Episode) -> Any:
@@ -70,25 +85,6 @@ def merge_sim_episode_config(sim_config: Config, episode: Episode) -> Any:
         agent_cfg.IS_SET_START_STATE = True
         agent_cfg.freeze()
     return sim_config
-
-
-def cartesian_to_polar(x, y):
-    rho = np.sqrt(x ** 2 + y ** 2)
-    phi = np.arctan2(y, x)
-    return rho, phi
-
-
-def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
-    r"""Rotates a vector by a quaternion
-    Args:
-        quaternion: The quaternion to rotate by
-        v: The vector to rotate
-    Returns:
-        np.array: The rotated vector
-    """
-    vq = np.quaternion(0, 0, 0, 0)
-    vq.imag = v
-    return (quat * vq * quat.inverse()).imag
 
 
 def quat_to_rad(rotation):
@@ -384,15 +380,10 @@ class HeadingSensor(Sensor):
         return SensorTypes.HEADING
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        return spaces.Box(low=-np.pi, high=np.pi, shape=(1,), dtype=np.float)
+        return spaces.Box(low=-np.pi, high=np.pi, shape=(1,), dtype=np.float32)
 
     def _quat_to_xy_heading(self, quat):
-        direction_vector = np.array([0, 0, -1])
-
-        heading_vector = quaternion_rotate_vector(quat, direction_vector)
-
-        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
-        return np.array([phi], dtype=np.float32)
+        return _quat_to_xy_heading(quat)
 
     def get_observation(
         self, observations, episode, *args: Any, **kwargs: Any
@@ -400,7 +391,28 @@ class HeadingSensor(Sensor):
         agent_state = self._sim.get_agent_state()
         rotation_world_agent = agent_state.rotation
 
-        return self._quat_to_xy_heading(rotation_world_agent.inverse())
+        return _quat_to_xy_heading(rotation_world_agent.inverse())
+
+
+@registry.register_sensor
+class GoalHeadingSensor(HeadingSensor):
+    r"""The agents heading in the coordinate frame defined by the epiosde,
+    theta=0 is defined by heading the agent is required to reached at the goal
+    """
+    cls_uuid: str = "goal_heading"
+
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
+        agent_state = self._sim.get_agent_state()
+        rotation_world_agent = agent_state.rotation
+        rotation_world_goal = quaternion_from_coeff(
+            episode.info["goal_rotation"]
+        )
+
+        return _quat_to_xy_heading(
+            rotation_world_agent.inverse() * rotation_world_goal
+        )
 
 
 @registry.register_sensor(name="CompassSensor")
@@ -420,7 +432,7 @@ class EpisodicCompassSensor(HeadingSensor):
         rotation_world_agent = agent_state.rotation
         rotation_world_start = quaternion_from_coeff(episode.start_rotation)
 
-        return self._quat_to_xy_heading(
+        return _quat_to_xy_heading(
             rotation_world_agent.inverse() * rotation_world_start
         )
 
@@ -543,6 +555,8 @@ class Success(Measure):
     ):
         self._sim = sim
         self._config = config
+        self._need_goal_heading = config.get("NEED_GOAL_HEADING", False)
+        self._heading_tol = np.deg2rad(config.get("HEADING_TOLERANCE", 5))
 
         super().__init__()
 
@@ -562,12 +576,33 @@ class Success(Measure):
             DistanceToGoal.cls_uuid
         ].get_metric()
 
+        if self._need_goal_heading:
+            agent_state = self._sim.get_agent_state()
+            rotation_world_agent = agent_state.rotation
+            rotation_world_goal = quaternion_from_coeff(
+                episode.info["goal_rotation"]
+            )
+            heading_error = abs(
+                _quat_to_xy_heading(
+                    rotation_world_agent.inverse() * rotation_world_goal
+                )
+            )
+            has_correct_heading = heading_error < self._heading_tol
+        else:
+            has_correct_heading = True
+
+        if task.must_call_stop and hasattr(task, "is_stop_called"):
+            stop_condition = task.is_stop_called
+        else:
+            stop_condition = True
+
         if (
-            hasattr(task, "is_stop_called")
-            and task.is_stop_called  # type: ignore
+            stop_condition
             and distance_to_target < self._config.SUCCESS_DISTANCE
+            and has_correct_heading
         ):
             self._metric = 1.0
+            task.is_stop_called = True
         else:
             self._metric = 0.0
 
@@ -637,8 +672,8 @@ class SPL(Measure):
 
 @registry.register_measure
 class SCT(SPL):
-    r"""Success weighted by Completion Time
-    """
+    r"""Success weighted by Completion Time"""
+
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return "sct"
 
@@ -665,8 +700,10 @@ class SCT(SPL):
         oracle_time = (
             self._start_end_episode_distance / self._config.HOLONOMIC_VELOCITY
         )
-        agent_time = self._num_steps_taken*self._config.TIME_STEP
-        self._metric = ep_success * (oracle_time / max(oracle_time, agent_time))
+        agent_time = self._num_steps_taken * self._config.TIME_STEP
+        self._metric = ep_success * (
+            oracle_time / max(oracle_time, agent_time)
+        )
 
 
 @registry.register_measure
@@ -1180,7 +1217,6 @@ class VelocityAction(SimulatorTaskAction):
         self.min_ang_vel, self.max_ang_vel = config.ANG_VEL_RANGE
         self.min_abs_lin_speed = config.MIN_ABS_LIN_SPEED
         self.min_abs_ang_speed = config.MIN_ABS_ANG_SPEED
-        self.must_call_stop = config.MUST_CALL_STOP
         self.time_step = config.TIME_STEP
 
         # Horizontal velocity
@@ -1209,7 +1245,7 @@ class VelocityAction(SimulatorTaskAction):
         }
 
         if self.has_hor_vel:
-            action_dict['horizontal_velocity'] = spaces.Box(
+            action_dict["horizontal_velocity"] = spaces.Box(
                 low=np.array([self.min_hor_vel]),
                 high=np.array([self.max_hor_vel]),
                 dtype=np.float32,
@@ -1229,15 +1265,9 @@ class VelocityAction(SimulatorTaskAction):
                 robot_file, fixed_base=False
             )
 
-        self.robot_id.joint_positions = np.deg2rad(np.array([
-            0., -170., 0,
-            135., 0. -45.,
-            0., 0., 0.,
-            0., 45, -90,
-            0., 45, -90,
-            0., 45, -90,
-            0., 45, -90,
-        ]))
+        self.robot_id.joint_positions = np.deg2rad(
+            [0, -180, 0, 135, 90, 0, -90, 0] + [0, 60, -120] * 4
+        )
 
     def step(
         self,
@@ -1262,8 +1292,9 @@ class VelocityAction(SimulatorTaskAction):
             allow_sliding: whether the agent will slide on collision
         """
 
-        if time_step is None:
-            time_step = self.time_step
+        # if time_step is None:
+        #     time_step = self.time_step
+        time_step = self.time_step
 
         # Convert from [-1, 1] to [0, 1] range
         lin_vel = (lin_vel + 1.0) / 2.0
@@ -1282,37 +1313,21 @@ class VelocityAction(SimulatorTaskAction):
             self.max_hor_vel - self.min_hor_vel
         )
 
-        if (
-            self.must_call_stop and (
-                abs(lin_vel) < self.min_abs_lin_speed
-                and abs(ang_vel) < self.min_abs_ang_speed
-                and abs(hor_vel) < self.min_abs_hor_speed
-            )
-            or not self.must_call_stop
-            and task.measurements.measures['distance_to_goal'].get_metric()
-            < 0.2
-        ):
+        called_stop = (
+            abs(lin_vel) < self.min_abs_lin_speed
+            and abs(ang_vel) < self.min_abs_ang_speed
+            and abs(hor_vel) < self.min_abs_hor_speed
+        )
+        if called_stop and task.must_call_stop:
             task.is_stop_called = True  # type: ignore
             return self._sim.get_observations_at(
                 position=None,
                 rotation=None,
             )
 
-        self.vel_control.linear_velocity = np.array(
-            [hor_vel, 0.0, -lin_vel]
-        )
-        self.vel_control.angular_velocity = np.array(
-            [0.0, ang_vel, 0.0]
-        )
+        self.vel_control.linear_velocity = np.array([hor_vel, 0.0, -lin_vel])
+        self.vel_control.angular_velocity = np.array([0.0, ang_vel, 0.0])
         agent_state = self._sim.get_agent_state()
-
-
-        # TODO: Sometimes the rotation given by get_agent_state is off by 1e-4
-        # in terms of if the quaternion it represents is normalized, which
-        # throws an error as habitat-sim/habitat_sim/utils/validators.py has a
-        # tolerance of 1e-5. It is thus explicitly re-normalized here.
-
-        # Convert from np.quaternion to mn.Quaternion
         normalized_quaternion = np.normalized(agent_state.rotation)
         agent_mn_quat = mn.Quaternion(
             normalized_quaternion.imag, normalized_quaternion.real
@@ -1351,7 +1366,7 @@ class VelocityAction(SimulatorTaskAction):
             agent_observations["moving_backwards"] = False
             agent_observations["moving_sideways"] = False
             agent_observations["ang_accel"] = 0.0
-            if kwargs.get('num_steps', -1) != -1:
+            if kwargs.get("num_steps", -1) != -1:
                 agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
@@ -1360,26 +1375,32 @@ class VelocityAction(SimulatorTaskAction):
         """See if goal state causes interpenetration with surroundings"""
 
         # Calculate next rigid state off agent rigid state
-        heading = np.quaternion(goal_rigid_state.rotation.scalar, *goal_rigid_state.rotation.vector)
+        heading = np.quaternion(
+            goal_rigid_state.rotation.scalar, *goal_rigid_state.rotation.vector
+        )
         heading = -quat_to_rad(heading) + np.pi / 2
 
-        next_rs = mn.Matrix4.rotation_y(
-            mn.Rad(-heading),
-        ).__matmul__( # Rotate 180 deg yaw
-            mn.Matrix4.rotation(
-                mn.Rad(np.pi),
-                mn.Vector3((0.0, 1.0, 0.0)),
+        next_rs = (
+            mn.Matrix4.rotation_y(
+                mn.Rad(-heading),
             )
-        ).__matmul__( # Rotate 90 deg roll
-            mn.Matrix4.rotation(
-                mn.Rad(-np.pi / 2.0),
-                mn.Vector3((1.0, 0.0, 0.0)),
+            .__matmul__(  # Rotate 180 deg yaw
+                mn.Matrix4.rotation(
+                    mn.Rad(np.pi),
+                    mn.Vector3((0.0, 1.0, 0.0)),
+                )
+            )
+            .__matmul__(  # Rotate 90 deg roll
+                mn.Matrix4.rotation(
+                    mn.Rad(-np.pi / 2.0),
+                    mn.Vector3((1.0, 0.0, 0.0)),
+                )
             )
         )
 
-        next_rs.translation = np.array(final_position) + np.array([
-            0.0, 0.425, 0.0,
-        ])
+        next_rs.translation = np.array(final_position) + np.array(
+            [0.0, 0.5, 0.0]
+        )
 
         # Check if next rigid state causes interpenetration
         curr_rs = self.robot_id.transformation
@@ -1395,7 +1416,7 @@ class VelocityAction(SimulatorTaskAction):
             agent_observations["moving_backwards"] = False
             agent_observations["moving_sideways"] = False
             agent_observations["ang_accel"] = 0.0
-            if kwargs.get('num_steps', -1) != -1:
+            if kwargs.get("num_steps", -1) != -1:
                 agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
@@ -1417,11 +1438,13 @@ class VelocityAction(SimulatorTaskAction):
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
         agent_observations["hit_navmesh"] = collided
         agent_observations["moving_backwards"] = lin_vel < 0
-        agent_observations["moving_sideways"] = abs(hor_vel) > self.min_abs_hor_speed
+        agent_observations["moving_sideways"] = (
+            abs(hor_vel) > self.min_abs_hor_speed
+        )
         agent_observations["ang_accel"] = (
             ang_vel - self.prev_ang_vel
         ) / self.time_step
-        if kwargs.get('num_steps', -1) != -1:
+        if kwargs.get("num_steps", -1) != -1:
             agent_observations["num_steps"] = kwargs["num_steps"]
 
         self.prev_ang_vel = ang_vel
@@ -1435,6 +1458,7 @@ class NavigationTask(EmbodiedTask):
         self, config: Config, sim: Simulator, dataset: Optional[Dataset] = None
     ) -> None:
         super().__init__(config=config, sim=sim, dataset=dataset)
+        self.must_call_stop = config.get("MUST_CALL_STOP", True)
 
     def overwrite_sim_config(self, sim_config: Any, episode: Episode) -> Any:
         return merge_sim_episode_config(sim_config, episode)
@@ -1450,3 +1474,46 @@ class InteractiveNavigationTask(NavigationTask):
         observations = super().reset(episode)
         return observations
 
+
+@registry.register_sensor
+class SpotLeftRgbSensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_left_rgb"
+
+
+@registry.register_sensor
+class SpotRightRgbSensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_right_rgb"
+
+
+@registry.register_sensor
+class SpotDepthSensor(HabitatSimDepthSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_depth"
+
+    def get_observation(self, sim_obs):
+        obs = sim_obs.get(self.uuid, None)
+        assert isinstance(obs, np.ndarray)
+        obs[obs > self.config.MAX_DEPTH] = 0.0  # Spot blacks out far pixels
+        obs = np.clip(obs, self.config.MIN_DEPTH, self.config.MAX_DEPTH)
+        obs = np.expand_dims(obs, axis=2)  # make depth observation a 3D array
+        if self.config.NORMALIZE_DEPTH:
+            # normalize depth observation to [0, 1]
+            obs = (obs - self.config.MIN_DEPTH) / (
+                self.config.MAX_DEPTH - self.config.MIN_DEPTH
+            )
+
+        return obs
+
+
+@registry.register_sensor
+class SpotLeftDepthSensor(SpotDepthSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_left_depth"
+
+
+@registry.register_sensor
+class SpotRightDepthSensor(SpotDepthSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_right_depth"
