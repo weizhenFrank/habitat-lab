@@ -81,6 +81,7 @@ TASK:
       ANG_VEL_RANGE: [-30.0, 30.0]  # deg per sec
       HOR_VEL_RANGE: [-0.5, 0.5] # meters per sec
       TIME_STEP: 0.5  # sec per step
+      ROBOT_FILE: data/spot_arm/urdf/spot_arm.urdf
 
 DATASET:
   TYPE: PointNav-v1

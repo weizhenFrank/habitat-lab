@@ -1217,6 +1217,7 @@ class VelocityAction(SimulatorTaskAction):
         self.min_ang_vel, self.max_ang_vel = config.ANG_VEL_RANGE
         self.min_abs_lin_speed = config.MIN_ABS_LIN_SPEED
         self.min_abs_ang_speed = config.MIN_ABS_ANG_SPEED
+        self.robot_file = config.ROBOT_FILE
         self.time_step = config.TIME_STEP
 
         # Horizontal velocity
@@ -1259,10 +1260,9 @@ class VelocityAction(SimulatorTaskAction):
 
         # If robot was never spawned or was removed with previous scene
         if self.robot_id is None or self.robot_id.object_id == -1:
-            robot_file = "/private/home/naokiyokoyama/delme/habitat-sim/data/URDF_demo_assets/spot_arm/urdf/spot_arm.urdf"
             ao_mgr = self._sim.get_articulated_object_manager()
             self.robot_id = ao_mgr.add_articulated_object_from_urdf(
-                robot_file, fixed_base=False
+                self.robot_file, fixed_base=False
             )
 
         self.robot_id.joint_positions = np.deg2rad(
