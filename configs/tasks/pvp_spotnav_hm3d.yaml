@@ -5,6 +5,7 @@ SIMULATOR:
     ALLOW_SLIDING: False
   AGENT_0:
     SENSORS: ["SPOT_LEFT_DEPTH_SENSOR", "SPOT_RIGHT_DEPTH_SENSOR"]
+#    SENSORS: ["DEPTH_SENSOR"]
     HEIGHT: 0.88
     RADIUS: 0.3
   SPOT_LEFT_RGB_SENSOR:
@@ -42,15 +43,15 @@ SIMULATOR:
     MIN_DEPTH: 0.0
     NORMALIZE_DEPTH: True
   RGB_SENSOR:
-    WIDTH: 383
-    HEIGHT: 255
-    HFOV: 172  # horizontal field of view in degrees
+    WIDTH: 240
+    HEIGHT: 212
+    HFOV: 117  # horizontal field of view in degrees
     ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
-    POSITION: [0.0, 1.0, 0.425]
+    POSITION: [0.0, 1.0, -0.425]
   DEPTH_SENSOR:
-    WIDTH: 383
-    HEIGHT: 255
-    HFOV: 172  # horizontal field of view in degrees
+    WIDTH: 240
+    HEIGHT: 212
+    HFOV: 117  # horizontal field of view in degrees
     ORIENTATION: [0.0, 0.0, 0.0]  # Euler's angles
     POSITION: [0.0, 0.5, -0.425]
   TIME_STEP: 0.1  # policy period
@@ -84,5 +85,5 @@ TASK:
 DATASET:
   TYPE: PointNav-v1
   SPLIT: train
-  DATA_PATH: /private/home/naokiyokoyama/spot_nav/spot_goal_headings_hm3d/{split}/{split}.json.gz
-  SCENES_DIR: /private/home/naokiyokoyama/datasets
+  DATA_PATH: data/spot_goal_headings_hm3d/{split}/{split}.json.gz
+  SCENES_DIR: data/
