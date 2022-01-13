@@ -184,38 +184,29 @@ class PointNavBaselineNet(Net):
     ):
         super().__init__()
 
-        if (
-            IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            in observation_space.spaces
-        ):
-            self._n_input_goal = observation_space.spaces[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ].shape[0]
-        elif PointGoalSensor.cls_uuid in observation_space.spaces:
-            self._n_input_goal = observation_space.spaces[
-                PointGoalSensor.cls_uuid
-            ].shape[0]
-        elif ImageGoalSensor.cls_uuid in observation_space.spaces:
-            goal_observation_space = spaces.Dict(
-                {"rgb": observation_space.spaces[ImageGoalSensor.cls_uuid]}
-            )
-            self.goal_visual_encoder = SimpleCNN(
-                goal_observation_space, hidden_size
-            )
-            self._n_input_goal = hidden_size
-
-        # Add heading sensor if available
-        if GoalHeadingSensor.cls_uuid in observation_space.spaces:
-            self._n_input_goal += observation_space.spaces[
-                GoalHeadingSensor.cls_uuid
-            ].shape[0]
+        self.fuse_states = []
+        self._n_input_goal = 0
+        for uuid in [
+            IntegratedPointGoalGPSAndCompassSensor.cls_uuid,
+            GoalHeadingSensor.cls_uuid,
+        ]:
+            if uuid in observation_space.spaces:
+                self._n_input_goal += observation_space.spaces[uuid].shape[0]
+                self.fuse_states.append(uuid)
 
         self._hidden_size = hidden_size
-
         self.visual_encoder = SimpleCNN(observation_space, hidden_size)
+        self._goal_hidden_size = 512  # TODO: Don't hardcode
+        self.goal_encoder = nn.Sequential(
+            nn.Linear(self._n_input_goal, self._goal_hidden_size),
+            nn.ReLU(),
+            nn.Linear(self._goal_hidden_size, self._goal_hidden_size),
+            nn.ReLU(),
+        )
 
         self.state_encoder = build_rnn_state_encoder(
-            (0 if self.is_blind else self._hidden_size) + self._n_input_goal,
+            (0 if self.is_blind else self._hidden_size)
+            + self._goal_hidden_size,
             self._hidden_size,
         )
 
@@ -234,26 +225,13 @@ class PointNavBaselineNet(Net):
         return self.state_encoder.num_recurrent_layers
 
     def forward(self, observations, rnn_hidden_states, prev_actions, masks):
-        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-            target_encoding = observations[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ]
-
-        elif PointGoalSensor.cls_uuid in observations:
-            target_encoding = observations[PointGoalSensor.cls_uuid]
-        elif ImageGoalSensor.cls_uuid in observations:
-            image_goal = observations[ImageGoalSensor.cls_uuid]
-            target_encoding = self.goal_visual_encoder({"rgb": image_goal})
-
-        x = [target_encoding]
-
-        # Append heading sensor if available
-        if GoalHeadingSensor.cls_uuid in observations:
-            x.append(observations[GoalHeadingSensor.cls_uuid])
-
+        x = []
         if not self.is_blind:
-            perception_embed = self.visual_encoder(observations)
-            x = [perception_embed] + x
+            x.append(self.visual_encoder(observations))
+
+        if len(self.fuse_states) > 0:
+            non_vis_obs = [observations[k] for k in self.fuse_states]
+            x.append(self.goal_encoder(torch.cat(non_vis_obs, dim=1)))
 
         x_out = torch.cat(x, dim=1)
         x_out, rnn_hidden_states = self.state_encoder(
