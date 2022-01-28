@@ -130,9 +130,12 @@ class PPO(nn.Module):
                     - dist_entropy * self.entropy_coef
                 )
 
-                self.before_backward(total_loss)
-                total_loss.backward()
-                self.after_backward(total_loss)
+                if not torch.isnan(total_loss):
+                    self.before_backward(total_loss)
+                    total_loss.backward()
+                    self.after_backward(total_loss)
+                else:
+                    print("TOTAL LOSS WAS NaN!! SKIPPING BACKPROP")
 
                 self.before_step()
                 self.optimizer.step()
