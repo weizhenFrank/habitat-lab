@@ -174,7 +174,7 @@ def load_resume_state(filename_or_config: Union[Config, str]) -> Optional[Any]:
 
     :return: The saved state if the file exists, else none
     """
-    return None
+    # return None
     if isinstance(filename_or_config, Config):
         filename = resume_state_filename(filename_or_config)
     else:
