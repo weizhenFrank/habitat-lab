@@ -1,5 +1,5 @@
 ENVIRONMENT:
-  MAX_EPISODE_STEPS: 500
+  MAX_EPISODE_STEPS: 15
 SIMULATOR:
   HABITAT_SIM_V0:
     ALLOW_SLIDING: False
@@ -13,21 +13,21 @@ SIMULATOR:
     WIDTH: 120
     HEIGHT: 212
     HFOV: 58.286  # horizontal field of view in degrees
-    ORIENTATION: [-0.4415683, -0.57648225, 0.0]  # Euler's angles (pitch yaw roll)
+    ORIENTATION: [-0.4415683, -0.57648225, 0.270526]  # Euler's angles (pitch yaw roll)
     POSITION: [-0.03740343144695029, 0.5, -0.4164822634134684]
   SPOT_RIGHT_RGB_SENSOR:
     TYPE: "SpotRightRgbSensor"
     WIDTH: 120
     HEIGHT: 212
     HFOV: 58.286  # horizontal field of view in degrees
-    ORIENTATION: [-0.4415683, 0.57648225, 0.0]  # Euler's angles
+    ORIENTATION: [-0.4415683, 0.57648225, -0.270526]  # Euler's angles
     POSITION: [0.03614789234067159, 0.5, -0.4164822634134684]
   SPOT_LEFT_DEPTH_SENSOR:
     TYPE: "SpotLeftDepthSensor"
     WIDTH: 120
     HEIGHT: 212
     HFOV: 58.286  # horizontal field of view in degrees
-    ORIENTATION: [-0.4415683, -0.57648225, 0.0]  # Euler's angles (pitch yaw roll)
+    ORIENTATION: [-0.4415683, -0.57648225, 0.270526]  # Euler's angles (pitch yaw roll)
     POSITION: [-0.03740343144695029, 0.5, -0.4164822634134684]
     MAX_DEPTH: 3.5
     MIN_DEPTH: 0.0
@@ -37,7 +37,7 @@ SIMULATOR:
     WIDTH: 120
     HEIGHT: 212
     HFOV: 58.286  # horizontal field of view in degrees
-    ORIENTATION: [-0.4415683, 0.57648225, 0.0]  # Euler's angles
+    ORIENTATION: [-0.4415683, 0.57648225, -0.270526]  # Euler's angles
     POSITION: [0.03614789234067159, 0.5, -0.4164822634134684]
     MAX_DEPTH: 3.5
     MIN_DEPTH: 0.0
@@ -60,12 +60,10 @@ TASK:
   SUCCESS_DISTANCE: 0.3
   MUST_CALL_STOP: False
 
-  SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR', 'GOAL_HEADING_SENSOR']
+  SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR']
   POINTGOAL_WITH_GPS_COMPASS_SENSOR:
     GOAL_FORMAT: "POLAR"
     DIMENSIONALITY: 2
-  GOAL_HEADING_SENSOR:
-    TYPE: "GoalHeadingSensor"
   GOAL_SENSOR_UUID: pointgoal_with_gps_compass
   MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL']
   SUCCESS:
