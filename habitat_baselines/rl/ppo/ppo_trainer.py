@@ -922,7 +922,11 @@ class PPOTrainer(BaseRLTrainer):
         try:
             ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
         except:
-            print('WARNING, WEIGHTS WERE NOT LOADED')
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("WARNING!!! MODEL WEIGHTS WERE NOT LOADED")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
         if self.config.EVAL.USE_CKPT_CONFIG:
             config = self._setup_eval_config(ckpt_dict["config"])

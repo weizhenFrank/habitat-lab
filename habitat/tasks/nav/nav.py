@@ -1266,7 +1266,7 @@ class VelocityAction(SimulatorTaskAction):
             )
 
         self.robot_id.joint_positions = np.deg2rad(
-            [0, -180, 0, 135, 90, 0, -90, 0] + [0, 60, -120] * 4
+            [0, 60, -120] * 4
         )
 
     def step(
