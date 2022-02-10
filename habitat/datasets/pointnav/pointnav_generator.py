@@ -27,7 +27,6 @@ from habitat.tasks.nav.nav import (
     quat_to_rad,
 )
 
-
 try:
     from habitat_sim.errors import GreedyFollowerError
 except ImportError:
@@ -108,9 +107,7 @@ def _create_episode(
 
 def _spot_collided(source_rotation, source_position, robot_id, sim):
     # Set Spot's joints to default walking position
-    robot_id.joint_positions = np.deg2rad(
-        [0, -180, 0, 135, 90, 0, -90, 0] + [0, 60, -120] * 4
-    )
+    robot_id.joint_positions = np.deg2rad([0, 60, -120] * 4)
 
     # Rotation offset matrices
     yaw_offset = mn.Matrix4.rotation(
@@ -145,8 +142,8 @@ def generate_pointnav_episode(
     is_gen_shortest_path: bool = True,
     shortest_path_success_distance: float = 0.2,
     shortest_path_max_steps: int = 500,
-    closest_dist_limit: float = 1,
-    furthest_dist_limit: float = 30,
+    closest_dist_limit: float = 2,
+    furthest_dist_limit: float = 100,
     geodesic_to_euclid_min_ratio: float = 1.1,
     number_retries_per_target: int = 10,
 ) -> Generator[NavigationEpisode, None, None]:
@@ -183,7 +180,7 @@ def generate_pointnav_episode(
     """
 
     # Load Spot model
-    robot_file = "/private/home/naokiyokoyama/delme/habitat-sim/data/URDF_demo_assets/spot_arm/urdf/spot_arm.urdf"
+    robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
     ao_mgr = sim.get_articulated_object_manager()
     robot_id = ao_mgr.add_articulated_object_from_urdf(
         robot_file, fixed_base=False

@@ -1,0 +1,53 @@
+ENVIRONMENT:
+  MAX_EPISODE_STEPS: 150
+SIMULATOR:
+  HABITAT_SIM_V0:
+    ALLOW_SLIDING: False
+  AGENT_0:
+    SENSORS: ["DEPTH_SENSOR"]
+    HEIGHT: 0.88
+    RADIUS: 0.3
+  RGB_SENSOR:
+    WIDTH: 320
+    HEIGHT: 240
+    HFOV: 70
+    ORIENTATION: [ -0.7, 0.0, 0.0 ]
+    POSITION: [ 0.0, 1.1, 1.0 ]
+  DEPTH_SENSOR:
+    WIDTH: 320
+    HEIGHT: 240
+    MAX_DEPTH: 10.0
+    MIN_DEPTH: 0.3
+    HFOV: 70
+    ORIENTATION: [ 0.0, 0.0, 0.0 ]
+    POSITION: [ 0.0, 0.325, -0.325]
+TASK:
+  TYPE: Nav-v0
+  SUCCESS_DISTANCE: 0.425
+  MUST_CALL_STOP: False
+
+  SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR']
+  POINTGOAL_WITH_GPS_COMPASS_SENSOR:
+    GOAL_FORMAT: "POLAR"
+    DIMENSIONALITY: 2
+  GOAL_SENSOR_UUID: pointgoal_with_gps_compass
+  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL']
+  SUCCESS:
+    SUCCESS_DISTANCE: 0.425
+    NEED_GOAL_HEADING: False
+    HEADING_TOLERANCE: 5
+  TOP_DOWN_MAP:
+    TYPE: "TopDownMap"
+    MAP_RESOLUTION: 256
+  ACTIONS:
+    VELOCITY_CONTROL:
+      LIN_VEL_RANGE: [-0.5, 0.5]  # meters per sec
+      ANG_VEL_RANGE: [-17.19, 17.19]  # deg per sec
+      HOR_VEL_RANGE: [-0.5, 0.5] # meters per sec
+      TIME_STEP: 1.0  # sec per step
+      ROBOT_FILE: data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf
+
+DATASET:
+  TYPE: PointNav-v1
+  SPLIT: train
+  DATA_PATH: /coc/testnvme/jtruong33/data/datasets/ferst/{split}/{split}.json.gz

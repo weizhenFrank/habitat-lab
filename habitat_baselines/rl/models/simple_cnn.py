@@ -21,7 +21,7 @@ class SimpleCNN(nn.Module):
         output_size,
     ):
         super().__init__()
-
+        #  TODO: normalize RGB images, and remove hardcoding here for depth images
         # HACK: Never use RGB for policies.
         # if "rgb" in observation_space.spaces:
         #     self._n_input_rgb = observation_space.spaces["rgb"].shape[2]

@@ -36,33 +36,104 @@ TRAIN_EP_DIR = args.out_dir
 NUM_EPISODES_PER_SCENE = args.num_episodes_per_scene
 
 if args.matterport:
-    split = 'val' if args.val else 'train'
+    split = "val" if args.val else "train"
     split_dir = osp.join(args.glb_dir, split)
-    SCENES = glob.glob(osp.join(split_dir, '*/*.basis.glb'))
+    SCENES = glob.glob(osp.join(split_dir, "*/*.basis.glb"))
 else:
     if args.val:
-        scenes = [
-            "Cantwell", "Denmark", "Eastville", "Edgemere", "Elmira",
-            "Eudora", "Greigsville", "Mosquito", "Pablo", "Ribera",
-            "Sands", "Scioto", "Sisters", "Swormville",
-        ]
+        # scenes = [
+        #     "Cantwell",
+        #     "Denmark",
+        #     "Eastville",
+        #     "Edgemere",
+        #     "Elmira",
+        #     "Eudora",
+        #     "Greigsville",
+        #     "Mosquito",
+        #     "Pablo",
+        #     "Ribera",
+        #     "Sands",
+        #     "Scioto",
+        #     "Sisters",
+        #     "Swormville",
+        # ]
+        scenes = ["ferst"]
     else:
         scenes = [
-            "Adrian", "Albertville", "Anaheim", "Andover", "Angiola",
-            "Annawan", "Applewold", "Arkansaw", "Avonia", "Azusa",
-            "Ballou", "Beach", "Bolton", "Bowlus", "Brevort", "Capistrano",
-            "Colebrook", "Convoy", "Cooperstown", "Crandon", "Delton", "Dryville",
-            "Dunmor", "Eagerville", "Goffs", "Hainesburg", "Hambleton",
-            "Haxtun", "Hillsdale", "Hometown", "Hominy", "Kerrtown", "Maryhill",
-            "Mesic", "Micanopy", "Mifflintown", "Mobridge", "Monson",
-            "Mosinee", "Nemacolin", "Nicut", "Nimmons", "Nuevo", "Oyens",
-            "Parole", "Pettigrew", "Placida", "Pleasant", "Quantico", "Rancocas",
-            "Reyno", "Roane", "Roeville", "Rosser", "Roxboro", "Sanctuary",
-            "Sasakwa", "Sawpit", "Seward", "Shelbiana", "Silas", "Sodaville",
-            "Soldier", "Spencerville", "Spotswood", "Springhill", "Stanleyville",
-            "Stilwell", "Stokes", "Sumas", "Superior", "Woonsocket",
+            "Adrian",
+            "Albertville",
+            "Anaheim",
+            "Andover",
+            "Angiola",
+            "Annawan",
+            "Applewold",
+            "Arkansaw",
+            "Avonia",
+            "Azusa",
+            "Ballou",
+            "Beach",
+            "Bolton",
+            "Bowlus",
+            "Brevort",
+            "Capistrano",
+            "Colebrook",
+            "Convoy",
+            "Cooperstown",
+            "Crandon",
+            "Delton",
+            "Dryville",
+            "Dunmor",
+            "Eagerville",
+            "Goffs",
+            "Hainesburg",
+            "Hambleton",
+            "Haxtun",
+            "Hillsdale",
+            "Hometown",
+            "Hominy",
+            "Kerrtown",
+            "Maryhill",
+            "Mesic",
+            "Micanopy",
+            "Mifflintown",
+            "Mobridge",
+            "Monson",
+            "Mosinee",
+            "Nemacolin",
+            "Nicut",
+            "Nimmons",
+            "Nuevo",
+            "Oyens",
+            "Parole",
+            "Pettigrew",
+            "Placida",
+            "Pleasant",
+            "Quantico",
+            "Rancocas",
+            "Reyno",
+            "Roane",
+            "Roeville",
+            "Rosser",
+            "Roxboro",
+            "Sanctuary",
+            "Sasakwa",
+            "Sawpit",
+            "Seward",
+            "Shelbiana",
+            "Silas",
+            "Sodaville",
+            "Soldier",
+            "Spencerville",
+            "Spotswood",
+            "Springhill",
+            "Stanleyville",
+            "Stilwell",
+            "Stokes",
+            "Sumas",
+            "Superior",
+            "Woonsocket",
         ]
-    SCENES = [osp.join(args.glb_dir, s + '.glb') for s in scenes]
+    SCENES = [osp.join(args.glb_dir, s + ".glb") for s in scenes]
 
 
 # Pass absolute path to the scene glb
@@ -92,12 +163,13 @@ def _generate_fn(scene):
     )
     for ep in dset.episodes:
         if args.matterport:
-            ep.scene_id = scene.replace(args.glb_dir, '')
-            if not ep.scene_id.startswith('/'):
+            ep.scene_id = scene.replace(args.glb_dir, "")
+            if not ep.scene_id.startswith("/"):
                 ep.scene_id = "/" + ep.scene_id
             ep.scene_id = "hm3d" + ep.scene_id
         else:
-            ep.scene_id = osp.join("gibson", scene_key)
+            # ep.scene_id = osp.join("gibson", scene_key)
+            ep.scene_id = osp.join("ferst", scene_key)
     with gzip.open(out_file, "wt") as f:
         f.write(dset.to_json())
 
