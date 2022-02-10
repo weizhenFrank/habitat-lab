@@ -6,7 +6,7 @@
 
 # TODO, lots of typing errors in here
 
-from typing import Any, List, Optional, Tuple, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 import attr
 
@@ -37,21 +37,21 @@ from habitat.core.simulator import (
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
+from habitat.sims.habitat_simulator.habitat_simulator import (
+    HabitatSimDepthSensor,
+    HabitatSimRGBSensor,
+)
 from habitat.tasks.utils import cartesian_to_polar
 from habitat.utils.geometry_utils import (
     quaternion_from_coeff,
     quaternion_rotate_vector,
 )
 from habitat.utils.visualizations import fog_of_war, maps
-from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimRGBSensor,
-    HabitatSimDepthSensor,
-)
 
 try:
+    from habitat.sims.habitat_simulator.habitat_simulator import HabitatSim
     from habitat_sim.bindings import RigidState
     from habitat_sim.physics import VelocityControl
-    from habitat.sims.habitat_simulator.habitat_simulator import HabitatSim
 except ImportError:
     pass
 cv2 = try_cv2_import()
@@ -288,7 +288,7 @@ class ImageGoalSensor(Sensor):
         goal_position = np.array(episode.goals[0].position, dtype=np.float32)
         # to be sure that the rotation is the same for the same episode_id
         # since the task is currently using pointnav Dataset.
-        seed = abs(hash(episode.episode_id)) % (2 ** 32)
+        seed = abs(hash(episode.episode_id)) % (2**32)
         rng = np.random.RandomState(seed)
         angle = rng.uniform(0, 2 * np.pi)
         source_rotation = [0, np.sin(angle / 2), 0, np.cos(angle / 2)]
@@ -1265,9 +1265,7 @@ class VelocityAction(SimulatorTaskAction):
                 self.robot_file, fixed_base=False
             )
 
-        self.robot_id.joint_positions = np.deg2rad(
-            [0, 60, -120] * 4
-        )
+        self.robot_id.joint_positions = np.deg2rad([0, 60, -120] * 4)
 
     def step(
         self,
@@ -1485,6 +1483,31 @@ class SpotLeftRgbSensor(HabitatSimRGBSensor):
 class SpotRightRgbSensor(HabitatSimRGBSensor):
     def _get_uuid(self, *args, **kwargs):
         return "spot_right_rgb"
+
+
+@registry.register_sensor
+class SpotGraySensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_gray"
+
+    def get_observation(self, sim_obs):
+        obs = sim_obs.get(self.uuid, None)
+        assert isinstance(obs, np.ndarray)
+        obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
+        obs = obs.reshape([*obs.shape[:2], 1])
+        return obs
+
+
+@registry.register_sensor
+class SpotLeftGraySensor(SpotGraySensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_left_gray"
+
+
+@registry.register_sensor
+class SpotRightGraySensor(SpotGraySensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_right_gray"
 
 
 @registry.register_sensor
