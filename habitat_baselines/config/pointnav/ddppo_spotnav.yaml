@@ -1,17 +1,18 @@
 VERBOSE: False
-BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_spot.yaml"
+BASE_TASK_CONFIG_PATH: "/coc/testnvme/jtruong33/google_nav/habitat-lab/configs/tasks/outdoor_spotnav_hm3d.yaml"
 TRAINER_NAME: "ddppo"
 ENV_NAME: "NavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 VIDEO_OPTION: []
-TENSORBOARD_DIR: "tb"
-VIDEO_DIR: "video_dir"
+TENSORBOARD_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_kinematic_hm3d_gibson/tb'
+VIDEO_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_kinematic_hm3d_gibson/video_dir'
+EVAL_CKPT_PATH_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_kinematic_hm3d_gibson/checkpoints'
+CHECKPOINT_FOLDER: '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_kinematic_hm3d_gibson/checkpoints'
+TXT_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/txts'
 TEST_EPISODE_COUNT: -1
-EVAL_CKPT_PATH_DIR: "data/new_checkpoints"
-NUM_ENVIRONMENTS: 4
-SENSORS: ["DEPTH_SENSOR"]
-CHECKPOINT_FOLDER: "data/new_checkpoints"
+NUM_ENVIRONMENTS: 16
+SENSORS: ['SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR']
 NUM_UPDATES: -1
 TOTAL_NUM_STEPS: 5e8
 LOG_INTERVAL: 10
@@ -21,23 +22,20 @@ NUM_CHECKPOINTS: 100
 FORCE_TORCH_SINGLE_THREADED: True
 
 RL:
-  SUCCESS_REWARD: 2.5
+  SUCCESS_REWARD: 5.0
+  FULL_GEODESIC_DECAY: -1.0
+  COLLISION_PENALTY: 0.003
+  BACKWARDS_PENALTY: 0.003
+  TURN_REWARD_DIST: 1.0  # when to start rewarding the agent for matching the goal heading
+  TURN_REWARD_COEF: 0.1
 
   POLICY:
-    name: "PointNavResNetPolicy"
+    name: "PointNavBaselinePolicy"
     action_distribution_type: "gaussian"
     OBS_TRANSFORMS:
-      ENABLED_TRANSFORMS: ['SPOT_DR', 'SPOT_MASK']
-      SPOT_MASK:
-        HEIGHT: 255
-        WIDTH: 383
-        MASK_PATH: "data/spot_mask.png"
-      SPOT_DR:
-        HEIGHT: 255
-        WIDTH: 383
-        CROP_SCALE: [0.92, 1.0]
-        ERASING_SCALE: [0.01, 0.05]
-        NUM_ERASING: 20
+      ENABLED_TRANSFORMS: []
+      PEPPER_NOISE:
+        NOISE_PERCENT: 0.4
 
   PPO:
     # ppo params

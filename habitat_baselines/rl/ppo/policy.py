@@ -11,10 +11,10 @@ from torch import nn as nn
 
 from habitat.config import Config
 from habitat.tasks.nav.nav import (
+    GoalHeadingSensor,
     ImageGoalSensor,
     IntegratedPointGoalGPSAndCompassSensor,
     PointGoalSensor,
-    GoalHeadingSensor,
 )
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.models.rnn_state_encoder import (
