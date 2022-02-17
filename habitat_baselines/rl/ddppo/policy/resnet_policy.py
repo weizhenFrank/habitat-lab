@@ -99,12 +99,13 @@ class ResNetEncoder(nn.Module):
         self.depth_keys = [k for k in observation_space.spaces if "depth" in k]
 
         self.using_one_gray_camera = "gray" in observation_space.spaces
+        self.using_two_gray_cameras = any(
+            [k.endswith("_gray") for k in observation_space.spaces.keys()]
+        )
+
         self.using_one_depth_camera = "depth" in observation_space.spaces
         self.using_two_depth_cameras = any(
             [k.endswith("_depth") for k in observation_space.spaces.keys()]
-        )
-        self.using_two_gray_cameras = any(
-            [k.endswith("_gray") for k in observation_space.spaces.keys()]
         )
 
         self._n_input_rgb, self._n_input_depth, self._n_input_gray = [
@@ -132,7 +133,11 @@ class ResNetEncoder(nn.Module):
             spatial_size_w = (
                 observation_space.spaces[all_keys[0]].shape[1] // 2
             )
-            input_channels = self._n_input_depth + self._n_input_rgb
+            if self.using_two_depth_cameras or self.using_two_gray_cameras:
+                spatial_size_w = observation_space.spaces[all_keys[0]].shape[1]
+            input_channels = (
+                self._n_input_depth + self._n_input_rgb + self._n_input_gray
+            )
             self.backbone = make_backbone(input_channels, baseplanes, ngroups)
 
             final_spatial_h = int(
@@ -371,9 +376,9 @@ class PointNavResNetNet(Net):
             [k.startswith("spot") for k in observation_space.spaces.keys()]
         )
         if not self.visual_encoder.is_blind:
-            ## 4069 = 256 * 4 * 4 [for 256 x 256 imgs]
-            ## 4560 = 228 * 4 * 5 [for 320 x 240 imgs]
-            dim = 4096 if using_spot else 4560
+            ## 2048 = 128 * 4 * 4 [for 256 x 256 imgs]
+            ## 2040 = 102 * 4 * 5 [for 320 x 240 imgs]
+            dim = 2048 if using_spot else 2040
             self.visual_fc = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(dim, hidden_size),
