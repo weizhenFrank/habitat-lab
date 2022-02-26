@@ -25,8 +25,12 @@ def make_env_fn(
     Returns:
         env object created according to specification.
     """
-    dataset = make_dataset(
-        config.TASK_CONFIG.DATASET.TYPE, config=config.TASK_CONFIG.DATASET
+    dataset = (
+        make_dataset(
+            config.TASK_CONFIG.DATASET.TYPE, config=config.TASK_CONFIG.DATASET
+        )
+        if config.TASK_CONFIG.DATASET.TYPE != ""
+        else None
     )
     env = env_class(config=config, dataset=dataset)
     env.seed(config.TASK_CONFIG.SEED)
@@ -53,18 +57,22 @@ def construct_envs(
     num_environments = config.NUM_ENVIRONMENTS
     configs = []
     env_classes = [env_class for _ in range(num_environments)]
-    dataset = make_dataset(config.TASK_CONFIG.DATASET.TYPE)
+    dataset = (
+        make_dataset(config.TASK_CONFIG.DATASET.TYPE)
+        if config.TASK_CONFIG.DATASET.TYPE != ""
+        else None
+    )
     scenes = config.TASK_CONFIG.DATASET.CONTENT_SCENES
     if "*" in config.TASK_CONFIG.DATASET.CONTENT_SCENES:
         scenes = dataset.get_scenes_to_load(config.TASK_CONFIG.DATASET)
 
     if num_environments > 1:
         if len(scenes) == 0:
-            raise RuntimeError(
-                "No scenes to load, multiple process logic relies on being able to split scenes uniquely between processes"
-            )
-
-        if len(scenes) < num_environments:
+            # raise RuntimeError(
+            #     "No scenes to load, multiple process logic relies on being able to split scenes uniquely between processes"
+            # )
+            print("No scenes loaded")
+        elif len(scenes) < num_environments:
             raise RuntimeError(
                 "reduce the number of environments as there "
                 "aren't enough number of scenes.\n"

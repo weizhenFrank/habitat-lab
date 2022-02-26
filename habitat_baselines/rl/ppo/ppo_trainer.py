@@ -16,6 +16,9 @@ import numpy as np
 import torch
 import tqdm
 from gym import spaces
+from torch import nn
+from torch.optim.lr_scheduler import LambdaLR
+
 from habitat import Config, VectorEnv, logger
 from habitat.core.spaces import ActionSpace, EmptySpace
 from habitat.utils import profiling_wrapper
@@ -54,8 +57,6 @@ from habitat_baselines.utils.common import (
     generate_video,
 )
 from habitat_baselines.utils.env_utils import construct_envs
-from torch import nn
-from torch.optim.lr_scheduler import LambdaLR
 
 
 @baseline_registry.register_trainer(name="ddppo")
@@ -275,9 +276,11 @@ class PPOTrainer(BaseRLTrainer):
         self._init_envs()
 
         if self.config.RL.POLICY.action_distribution_type == "gaussian":
+
             self.policy_action_space = self.envs.action_spaces[0][
                 self.action_type
             ]
+            self.policy_action_space.n = 3
             action_shape = self.policy_action_space.n
             discrete_actions = False
         else:
