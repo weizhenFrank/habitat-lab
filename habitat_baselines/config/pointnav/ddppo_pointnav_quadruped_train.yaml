@@ -1,4 +1,4 @@
-BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped_train.yaml"
+BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped.yaml"
 TOTAL_NUM_STEPS: 5e8
 
 VERBOSE: False

@@ -7,7 +7,7 @@ Replaces the yaml file content with the location of the new directory.
 HABITAT_LAB = "/coc/testnvme/jtruong33/google_nav/habitat-lab"
 RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
 SLURM_TEMPLATE = (
-    "/coc/testnvme/jtruong33/habitat_spot/habitat-lab/slurm_job_template.sh"
+    "/coc/testnvme/jtruong33/habitat_spot/habitat-lab/slurm_template.sh"
 )
 EVAL_SLURM_TEMPLATE = (
     "/coc/testnvme/jtruong33/habitat_spot/habitat-lab/eval_slurm_template.sh"
