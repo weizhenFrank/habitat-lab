@@ -17,10 +17,12 @@ from torch.nn import functional as F
 from habitat.config import Config
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.ddppo.policy import resnet
-from habitat_baselines.rl.ddppo.policy.running_mean_and_var import \
-    RunningMeanAndVar
-from habitat_baselines.rl.models.rnn_state_encoder import \
-    build_rnn_state_encoder
+from habitat_baselines.rl.ddppo.policy.running_mean_and_var import (
+    RunningMeanAndVar,
+)
+from habitat_baselines.rl.models.rnn_state_encoder import (
+    build_rnn_state_encoder,
+)
 from habitat_baselines.rl.ppo import Net, Policy
 
 DEQUE_LENGTH = 150
@@ -361,7 +363,7 @@ class PointNavResNetNet(Net):
                     ],
                     -1,
                 )
-            x.append(self.tgt_embeding(goal_observations))
+            x.append(self.tgt_embeding(goal_observations.to(torch.float)))
 
         prev_actions = self.prev_action_embedding(prev_actions.float())
 
