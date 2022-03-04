@@ -26,9 +26,7 @@ def make_env_fn(
         env object created according to specification.
     """
     dataset = (
-        make_dataset(
-            config.TASK_CONFIG.DATASET.TYPE, config=config.TASK_CONFIG.DATASET
-        )
+        make_dataset(config.TASK_CONFIG.DATASET.TYPE, config=config.TASK_CONFIG.DATASET)
         if config.TASK_CONFIG.DATASET.TYPE != ""
         else None
     )
@@ -98,9 +96,7 @@ def construct_envs(
         if len(scenes) > 0:
             task_config.DATASET.CONTENT_SCENES = scene_splits[i]
 
-        task_config.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID = (
-            config.SIMULATOR_GPU_ID
-        )
+        task_config.SIMULATOR.HABITAT_SIM_V0.GPU_DEVICE_ID = config.SIMULATOR_GPU_ID
 
         task_config.SIMULATOR.AGENT_0.SENSORS = config.SENSORS
 

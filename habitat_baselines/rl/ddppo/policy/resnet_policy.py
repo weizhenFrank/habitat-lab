@@ -24,6 +24,8 @@ from habitat_baselines.rl.models.rnn_state_encoder import (
     build_rnn_state_encoder,
 )
 from habitat_baselines.rl.ppo import Net, Policy
+from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
+
 
 DEQUE_LENGTH = 150
 
@@ -64,9 +66,7 @@ class PointNavResNetPolicy(Policy):
         self.action_distribution_type = action_distribution_type
 
     @classmethod
-    def from_config(
-        cls, config: Config, observation_space: spaces.Dict, action_space
-    ):
+    def from_config(cls, config: Config, observation_space: spaces.Dict, action_space):
         return cls(
             observation_space=observation_space,
             action_space=action_space,
@@ -125,12 +125,8 @@ class ResNetEncoder(nn.Module):
 
         if not self.is_blind:
             all_keys = self.rgb_keys + self.depth_keys + self.gray_keys
-            spatial_size_h = (
-                observation_space.spaces[all_keys[0]].shape[0] // 2
-            )
-            spatial_size_w = (
-                observation_space.spaces[all_keys[0]].shape[1] // 2
-            )
+            spatial_size_h = observation_space.spaces[all_keys[0]].shape[0] // 2
+            spatial_size_w = observation_space.spaces[all_keys[0]].shape[1] // 2
             if self.using_two_depth_cameras or self.using_two_gray_cameras:
                 spatial_size_w = observation_space.spaces[all_keys[0]].shape[1]
             input_channels = (
@@ -146,10 +142,7 @@ class ResNetEncoder(nn.Module):
             )
             after_compression_flat_size = 2048
             num_compression_channels = int(
-                round(
-                    after_compression_flat_size
-                    / (final_spatial_h * final_spatial_w)
-                )
+                round(after_compression_flat_size / (final_spatial_h * final_spatial_w))
             )
             self.compression = nn.Sequential(
                 nn.Conv2d(
@@ -176,9 +169,7 @@ class ResNetEncoder(nn.Module):
     def layer_init(self):
         for layer in self.modules():
             if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_normal_(
-                    layer.weight, nn.init.calculate_gain("relu")
-                )
+                nn.init.kaiming_normal_(layer.weight, nn.init.calculate_gain("relu"))
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, val=0)
 
@@ -190,9 +181,7 @@ class ResNetEncoder(nn.Module):
         if self._n_input_rgb > 0:
             rgb_observations = observations["rgb"]
             rgb_observations = rgb_observations.permute(0, 3, 1, 2)
-            rgb_observations = (
-                rgb_observations.float() / 255.0
-            )  # normalize RGB
+            rgb_observations = rgb_observations.float() / 255.0  # normalize RGB
             cnn_input.append(rgb_observations)
 
         if self._n_input_gray > 0:
@@ -211,9 +200,7 @@ class ResNetEncoder(nn.Module):
                 raise Exception("Not implemented")
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             gray_observations = gray_observations.permute(0, 3, 1, 2)
-            gray_observations = (
-                gray_observations.float() / 255.0
-            )  # normalize RGB
+            gray_observations = gray_observations.float() / 255.0  # normalize RGB
             cnn_input.append(gray_observations)
 
         if self._n_input_depth > 0:
@@ -274,6 +261,17 @@ class PointNavResNetNet(Net):
             n_input_goal = observation_space.spaces["task_obs"].shape[0] + 1
             self.tgt_embeding = nn.Linear(n_input_goal, 32)
             rnn_input_size += 32
+        elif (
+            IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observation_space.spaces
+        ):
+            n_input_goal = (
+                observation_space.spaces[
+                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+                ].shape[0]
+                + 1
+            )
+            self.tgt_embeding = nn.Linear(n_input_goal, 32)
+            rnn_input_size += 32
 
         self._hidden_size = hidden_size
 
@@ -332,8 +330,16 @@ class PointNavResNetNet(Net):
         visual_feats = self.visual_encoder(observations)
         visual_feats = self.visual_fc(visual_feats)
         x.append(visual_feats)
-        if "task_obs" in observations:
-            goal_observations = observations["task_obs"]
+        if (
+            "task_obs" in observations
+            or IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations
+        ):
+            if "task_obs" in observations:
+                goal_observations = observations["task_obs"]
+            elif IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
+                goal_observations = observations[
+                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+                ]
             if goal_observations.shape[1] == 2:
                 # Polar Dimensionality 2
                 # 2D polar transform
@@ -346,19 +352,15 @@ class PointNavResNetNet(Net):
                     -1,
                 )
             else:
-                assert (
-                    goal_observations.shape[1] == 3
-                ), "Unsupported dimensionality"
+                assert goal_observations.shape[1] == 3, "Unsupported dimensionality"
                 vertical_angle_sin = torch.sin(goal_observations[:, 2])
                 # Polar Dimensionality 3
                 # 3D Polar transformation
                 goal_observations = torch.stack(
                     [
                         goal_observations[:, 0],
-                        torch.cos(-goal_observations[:, 1])
-                        * vertical_angle_sin,
-                        torch.sin(-goal_observations[:, 1])
-                        * vertical_angle_sin,
+                        torch.cos(-goal_observations[:, 1]) * vertical_angle_sin,
+                        torch.sin(-goal_observations[:, 1]) * vertical_angle_sin,
                         torch.cos(goal_observations[:, 2]),
                     ],
                     -1,
@@ -369,7 +371,5 @@ class PointNavResNetNet(Net):
 
         x.append(prev_actions)
         out = torch.cat(x, dim=1)
-        out, rnn_hidden_states = self.state_encoder(
-            out, rnn_hidden_states, masks
-        )
+        out, rnn_hidden_states = self.state_encoder(out, rnn_hidden_states, masks)
         return out, rnn_hidden_states

@@ -919,7 +919,10 @@ class PPOTrainer(BaseRLTrainer):
 
         if self.config.RL.POLICY.action_distribution_type == "gaussian":
             self.policy_action_space = self.envs.action_spaces[0][self.action_type]
-            self.policy_action_space.n = 3
+            try:
+                self.policy_action_space.n = 3
+            except:
+                pass
             action_shape = self.policy_action_space.n
             action_type = torch.float
         else:
@@ -985,21 +988,11 @@ class PPOTrainer(BaseRLTrainer):
                 )
                 logger.warn(f"Evaluating with {total_num_eps} instead.")
                 number_of_eval_episodes = total_num_eps
-        number_of_eval_episodes = int(number_of_eval_episodes / self.envs.num_envs)
         pbar = tqdm.tqdm(total=number_of_eval_episodes)
         self.actor_critic.eval()
         all_episode_stats = {}
         while len(stats_episodes) < number_of_eval_episodes and self.envs.num_envs > 0:
-            print(
-                "curr len: ",
-                len(stats_episodes),
-                "num eval eps: ",
-                number_of_eval_episodes,
-                "num envs: ",
-                self.envs.num_envs,
-            )
             current_episodes = self.envs.current_episodes()
-
             with torch.no_grad():
                 (_, actions, _, test_recurrent_hidden_states,) = self.actor_critic.act(
                     batch,
@@ -1150,7 +1143,7 @@ class PPOTrainer(BaseRLTrainer):
 
             not_done_masks = not_done_masks.to(device=self.device)
             (
-                self.envs,
+                _,
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
@@ -1167,6 +1160,14 @@ class PPOTrainer(BaseRLTrainer):
                 batch,
                 rgb_frames,
             )
+            # print(
+            #     "curr len: ",
+            #     len(stats_episodes),
+            #     "num eval eps: ",
+            #     number_of_eval_episodes,
+            #     "num envs: ",
+            #     self.envs.num_envs,
+            # )
 
         num_episodes = len(stats_episodes)
         aggregated_stats = {}

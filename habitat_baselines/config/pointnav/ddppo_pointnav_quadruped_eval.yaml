@@ -1,5 +1,6 @@
-BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped_eval.yaml"
-TOTAL_NUM_STEPS: 5e8
+BASE_TASK_CONFIG_PATH: "configs/pointnav_quadruped.yaml"
+BASE_IGIBSON_CONFIG_PATH: "aliengo_nav.yaml"
+TOTAL_NUM_STEPS: 1e9
 
 VERBOSE: False
 TRAINER_NAME: "ddppo"
@@ -7,14 +8,14 @@ ENV_NAME: "NavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 VIDEO_OPTION: []
-TENSORBOARD_DIR:    '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/tb'
-VIDEO_DIR:          '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/video_dir'
-EVAL_CKPT_PATH_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
-CHECKPOINT_FOLDER:  '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
-TXT_DIR:            '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/txts'
+TENSORBOARD_DIR:    'igibson_dyn_results/aliengo_dynamic_hm3d_gibson/tb'
+VIDEO_DIR:          'igibson_dyn_results/aliengo_dynamic_hm3d_gibson/video_dir'
+EVAL_CKPT_PATH_DIR: 'igibson_dyn_results/aliengo_dynamic_hm3d_gibson/checkpoints'
+CHECKPOINT_FOLDER:  'igibson_dyn_results/aliengo_dynamic_hm3d_gibson/checkpoints'
+TXT_DIR:            'igibson_dyn_results/aliengo_dynamic_hm3d_gibson/txts'
 TEST_EPISODE_COUNT: -1
 NUM_ENVIRONMENTS: 8
-SENSORS: ["RGB_SENSOR", "DEPTH_SENSOR"]
+SENSORS: ["DEPTH_SENSOR"]
 NUM_UPDATES: -1
 LOG_INTERVAL: 10
 NUM_CHECKPOINTS: 100
@@ -28,6 +29,7 @@ RL:
   COLLISION_PENALTY: 0.003
   BACKWARDS_PENALTY: 0.003
   FULL_GEODESIC_DECAY: -1.0
+  FALL_PENALTY: -5.0
 
   POLICY:
     name: "PointNavResNetPolicy"
@@ -80,4 +82,3 @@ RL:
     num_recurrent_layers: 2
 EVAL:
     SPLIT: "val"
-    
