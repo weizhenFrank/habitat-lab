@@ -26,7 +26,7 @@ parser.add_argument("-ts", "--time-step", type=float, default=1.0)
 
 parser.add_argument("-cpt", "--ckpt", type=int, default=-1)
 parser.add_argument("-v", "--video", default=False, action="store_true")
-parser.add_argument("-ext", default="")
+parser.add_argument("--ext", default="")
 
 args = parser.parse_args()
 
@@ -37,9 +37,20 @@ TASK_YAML = "configs/tasks/pointnav_quadruped_eval.yaml"
 experiment_name = args.experiment_name
 
 dst_dir = os.path.join(RESULTS, experiment_name)
-eval_dst_dir = os.path.join(
-    RESULTS, experiment_name, "eval", args.control_type + "_habitat"
-)
+
+dir_name = "{}_habitat".format(args.control_type)
+
+eval_name = "_{}_habitat_eval".format(args.control_type)
+if args.ckpt != -1:
+    eval_name += "_ckpt_{}".format(args.ckpt)
+    dir_name += "_ckpt_{}".format(args.ckpt)
+if args.video:
+    eval_name += "_video"
+    dir_name += "_video"
+if args.ext != "":
+    eval_name += "_" + args.ext
+
+eval_dst_dir = os.path.join(RESULTS, experiment_name, "eval", dir_name)
 
 task_yaml_path = os.path.join(HABITAT, TASK_YAML)
 exp_yaml_path = os.path.join(HABITAT, EXP_YAML)
@@ -47,9 +58,6 @@ exp_yaml_path = os.path.join(HABITAT, EXP_YAML)
 new_task_yaml_path = os.path.join(dst_dir, os.path.basename(task_yaml_path))
 new_exp_yaml_path = os.path.join(dst_dir, os.path.basename(exp_yaml_path))
 
-eval_name = "_{}_habitat_eval".format(args.control_type)
-if args.ext != "":
-    eval_name += "_" + args.ext
 
 new_eval_task_yaml_path = (
     os.path.join(eval_dst_dir, os.path.basename(task_yaml_path)).split(".yaml")[0]
@@ -110,7 +118,8 @@ for idx, i in enumerate(eval_task_yaml_data):
         if not args.control_type == "dynamic":
             eval_task_yaml_data[idx] = "    VELOCITY_CONTROL:"
     elif i.startswith("      TIME_STEP:"):
-        eval_task_yaml_data[idx] = "      TIME_STEP: {}".format(args.time_step)
+        if args.control_type == "dynamic":
+            eval_task_yaml_data[idx] = "      TIME_STEP: 0.33"
     elif i.startswith("  ROBOT:"):
         eval_task_yaml_data[idx] = "  ROBOT: {}".format(args.robot)
     elif i.startswith("      ROBOT_URDF:"):

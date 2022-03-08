@@ -1431,13 +1431,18 @@ class DynamicVelocityAction(VelocityAction):
             and abs(ang_vel) < self.min_abs_ang_speed
             and abs(hor_vel) < self.min_abs_hor_speed
         )
-        if called_stop and self.must_call_stop:
+        if (
+            self.must_call_stop
+            and called_stop
+            or not self.must_call_stop
+            and task.measurements.measures["distance_to_goal"].get_metric()
+            < task._config.SUCCESS_DISTANCE
+        ):
             task.is_stop_called = True  # type: ignore
             return self._sim.get_observations_at(
                 position=None,
                 rotation=None,
             )
-
         """Get the current agent state"""
         agent_state = self._sim.get_agent_state()
         normalized_quaternion = np.normalized(agent_state.rotation)
@@ -1452,6 +1457,9 @@ class DynamicVelocityAction(VelocityAction):
         """ Step dynamically using raibert controller """
         for i in range(int(1 / self.time_step)):
             state = self.robot.calc_state()
+            # habitat conventions: -Y LEFT, +Y RIGHT
+            # gibson conventions: -Y RIGHT, +Y LEFT
+            hor_vel = -hor_vel
             target_speed = np.array([lin_vel, hor_vel])
             latent_action = self.raibert_controller.plan_latent_action(
                 state, target_speed, target_ang_vel=ang_vel
