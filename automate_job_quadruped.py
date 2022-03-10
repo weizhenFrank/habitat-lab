@@ -4,20 +4,18 @@ Makes a new directory, and stores the two yaml files that generate the config.
 Replaces the yaml file content with the location of the new directory.
 """
 
-HABITAT_LAB = "/coc/testnvme/jtruong33/habitat_spot/habitat-lab"
-RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/dan_res"
-SLURM_TEMPLATE = (
-    "/coc/testnvme/jtruong33/habitat_spot/habitat-lab/slurm_job_template.sh"
-)
-EVAL_SLURM_TEMPLATE = (
-    "/coc/testnvme/jtruong33/habitat_spot/habitat-lab/eval_slurm_template.sh"
-)
 
 import argparse
 import ast
 import os
 import shutil
 import subprocess
+
+HABITAT_LAB = "/coc/testnvme/jtruong33/kin2dyn/habitat-lab"
+RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/kin2dyn_results"
+SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "slurm_job_template.sh")
+EVAL_SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "eval_slurm_template.sh")
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("experiment_name")
