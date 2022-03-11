@@ -168,11 +168,12 @@ class ResNetEncoder(nn.Module):
         return self._n_input_rgb + self._n_input_depth == 0
 
     def layer_init(self):
-        for layer in self.modules():
-            if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_normal_(layer.weight, nn.init.calculate_gain("relu"))
-                if layer.bias is not None:
-                    nn.init.constant_(layer.bias, val=0)
+        return
+        # for layer in self.modules():
+        #     if isinstance(layer, (nn.Conv2d, nn.Linear)):
+        #         nn.init.kaiming_normal_(layer.weight, nn.init.calculate_gain("relu"))
+        #         if layer.bias is not None:
+        #             nn.init.constant_(layer.bias, val=0)
 
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:  # type: ignore
         if self.is_blind:
