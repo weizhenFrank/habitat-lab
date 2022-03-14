@@ -1338,6 +1338,7 @@ class VelocityAction(SimulatorTaskAction):
         collided = self._sim.contact_test(self.robot.robot_id.object_id)
         if collided:
             self.robot.robot_id.transformation = curr_rs
+            agent_observations = self._sim.get_observations_at()
             self._sim._prev_sim_obs["collided"] = True  # type: ignore
             agent_observations["hit_navmesh"] = True
             agent_observations["moving_backwards"] = False
