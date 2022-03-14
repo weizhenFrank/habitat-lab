@@ -26,6 +26,7 @@ parser.add_argument("-ts", "--time-step", type=float, default=1.0)
 
 parser.add_argument("-cpt", "--ckpt", type=int, default=-1)
 parser.add_argument("-v", "--video", default=False, action="store_true")
+parser.add_argument("-n", "--noise", default=False, action="store_true")
 parser.add_argument("--ext", default="")
 
 args = parser.parse_args()
@@ -47,8 +48,12 @@ if args.ckpt != -1:
 if args.video:
     eval_name += "_video"
     dir_name += "_video"
+if args.noise:
+    eval_name += "_noise"
+    dir_name += "_noise"
 if args.ext != "":
     eval_name += "_" + args.ext
+    dir_name += "_" + args.ext
 
 eval_dst_dir = os.path.join(RESULTS, experiment_name, "eval", dir_name)
 
@@ -77,9 +82,9 @@ robot_goal_dict = {
 }
 
 robot_vel_dict = {
-    "a1": [[-0.23, 0.23], [-0.14, 0.14]],
-    "aliengo": [[-0.28, 0.28], [-0.17, 0.17]],
-    "spot": [[-0.5, 0.5], [-0.3, 0.3]],
+    "a1": [[-0.23, 0.23], [-8.02, 8.02]],
+    "aliengo": [[-0.28, 0.28], [-9.74, 9.74]],
+    "spot": [[-0.5, 0.5], [-17.19, 17.19]],
 }
 
 robot_urdfs_dict = {
@@ -120,8 +125,32 @@ for idx, i in enumerate(eval_task_yaml_data):
     elif i.startswith("      TIME_STEP:"):
         if args.control_type == "dynamic":
             eval_task_yaml_data[idx] = "      TIME_STEP: 0.33"
+    elif i.startswith("      LIN_VEL_RANGE:"):
+        eval_task_yaml_data[idx] = "      LIN_VEL_RANGE: [{}, {}]".format(
+            robot_lin_vel[0], robot_lin_vel[1]
+        )
+    elif i.startswith("      ANG_VEL_RANGE:"):
+        eval_task_yaml_data[idx] = "      ANG_VEL_RANGE: [{}, {}]".format(
+            robot_ang_vel[0], robot_ang_vel[1]
+        )
+    elif i.startswith("      HOR_VEL_RANGE:"):
+        eval_task_yaml_data[idx] = "      HOR_VEL_RANGE: [{}, {}]".format(
+            robot_lin_vel[0], robot_lin_vel[1]
+        )
     elif i.startswith("  ROBOT:"):
         eval_task_yaml_data[idx] = "  ROBOT: {}".format(args.robot)
+    elif i.startswith("      NOISE_MEAN_X:"):
+        if args.noise:
+            eval_task_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(-0.0171)
+    elif i.startswith("      NOISE_MEAN_Y:"):
+        if args.noise:
+            eval_task_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(0.0141)
+    elif i.startswith("      NOISE_VAR_X:"):
+        if args.noise:
+            eval_task_yaml_data[idx] = "      NOISE_VAR_X: {}".format(0.0439)
+    elif i.startswith("      NOISE_VAR_Y:"):
+        if args.noise:
+            eval_task_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(0.0282)
     elif i.startswith("      ROBOT_URDF:"):
         eval_task_yaml_data[idx] = "      ROBOT_URDF: {}".format(robot_urdf)
 with open(new_eval_task_yaml_path, "w") as f:

@@ -1138,6 +1138,14 @@ class VelocityAction(SimulatorTaskAction):
 
         self.must_call_stop = config.MUST_CALL_STOP
 
+        # Actuation noise
+        self.noise_mean_x = config.NOISE_MEAN_X
+        self.noise_mean_y = config.NOISE_MEAN_Y
+        self.noise_var_x = config.NOISE_VAR_X
+        self.noise_var_y = config.NOISE_VAR_Y
+        self.noise_var_t = config.NOISE_VAR_T
+        self.noise_mean_t = config.NOISE_MEAN_T
+
     @property
     def action_space(self):
         action_dict = {
@@ -1166,6 +1174,10 @@ class VelocityAction(SimulatorTaskAction):
         task.is_stop_called = False  # type: ignore
         self.prev_ang_vel = 0.0
 
+        if self.robot.robot_id is not None and self.robot.robot_id.object_id != -1:
+            ao_mgr = self._sim.get_articulated_object_manager()
+            ao_mgr.remove_object_by_id(self.robot.robot_id.object_id)
+            self.robot.robot_id = None
         # If robot was never spawned or was removed with previous scene
         if self.robot.robot_id is None or self.robot.robot_id.object_id == -1:
             ao_mgr = self._sim.get_articulated_object_manager()
@@ -1175,8 +1187,7 @@ class VelocityAction(SimulatorTaskAction):
             self.robot.robot_id = robot_id
         agent_pos = kwargs["episode"].start_position
         agent_rot = kwargs["episode"].start_rotation
-        agent_yaw = euler_from_quaternion(*agent_rot)[-1]
-        self.robot.reset(agent_pos, agent_yaw)
+        self.robot.reset(agent_pos, agent_rot)
 
     def step(
         self,
@@ -1200,6 +1211,7 @@ class VelocityAction(SimulatorTaskAction):
             time_step: amount of time to move the agent for
             allow_sliding: whether the agent will slide on collision
         """
+        curr_rs = self.robot.robot_id.transformation
         if time_step is None:
             time_step = self.time_step
 
@@ -1253,6 +1265,20 @@ class VelocityAction(SimulatorTaskAction):
         )
 
         """Check if point is on navmesh"""
+
+        # goal_rigid_state.translation.x += np.random.normal(
+        #     loc=self.noise_mean_x, scale=self.noise_var_x
+        # )
+        # goal_rigid_state.translation.z += np.random.normal(
+        #     loc=self.noise_mean_y, scale=self.noise_var_y
+        # )
+        # ang = np.arctan2(
+        #     goal_rigid_state.rotation.vector.y, goal_rigid_state.rotation.scalar
+        # ) * 2 + np.random.normal(loc=self.noise_mean_t, scale=self.noise_var_t)
+        # goal_rigid_state.rotation = mn.Quaternion.rotation(
+        #     mn.Rad(ang), mn.Vector3(0, 1, 0)
+        # )
+
         final_position = self._sim.pathfinder.try_step_no_sliding(  # type: ignore
             agent_state.position, goal_rigid_state.translation
         )
@@ -1293,20 +1319,25 @@ class VelocityAction(SimulatorTaskAction):
         robot_T_agent_rot_offset = mn.Matrix4.rotation(
             mn.Rad(0.0), mn.Vector3((1.0, 0.0, 0.0))
         ).rotation()
+        robot_translation_offset = mn.Vector3(self.robot.robot_spawn_offset)
         robot_T_agent = mn.Matrix4.from_(
-            robot_T_agent_rot_offset,
-            self.robot.base_transform.translation,
+            robot_T_agent_rot_offset, robot_translation_offset
         )
-
         robot_T_global = robot_T_agent @ agent_T_global
-        robot_global_rotation_offset = self.robot.base_transform
+        robot_global_rotation_offset = mn.Matrix4.rotation(
+            mn.Rad(-np.pi / 2.0),
+            mn.Vector3((1.0, 0.0, 0.0)),
+        ) @ mn.Matrix4.rotation(
+            mn.Rad(np.pi / 2.0),
+            mn.Vector3((0.0, 0.0, 1.0)),
+        )
         robot_T_global = robot_T_global @ robot_global_rotation_offset
         self.robot.robot_id.transformation = robot_T_global
 
         """See if goal state causes interpenetration with surroundings"""
         collided = self._sim.contact_test(self.robot.robot_id.object_id)
         if collided:
-            agent_observations = self._sim.get_observations_at()
+            self.robot.robot_id.transformation = curr_rs
             self._sim._prev_sim_obs["collided"] = True  # type: ignore
             agent_observations["hit_navmesh"] = True
             agent_observations["moving_backwards"] = False
@@ -1379,13 +1410,6 @@ class DynamicVelocityAction(VelocityAction):
 
     def reset(self, task: EmbodiedTask, *args: Any, **kwargs: Any):
         super().reset(task=task, *args, **kwargs)
-        self.robot.robot_id.clear_joint_states()
-
-        self.robot.robot_id.root_angular_velocity = mn.Vector3(0.0, 0.0, 0.0)
-        self.robot.robot_id.root_linear_velocity = mn.Vector3(0.0, 0.0, 0.0)
-
-        self.robot.set_pose_jms(self.robot._initial_joint_positions, True)
-
         self.raibert_controller = Raibert_controller_turn(
             control_frequency=self.ctrl_freq,
             num_timestep_per_HL_action=self.time_per_step,
@@ -1443,6 +1467,7 @@ class DynamicVelocityAction(VelocityAction):
                 position=None,
                 rotation=None,
             )
+
         """Get the current agent state"""
         agent_state = self._sim.get_agent_state()
         normalized_quaternion = np.normalized(agent_state.rotation)
@@ -1488,16 +1513,16 @@ class DynamicVelocityAction(VelocityAction):
 
         z_fall = agent_final_position[1] < self.robot.start_height - 0.3
 
-        if z_fall:
-            print("fell over")
-            task.is_stop_called = True
-            agent_observations = self._sim.get_observations_at(
-                position=None,
-                rotation=None,
-            )
-
-            agent_observations["fell_over"] = True
-            return agent_observations
+        # if z_fall:
+        #     print("fell over")
+        #     task.is_stop_called = True
+        #     agent_observations = self._sim.get_observations_at(
+        #         position=None,
+        #         rotation=None,
+        #     )
+        #
+        #     agent_observations["fell_over"] = True
+        #     return agent_observations
 
         # TODO: Make a better way to flag collisions
         agent_observations["moving_backwards"] = lin_vel < 0
@@ -1523,6 +1548,17 @@ class DynamicVelocityAction(VelocityAction):
             self._sim._prev_sim_obs["collided"] = True  # type: ignore
             agent_observations["hit_navmesh"] = True
 
+        try:
+            img = np.copy(agent_observations["rgb"])
+            font = cv2.FONT_HERSHEY_PLAIN
+            policy_vel_text = "Vx: {:.2f}, Vy: {:.2f}, Vt: {:.2f}".format(
+                lin_vel, hor_vel, ang_vel
+            )
+            cv2.putText(img, policy_vel_text, (10, 20), font, 1, (0, 0, 0), 1)
+
+            agent_observations["rgb"] = img
+        except:
+            pass
         return agent_observations
 
 
