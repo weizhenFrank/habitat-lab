@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("experiment_name")
 
 # Training
+parser.add_argument("-u", "--user", type=str, default="joanne")
 parser.add_argument("-sd", "--seed", type=int, default=100)
 parser.add_argument("-r", "--robot", default="Spot")
 parser.add_argument("-c", "--control-type", required=True)
@@ -31,8 +32,15 @@ parser.add_argument("-sc", "--spot_cameras", default=False, action="store_true")
 parser.add_argument("-g", "--use_gray", default=False, action="store_true")
 parser.add_argument("-gd", "--use_gray_depth", default=False, action="store_true")
 parser.add_argument("-o", "--outdoor", default=False, action="store_true")
-
 parser.add_argument("-curr", "--curriculum", default=False, action="store_true")
+
+## Noise Parameters
+parser.add_argument("-sigx", "--variance_x", type=float, default=0.0)
+parser.add_argument("-mux", "--mean_x", type=float, default=0.0)
+parser.add_argument("-sigy", "--variance_y", type=float, default=0.0)
+parser.add_argument("-muy", "--mean_y", type=float, default=0.0)
+parser.add_argument("-sigt", "--variance_t", type=float, default=0.0)
+parser.add_argument("-mut", "--mean_t", type=float, default=0.0)
 
 # Evaluation
 parser.add_argument("-e", "--eval", default=False, action="store_true")
@@ -42,6 +50,12 @@ parser.add_argument("-v", "--video", default=False, action="store_true")
 parser.add_argument("-d", "--debug", default=False, action="store_true")
 parser.add_argument("--ext", default="")
 args = parser.parse_args()
+
+if args.user == "max":
+    HABITAT_LAB = "/srv/share3/mrudolph8/develop/kin2dyn/habitat-lab"
+    CONDA_ENV = "/nethome/mrudolph8/miniconda3/envs/kin2dyn/bin/python"
+    RESULTS = "/srv/share3/mrudolph8/develop/results/kin2dyn"
+
 
 EXP_YAML = "habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml"
 TASK_YAML = "configs/tasks/pointnav_quadruped.yaml"
@@ -178,6 +192,18 @@ if not args.eval:
         elif i.startswith("  DATA_PATH:"):
             if args.outdoor:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/{split}/{split}.json.gz"
+        elif i.startswith("      NOISE_VAR_X:"):
+            task_yaml_data[idx] = "      NOISE_VAR_X: {}".format(args.variance_x)
+        elif i.startswith("      NOISE_VAR_Y:"):
+            task_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(args.variance_y)
+        elif i.startswith("      NOISE_VAR_T:"):
+            task_yaml_data[idx] = "      NOISE_VAR_T: {}".format(args.variance_t)
+        elif i.startswith("      NOISE_MEAN_X:"):
+            task_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(args.mean_x)
+        elif i.startswith("      NOISE_MEAN_Y:"):
+            task_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(args.mean_y)
+        elif i.startswith("      NOISE_MEAN_T:"):
+            task_yaml_data[idx] = "      NOISE_MEAN_T: {}".format(args.mean_t)
 
     with open(new_task_yaml_path, "w") as f:
         f.write("\n".join(task_yaml_data))
@@ -320,6 +346,18 @@ else:
             eval_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(succ_radius)
         elif i.startswith("SEED:"):
             eval_yaml_data[idx] = "SEED: {}".format(args.seed)
+        elif i.startswith("      NOISE_VAR_X:"):
+            eval_yaml_data[idx] = "      NOISE_VAR_X: {}".format(args.variance_x)
+        elif i.startswith("      NOISE_VAR_Y:"):
+            eval_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(args.variance_y)
+        elif i.startswith("      NOISE_VAR_T:"):
+            eval_yaml_data[idx] = "      NOISE_VAR_T: {}".format(args.variance_t)
+        elif i.startswith("      NOISE_MEAN_X:"):
+            eval_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(args.mean_x)
+        elif i.startswith("      NOISE_MEAN_Y:"):
+            eval_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(args.mean_y)
+        elif i.startswith("      NOISE_MEAN_T:"):
+            eval_yaml_data[idx] = "      NOISE_MEAN_T: {}".format(args.mean_t)
 
     with open(new_eval_task_yaml_path, "w") as f:
         f.write("\n".join(eval_yaml_data))
