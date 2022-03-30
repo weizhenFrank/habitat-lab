@@ -102,7 +102,6 @@ class ResNetEncoder(nn.Module):
         self.gray_keys = [k for k in observation_space.spaces if "gray" in k]
         self.depth_keys = [k for k in observation_space.spaces if "depth" in k]
 
-        print("gray keys: ", self.gray_keys)
         self.using_one_gray_camera = len(self.gray_keys) == 1
         self.using_two_gray_cameras = len(self.gray_keys) == 2
         self.using_one_depth_camera = len(self.depth_keys) == 1
