@@ -35,6 +35,7 @@ parser.add_argument("-o", "--outdoor", default=False, action="store_true")
 parser.add_argument("-curr", "--curriculum", default=False, action="store_true")
 
 ## Noise Parameters
+parser.add_argument("-n", "--actuation_noise", default=False, action="store_true")
 parser.add_argument("-sigx", "--variance_x", type=float, default=0.0)
 parser.add_argument("-mux", "--mean_x", type=float, default=0.0)
 parser.add_argument("-sigy", "--variance_y", type=float, default=0.0)
@@ -116,6 +117,15 @@ robot_vel_dict = {
     "AlienGo": [[-0.28, 0.28], [-9.74, 9.74]],
     "Spot": [[-0.5, 0.5], [-17.19, 17.19]],
 }
+
+robot_noise_dict = {
+    # mux muy mut sigx sigy sigt
+    "A1": [0.0046,-0.0044,-.00056511,0.0148,0.0147,0.0158],
+    "AlienGo": [0.0008  ,-0.0013  ,-.00028020,0.0084, 0.0071 ,0.0012],
+    "Spot": [-0.0171, 0.0141, 0.0, 0.0439, 0.0282, 0.0],
+    "NoNoise": [0.0,0.0,0.0,0.0,0.0,0.0],
+}
+
 robot_radius_dict = {"A1": 0.2, "AlienGo": 0.22, "Locobot": 0.23, "Spot": 0.3}
 
 robot = args.robot
@@ -124,6 +134,14 @@ robot_urdf = robot_urdfs_dict[robot]
 robot_lin_vel, robot_ang_vel = robot_vel_dict[robot]
 succ_radius = robot_goal_dict[robot]
 robot_radius = robot_radius_dict[robot]
+
+
+mean_x = robot_noise_dict[robot if args.actuation_noise else "NoNoise"][0]
+mean_y = robot_noise_dict[robot if args.actuation_noise else "NoNoise"][1]
+mean_t = robot_noise_dict[robot if args.actuation_noise else "NoNoise"][2]
+variance_x = robot_noise_dict[robot if args.actuation_noise else "NoNoise"][3]
+variance_y = robot_noise_dict[robot if args.actuation_noise else "NoNoise"][4]
+variance_t = robot_noise_dict[robot if args.actuation_noise else "NoNoise"][5]
 
 # Training
 if not args.eval:
@@ -193,17 +211,17 @@ if not args.eval:
             if args.outdoor:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/{split}/{split}.json.gz"
         elif i.startswith("      NOISE_VAR_X:"):
-            task_yaml_data[idx] = "      NOISE_VAR_X: {}".format(args.variance_x)
+            task_yaml_data[idx] = "      NOISE_VAR_X: {}".format(variance_x)
         elif i.startswith("      NOISE_VAR_Y:"):
-            task_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(args.variance_y)
+            task_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(variance_y)
         elif i.startswith("      NOISE_VAR_T:"):
-            task_yaml_data[idx] = "      NOISE_VAR_T: {}".format(args.variance_t)
+            task_yaml_data[idx] = "      NOISE_VAR_T: {}".format(variance_t)
         elif i.startswith("      NOISE_MEAN_X:"):
-            task_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(args.mean_x)
+            task_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(mean_x)
         elif i.startswith("      NOISE_MEAN_Y:"):
-            task_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(args.mean_y)
+            task_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(mean_y)
         elif i.startswith("      NOISE_MEAN_T:"):
-            task_yaml_data[idx] = "      NOISE_MEAN_T: {}".format(args.mean_t)
+            task_yaml_data[idx] = "      NOISE_MEAN_T: {}".format(mean_t)
 
     with open(new_task_yaml_path, "w") as f:
         f.write("\n".join(task_yaml_data))
@@ -219,7 +237,7 @@ if not args.eval:
                 new_task_yaml_path
             )
         elif i.startswith("TOTAL_NUM_STEPS:"):
-            max_num_steps = 5e8 if args.control_type == "kinematic" else 5e7
+            max_num_steps = 2e8 if args.control_type == "kinematic" else 5e7
             exp_yaml_data[idx] = "TOTAL_NUM_STEPS: {}".format(max_num_steps)
         elif i.startswith("TENSORBOARD_DIR:"):
             exp_yaml_data[idx] = "TENSORBOARD_DIR:    '{}'".format(
@@ -347,17 +365,17 @@ else:
         elif i.startswith("SEED:"):
             eval_yaml_data[idx] = "SEED: {}".format(args.seed)
         elif i.startswith("      NOISE_VAR_X:"):
-            eval_yaml_data[idx] = "      NOISE_VAR_X: {}".format(args.variance_x)
+            eval_yaml_data[idx] = "      NOISE_VAR_X: {}".format(variance_x)
         elif i.startswith("      NOISE_VAR_Y:"):
-            eval_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(args.variance_y)
+            eval_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(variance_y)
         elif i.startswith("      NOISE_VAR_T:"):
-            eval_yaml_data[idx] = "      NOISE_VAR_T: {}".format(args.variance_t)
+            eval_yaml_data[idx] = "      NOISE_VAR_T: {}".format(variance_t)
         elif i.startswith("      NOISE_MEAN_X:"):
-            eval_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(args.mean_x)
+            eval_yaml_data[idx] = "      NOISE_MEAN_X: {}".format(mean_x)
         elif i.startswith("      NOISE_MEAN_Y:"):
-            eval_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(args.mean_y)
+            eval_yaml_data[idx] = "      NOISE_MEAN_Y: {}".format(mean_y)
         elif i.startswith("      NOISE_MEAN_T:"):
-            eval_yaml_data[idx] = "      NOISE_MEAN_T: {}".format(args.mean_t)
+            eval_yaml_data[idx] = "      NOISE_MEAN_T: {}".format(mean_t)
 
     with open(new_eval_task_yaml_path, "w") as f:
         f.write("\n".join(eval_yaml_data))

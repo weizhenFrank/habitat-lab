@@ -17,7 +17,7 @@ NUM_ENVIRONMENTS: 8
 SENSORS: ["DEPTH_SENSOR"]
 NUM_UPDATES: -1
 LOG_INTERVAL: 10
-NUM_CHECKPOINTS: 100
+NUM_CHECKPOINTS: 40
 # Force PyTorch to be single threaded as
 # this improves performance considerably
 FORCE_TORCH_SINGLE_THREADED: True

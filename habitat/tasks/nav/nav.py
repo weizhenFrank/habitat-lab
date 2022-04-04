@@ -1440,6 +1440,7 @@ class DynamicVelocityAction(VelocityAction):
         self.time_per_step = config.TIME_PER_STEP
         self.pos_gain = np.array([0.4, 0.4, 0.5])
         self.vel_gain = np.ones((3,)) * 1.0  # 1.5
+    
 
     @property
     def action_space(self):
@@ -1547,6 +1548,19 @@ class DynamicVelocityAction(VelocityAction):
         # throws an error as habitat-sim/habitat_sim/utils/validators.py has a
         # tolerance of 1e-5. It is thus explicitly re-normalized here.
 
+        init_robot_rigid_state = task.robot_id.rigid_state
+
+        init_position = init_robot_rigid_state.translation
+
+        init_rotation = mn.Quaternion.from_matrix(
+            task.robot_id.transformation.__matmul__(
+                task.robot_wrapper.rotation_offset.inverted()
+            ).rotation()
+        )
+        init_rotation = [*init_rotation.vector, init_rotation.scalar]
+
+        init_yaw = np.arccos(np.array([0.0, 0.0, init_rotation[2]])) * 2
+
         ## STEP ROBOT
         if task.robot_wrapper.name != "Locobot":
             ## QUADRUPEDS:
@@ -1584,6 +1598,18 @@ class DynamicVelocityAction(VelocityAction):
         )
         final_rotation = [*final_rotation.vector, final_rotation.scalar]
 
+        final_yaw = np.arccos(np.array([0.0, 0.0, final_rotation[2]])) * 2
+
+
+        with open('/srv/share3/mrudolph8/develop/results/kin2dyn/noise/' + task.robot_wrapper.name + '.txt', 'a') as f:
+            f.write('--------\n')
+            f.write('Yaw init: ' + str(init_yaw[-1]) + '\n')
+            f.write('Yaw final: ' + str(final_yaw[-1]) + '\n')
+            f.write('pos diff: ' + str(final_position - init_position) + '\n')
+            f.write('commanded: ' + str(lin_hor) + ' ' + str(ang_vel) + '\n')
+
+
+        
         z_fall = final_position[1] < self.start_height + 0.1
 
         if z_fall and task.robot_wrapper.name != "Locobot":
