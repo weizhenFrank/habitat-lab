@@ -6,7 +6,6 @@ Replaces the yaml file content with the location of the new directory.
 import argparse
 import os
 import subprocess
-
 import sys
 
 automate_command = "python " + " ".join(sys.argv)
@@ -127,7 +126,9 @@ with open(task_yaml_path) as f:
     eval_task_yaml_data = f.read().splitlines()
 
 for idx, i in enumerate(eval_task_yaml_data):
-    if i.startswith("  MAX_EPISODE_STEPS:"):
+    if i.startswith("SEED:"):
+        eval_task_yaml_data[idx] = "SEED: {}".format(args.seed)
+    elif i.startswith("  MAX_EPISODE_STEPS:"):
         eval_task_yaml_data[idx] = "  MAX_EPISODE_STEPS: {}".format(robot_num_steps)
     elif i.startswith("    RADIUS:"):
         eval_task_yaml_data[idx] = "    RADIUS: {}".format(robot_radius)
