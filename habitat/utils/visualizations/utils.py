@@ -60,14 +60,10 @@ def paste_overlapping_image(
 
     background_patch = background[
         (location[0] - foreground_size[0] // 2 + min_pad[0]) : (
-            location[0]
-            + (foreground_size[0] - foreground_size[0] // 2)
-            - max_pad[0]
+            location[0] + (foreground_size[0] - foreground_size[0] // 2) - max_pad[0]
         ),
         (location[1] - foreground_size[1] // 2 + min_pad[1]) : (
-            location[1]
-            + (foreground_size[1] - foreground_size[1] // 2)
-            - max_pad[1]
+            location[1] + (foreground_size[1] - foreground_size[1] // 2) - max_pad[1]
         ),
     ]
     foreground = foreground[
@@ -151,6 +147,7 @@ def draw_collision(view: np.ndarray, alpha: float = 0.4) -> np.ndarray:
     view[mask] = (alpha * np.array([255, 0, 0]) + (1.0 - alpha) * view)[mask]
     return view
 
+
 def draw_human_collision(view: np.ndarray, alpha: float = 0.4) -> np.ndarray:
     r"""Draw translucent red strips on the border of input view to indicate
     a collision has taken place.
@@ -167,16 +164,13 @@ def draw_human_collision(view: np.ndarray, alpha: float = 0.4) -> np.ndarray:
 
     font_scale = 2
     thickness = 2
-    text = 'HUMAN HIT'
+    text = "HUMAN HIT"
     label_width, label_height = cv2.getTextSize(
-        text,
-        cv2.FONT_HERSHEY_SIMPLEX,
-        font_scale,
-        thickness
+        text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
     )[0]
 
-    h,w = view.shape[:2]
-    origin = (w-label_width)//2, (h+label_height)//2
+    h, w = view.shape[:2]
+    origin = (w - label_width) // 2, (h + label_height) // 2
 
     cv2.putText(
         view,
@@ -184,9 +178,9 @@ def draw_human_collision(view: np.ndarray, alpha: float = 0.4) -> np.ndarray:
         origin,
         cv2.FONT_HERSHEY_SIMPLEX,
         font_scale,
-        (0,0,0),
+        (0, 0, 0),
         thickness,
-        cv2.LINE_AA
+        cv2.LINE_AA,
     )
 
     return view
@@ -208,7 +202,9 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
         rgb = observation["rgb"]
         if not isinstance(rgb, np.ndarray):
             rgb = rgb.cpu().numpy()
-
+        max_rgb = np.max(rgb)
+        if max_rgb <= 1.0:
+            rgb *= 255
         egocentric_view_l.append(rgb)
 
     # draw depth map if observation has depth info
@@ -228,10 +224,15 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
             rgb = rgb.cpu().numpy()
 
         egocentric_view_l.append(rgb)
+    # add top down map if observation has top_down info
+    if "top_down" in observation:
+        rgb = observation["top_down"]
+        if not isinstance(rgb, np.ndarray):
+            rgb = rgb.cpu().numpy()
 
-    assert (
-        len(egocentric_view_l) > 0
-    ), "Expected at least one visual sensor enabled."
+        egocentric_view_l.append(rgb)
+
+    assert len(egocentric_view_l) > 0, "Expected at least one visual sensor enabled."
     egocentric_view = np.concatenate(egocentric_view_l, axis=1)
 
     # draw collision

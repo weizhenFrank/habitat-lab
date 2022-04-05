@@ -127,7 +127,7 @@ class Stats(object):
         if eps_ignore is not None:
             SPLIT = [i for i in SPLIT if i not in eps_ignore]
         df_split = df[[ep_id in SPLIT for ep_id in df.id]]
-        self.plot_episode_distance(df_split)
+        # self.plot_episode_distance(df_split)
         stats = {}
         # id,reward,distance_to_goal,success,spl,steps,collisions,soft_spl,episode_distance,num_actions
         stats["spl_stats"] = self.mean_confidence_interval(np.array(df_split.spl))

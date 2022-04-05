@@ -7,9 +7,13 @@ import argparse
 import os
 import subprocess
 
+import sys
+
+automate_command = "python " + " ".join(sys.argv)
 IGIBSON = "/coc/testnvme/jtruong33/igibson_dyn/iGibson/igibson"
 HABITAT = "/coc/testnvme/jtruong33/igibson_dyn/habitat-lab"
 RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/igibson_dyn_results"
+URDFS = "/coc/testnvme/jtruong33/data/URDF_demo_assets"
 EVAL_SLURM_TEMPLATE = os.path.join(HABITAT, "eval_slurm_template.sh")
 
 
@@ -27,6 +31,7 @@ parser.add_argument("-ts", "--time-step", type=float, default=1.0)
 parser.add_argument("-cpt", "--ckpt", type=int, default=-1)
 parser.add_argument("-v", "--video", default=False, action="store_true")
 parser.add_argument("-n", "--noise", default=False, action="store_true")
+parser.add_argument("-x", default=False, action="store_true")
 parser.add_argument("--ext", default="")
 
 args = parser.parse_args()
@@ -88,28 +93,46 @@ robot_vel_dict = {
 }
 
 robot_urdfs_dict = {
-    "a1": "/coc/testnvme/jtruong33/data/URDF_demo_assets/a1/a1.urdf",
-    "aliengo": "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf",
-    "daisy": "/coc/testnvme/jtruong33/data/URDF_demo_assets/daisy/daisy_advanced_akshara.urdf",
-    "spot": "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf",
-    "locobot": "/coc/testnvme/jtruong33/data/URDF_demo_assets/locobot/urdf/locobot_description2.urdf",
+    "a1": os.path.join(URDFS, "a1/a1.urdf"),
+    "aliengo": os.path.join(URDFS, "aliengo/urdf/aliengo.urdf"),
+    "daisy": os.path.join(URDFS, "daisy/daisy_advanced_akshara.urdf"),
+    "spot": os.path.join(
+        URDFS, "spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
+    ),
+    "locobot": os.path.join(URDFS, "locobot/urdf/locobot_description2.urdf"),
 }
+
+num_steps_dict = {
+    "a1": 326,
+    "aliengo": 268,
+    "spot": 150,
+}
+
+robot_radius_dict = {"a1": 0.2, "aliengo": 0.22, "spot": 0.3}
 
 succ_radius = robot_goal_dict[args.robot.lower()]
 robot_lin_vel, robot_ang_vel = robot_vel_dict[args.robot.lower()]
 robot_urdf = robot_urdfs_dict[args.robot.lower()]
+robot_radius = robot_radius_dict[args.robot.lower()]
+robot_num_steps = num_steps_dict[args.robot.lower()]
 
 assert os.path.isdir(dst_dir), "{} directory does not exist".format(dst_dir)
 os.makedirs(eval_dst_dir, exist_ok=True)
+with open(os.path.join(eval_dst_dir, "automate_job_cmd.txt"), "w") as f:
+    f.write(automate_command)
+print("Saved automate command: " + os.path.join(eval_dst_dir, "automate_job_cmd.txt"))
+
 # Create task yaml file, using file within Habitat Lab repo as a template
 with open(task_yaml_path) as f:
     eval_task_yaml_data = f.read().splitlines()
 
 for idx, i in enumerate(eval_task_yaml_data):
-    if i.startswith("  SUCCESS_DISTANCE:"):
+    if i.startswith("  MAX_EPISODE_STEPS:"):
+        eval_task_yaml_data[idx] = "  MAX_EPISODE_STEPS: {}".format(robot_num_steps)
+    elif i.startswith("    RADIUS:"):
+        eval_task_yaml_data[idx] = "    RADIUS: {}".format(robot_radius)
+    elif i.startswith("  SUCCESS_DISTANCE:"):
         eval_task_yaml_data[idx] = "  SUCCESS_DISTANCE: {}".format(succ_radius)
-    elif i.startswith("    SUCCESS_DISTANCE:"):
-        eval_task_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(succ_radius)
     elif i.startswith("  POSSIBLE_ACTIONS:"):
         if args.control_type == "dynamic":
             control_type = "DYNAMIC_VELOCITY_CONTROL"
@@ -153,6 +176,15 @@ for idx, i in enumerate(eval_task_yaml_data):
             eval_task_yaml_data[idx] = "      NOISE_VAR_Y: {}".format(0.0282)
     elif i.startswith("      ROBOT_URDF:"):
         eval_task_yaml_data[idx] = "      ROBOT_URDF: {}".format(robot_urdf)
+    elif i.startswith("    SUCCESS_DISTANCE:"):
+        eval_task_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(succ_radius)
+    # elif i.startswith("  DATA_PATH:"):
+    #     eval_task_yaml_data[
+    #         idx
+    #     ] = "  DATA_PATH: /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson/pointnav_{}_{}/{{split}}/{{split}}.json.gz".format(
+    #         args.robot.lower(), robot_radius
+    #     )
+
 with open(new_eval_task_yaml_path, "w") as f:
     f.write("\n".join(eval_task_yaml_data))
 print("Created " + new_eval_task_yaml_path)
@@ -233,9 +265,12 @@ with open(slurm_path, "w") as f:
     f.write(slurm_data)
 print("Generated slurm job: " + slurm_path)
 
-# Submit slurm job
-cmd = "sbatch " + slurm_path
-subprocess.check_call(cmd.split(), cwd=eval_dst_dir)
+if not args.x:
+    # Submit slurm job
+    cmd = "sbatch " + slurm_path
+    subprocess.check_call(cmd.split(), cwd=eval_dst_dir)
+else:
+    print(slurm_data)
 
 print(
     "\nSee output with:\ntail -F {}".format(
