@@ -9,8 +9,8 @@ import subprocess
 import sys
 
 automate_command = "python " + " ".join(sys.argv)
-IGIBSON = "/private/home/akshararai/igibson_dyn/iGibson/igibson"
-HABITAT = "/private/home/akshararai/igibson_dyn/habitat-lab"
+IGIBSON = "/private/home/akshararai/kin2dyn/igibson_dyn/iGibson/igibson"
+HABITAT = "/private/home/akshararai/kin2dyn/igibson_dyn/habitat-lab"
 URDFS = "/private/home/akshararai/kin2dyn/habitat-lab/data/URDF_demo_assets"
 RESULTS = "/checkpoint/akshararai/igibson_dyn"
 EVAL_SLURM_TEMPLATE = os.path.join(HABITAT, "eval_slurm_template_ar.sh")
