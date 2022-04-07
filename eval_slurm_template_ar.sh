@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=$TEMPLATE
+#SBATCH --job-name=jt_$TEMPLATE
 #SBATCH --output=$LOG.out
 #SBATCH --error=$LOG.err
 #SBATCH --gres gpu:1
@@ -12,7 +12,7 @@
 
 #SBATCH --chdir $HABITAT_REPO_PATH
 export CUDA_LAUNCH_BLOCKING=1
-srun /private/home/akshararai/.conda/envs/igib_dyn/bin/python -u -m habitat_baselines.run \
+srun $CONDA_ENV -u -m habitat_baselines.run \
     --exp-config $CONFIG_YAML \
     --run-type eval
 
