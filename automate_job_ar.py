@@ -10,6 +10,7 @@ import sys
 
 automate_command = "python " + " ".join(sys.argv)
 IGIBSON = "/private/home/akshararai/kin2dyn/igibson_dyn/iGibson/igibson"
+CONDA_ENV = "/private/home/akshararai/miniconda3/envs/igib_dyn/bin/python"
 HABITAT = "/private/home/akshararai/kin2dyn/igibson_dyn/habitat-lab"
 URDFS = "/private/home/akshararai/kin2dyn/habitat-lab/data/URDF_demo_assets"
 RESULTS = "/checkpoint/akshararai/igibson_dyn"
@@ -253,6 +254,7 @@ eval_experiment_name = experiment_name + eval_name
 with open(EVAL_SLURM_TEMPLATE) as f:
     slurm_data = f.read()
     slurm_data = slurm_data.replace("$TEMPLATE", eval_experiment_name)
+    slurm_data = slurm_data.replace("$CONDA_ENV", CONDA_ENV)
     slurm_data = slurm_data.replace(
         "$LOG", os.path.join(eval_dst_dir, eval_experiment_name)
     )
