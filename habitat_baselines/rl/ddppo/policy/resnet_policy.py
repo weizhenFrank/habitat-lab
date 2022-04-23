@@ -12,20 +12,17 @@ import numpy as np
 import torch
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    EpisodicCompassSensor,
-    EpisodicGPSSensor,
-    HeadingSensor,
-    ImageGoalSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    PointGoalSensor,
-    ProximitySensor,
-)
+from habitat.tasks.nav.nav import (EpisodicCompassSensor, EpisodicGPSSensor,
+                                   HeadingSensor, ImageGoalSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   PointGoalSensor, ProximitySensor)
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.ddppo.policy import resnet
-from habitat_baselines.rl.ddppo.policy.running_mean_and_var import RunningMeanAndVar
-from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
+from habitat_baselines.rl.ddppo.policy.running_mean_and_var import \
+    RunningMeanAndVar
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.ppo import Net, Policy
 from torch import nn as nn
 from torch.nn import functional as F
@@ -253,7 +250,8 @@ class PointNavResNetNet(Net):
         num_cnns: int = 1,
     ):
         super().__init__()
-        action_space.n = 3
+        print(action_space)
+        action_space.n = action_space.shape[0]
         self.discrete_actions = discrete_actions
         self.num_cnns = num_cnns
         if discrete_actions:
