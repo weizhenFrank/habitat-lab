@@ -1,8 +1,12 @@
+import time
 from typing import Dict
 
+import cv2
 import numpy as np
 import torch
 from torch import nn as nn
+
+DEBUGGING = False
 
 
 class SimpleCNN(nn.Module):
@@ -21,7 +25,8 @@ class SimpleCNN(nn.Module):
         output_size,
     ):
         super().__init__()
-
+        self.count = 0
+        self.debug_prefix = f"{time.time() * 1e7:.0f}"[-5:]
         # HACK: Never use RGB for policies.
         # if "rgb" in observation_space.spaces:
         #     self._n_input_rgb = observation_space.spaces["rgb"].shape[2]
@@ -171,6 +176,22 @@ class SimpleCNN(nn.Module):
                 )
             else:
                 raise Exception("Not implemented")
+
+            # Save images to disk for debugging
+            if DEBUGGING:
+                img = None
+                h, w, c = depth_observations.shape[1:]
+                for c_idx in range(c):
+                    new_img = depth_observations[0][:, :, c_idx].cpu().numpy()
+                    if img is None:
+                        img = new_img
+                    else:
+                        img = np.hstack([img, new_img])
+                img = (img * 255).astype(np.uint8)
+                out_path = f"{self.debug_prefix}_{self.count:04}.png"
+                cv2.imwrite(out_path, img)
+                print("Saved visual observations to", out_path)
+                self.count += 1
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             depth_observations = depth_observations.permute(0, 3, 1, 2)
             cnn_input.append(depth_observations)
