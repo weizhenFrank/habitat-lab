@@ -111,6 +111,7 @@ class PointNavBaselinePolicy(Policy):
         action_distribution_type: str = "gaussian",
         **kwargs,
     ):
+        action_space.n = action_space.shape[0]
         super().__init__(
             PointNavBaselineNet(  # type: ignore
                 observation_space=observation_space,
@@ -180,7 +181,7 @@ class PointNavBaselineNet(Net):
         )
 
         self.state_encoder = build_rnn_state_encoder(
-            (0 if self.is_blind else self._hidden_size) + self.tgt_embeding_size,
+            self._hidden_size + self.tgt_embeding_size,
             self._hidden_size,
         )
 
@@ -200,8 +201,7 @@ class PointNavBaselineNet(Net):
 
     def forward(self, observations, rnn_hidden_states, prev_actions, masks):
         x = []
-        if not self.is_blind:
-            x.append(self.visual_encoder(observations))
+        x.append(self.visual_encoder(observations))
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
             goal_observations = observations[
                 IntegratedPointGoalGPSAndCompassSensor.cls_uuid
