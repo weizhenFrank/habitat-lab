@@ -14,7 +14,6 @@ import attr
 import numpy as np
 from gym import spaces
 from gym.spaces.box import Box
-
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
 from habitat.core.embodied_task import EmbodiedTask, Measure, SimulatorTaskAction
@@ -56,13 +55,13 @@ except ModuleNotFoundError:
 try:
     import habitat_sim
     from habitat.sims.habitat_simulator.actions import HabitatSimActions
-    from habitat.sims.habitat_simulator.habitat_simulator import HabitatSim
-    from habitat_sim.bindings import RigidState
-    from habitat_sim.physics import VelocityControl
     from habitat.sims.habitat_simulator.habitat_simulator import (
+        HabitatSim,
         HabitatSimDepthSensor,
         HabitatSimRGBSensor,
     )
+    from habitat_sim.bindings import RigidState
+    from habitat_sim.physics import VelocityControl
 except ImportError:
     pass
 
@@ -1243,10 +1242,7 @@ class VelocityAction(SimulatorTaskAction):
                 rotation=None,
             )
 
-        # habitat conventions: -Y LEFT, +Y RIGHT
-        # gibson conventions: -Y RIGHT, +Y LEFT
-        hor_vel = -hor_vel
-        self.vel_control.linear_velocity = np.array([hor_vel, 0.0, -lin_vel])
+        self.vel_control.linear_velocity = np.array([-hor_vel, 0.0, -lin_vel])
         self.vel_control.angular_velocity = np.array([0.0, ang_vel, 0.0])
 
         """Get the current agent state"""
@@ -1483,9 +1479,6 @@ class DynamicVelocityAction(VelocityAction):
         """ Step dynamically using raibert controller """
         for i in range(int(1 / self.time_step)):
             state = self.robot.calc_state()
-            # habitat conventions: -Y LEFT, +Y RIGHT
-            # gibson conventions: -Y RIGHT, +Y LEFT
-            hor_vel = -hor_vel
             target_speed = np.array([lin_vel, hor_vel])
             latent_action = self.raibert_controller.plan_latent_action(
                 state, target_speed, target_ang_vel=ang_vel
