@@ -1256,6 +1256,8 @@ class VelocityAction(SimulatorTaskAction):
             time_step: amount of time to move the agent for
             allow_sliding: whether the agent will slide on collision
         """
+
+        
         curr_rs = task.robot_id.transformation
         if time_step is None:
             time_step = self.time_step
@@ -1440,6 +1442,7 @@ class DynamicVelocityAction(VelocityAction):
         self.time_per_step = config.TIME_PER_STEP
         self.pos_gain = np.array([0.4, 0.4, 0.5])
         self.vel_gain = np.ones((3,)) * 1.0  # 1.5
+        self.count_count = 0
     
 
     @property
@@ -1488,6 +1491,7 @@ class DynamicVelocityAction(VelocityAction):
             )
 
         self._reset_robot(task, agent_pos, agent_rot)
+        self.count_count = 0
 
         # Settle for 15 seconds to allow robot to land on ground and be still
         # self._sim.step_physics(15)
@@ -1530,6 +1534,8 @@ class DynamicVelocityAction(VelocityAction):
             and abs(ang_vel) < self.min_abs_ang_speed
             and abs(hor_vel) < self.min_abs_hor_speed
         )
+
+        
         if (
             self.must_call_stop
             and called_stop
@@ -1542,12 +1548,13 @@ class DynamicVelocityAction(VelocityAction):
                 position=None,
                 rotation=None,
             )
+            print('stopped?')
 
         # TODO: Sometimes the rotation given by get_agent_state is off by 1e-4
         # in terms of if the quaternion it represents is normalized, which
         # throws an error as habitat-sim/habitat_sim/utils/validators.py has a
         # tolerance of 1e-5. It is thus explicitly re-normalized here.
-
+    
         init_robot_rigid_state = task.robot_id.rigid_state
 
         init_position = init_robot_rigid_state.translation
@@ -1562,12 +1569,15 @@ class DynamicVelocityAction(VelocityAction):
         init_yaw = np.arccos(np.array([0.0, 0.0, init_rotation[2]])) * 2
 
         ## STEP ROBOT
+
         if task.robot_wrapper.name != "Locobot":
             ## QUADRUPEDS:
             robot_start_rigid_state = task.robot_id.rigid_state
             for i in range(int(1 / self.time_step)):
+                
                 state = task.robot_wrapper.calc_state()
                 lin_hor = np.array([lin_vel, hor_vel])
+                #lin_hor = np.array([0.5, 0.0])
                 latent_action = self.raibert_controller.plan_latent_action(
                     state, lin_hor, target_ang_vel=ang_vel
                 )
@@ -1580,6 +1590,30 @@ class DynamicVelocityAction(VelocityAction):
                     )
                     self._sim.step_physics(self.dt)
                     state = task.robot_wrapper.calc_state()
+
+
+            # Check noiseless/kinematic movement
+           
+
+
+            time_step = self.time_step
+            agent_state = self._sim.get_agent_state()
+            normalized_quaternion = np.normalized(agent_state.rotation)
+            agent_mn_quat = mn.Quaternion(
+                normalized_quaternion.imag, normalized_quaternion.real
+            )
+            current_rigid_state = RigidState(
+                agent_mn_quat,
+                agent_state.position,
+
+            )
+     
+            self.vel_control.linear_velocity = np.array([hor_vel, 0.0, -lin_vel])
+            self.vel_control.angular_velocity = np.array([0.0, ang_vel, 0.0])
+            goal_rigid_state = self.vel_control.integrate_transform(
+                time_step, current_rigid_state
+            )
+
         else:
             ## LOCOBOT
             self.vel_control.linear_velocity = np.array([hor_vel, 0.0, -lin_vel])
@@ -1599,18 +1633,33 @@ class DynamicVelocityAction(VelocityAction):
         final_rotation = [*final_rotation.vector, final_rotation.scalar]
 
         final_yaw = np.arccos(np.array([0.0, 0.0, final_rotation[2]])) * 2
-
-
-        with open('/srv/share3/mrudolph8/develop/results/kin2dyn/noise/' + task.robot_wrapper.name + '.txt', 'a') as f:
-            f.write('--------\n')
-            f.write('Yaw init: ' + str(init_yaw[-1]) + '\n')
-            f.write('Yaw final: ' + str(final_yaw[-1]) + '\n')
-            f.write('pos diff: ' + str(final_position - init_position) + '\n')
-            f.write('commanded: ' + str(lin_hor) + ' ' + str(ang_vel) + '\n')
+        print('before')
+        cmd_final_state = goal_rigid_state
+        cmd_final_position = cmd_final_state.translation
+        print('after')
 
 
         
-        z_fall = final_position[1] < self.start_height + 0.1
+        
+        with open('/nethome/mrudolph8/noise/' + task.robot_wrapper.name + '_trajectory.txt', 'a') as f:
+            self.count_count += 1
+            print(self.count_count)
+            f.write('--------\n')
+            f.write('Yaw init: ' + str(init_yaw[-1]) + '\n')
+            f.write('Yaw final: ' + str(final_yaw[-1]) + '\n')
+            f.write('init pos: ' + str(init_position) + '\n')
+            f.write('true final pos: ' + str(final_position) + '\n')
+            f.write('cmd final pos: ' + str(cmd_final_position) + '\n')
+            f.write('commanded: ' + str(lin_hor) + ' ' + str(ang_vel) + '\n')
+
+    
+            #self.prev_ang_vel = 0.0
+            #self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
+            #return agent_observations
+
+
+        
+        z_fall = False #final_position[1] < self.start_height + 0.1
 
         if z_fall and task.robot_wrapper.name != "Locobot":
             print("fell over")
@@ -1621,6 +1670,7 @@ class DynamicVelocityAction(VelocityAction):
             )
 
             agent_observations["fell_over"] = True
+            print('fall')
             return agent_observations
 
         agent_observations = self._sim.get_observations_at(

@@ -121,8 +121,9 @@ robot_vel_dict = {
 robot_noise_dict = {
     # mux muy mut sigx sigy sigt
     "A1": [0.0046,-0.0044,-.00056511,0.0148,0.0147,0.0158],
-    "AlienGo": [0.0008  ,-0.0013  ,-.00028020,0.0084, 0.0071 ,0.0012],
-    "Spot": [-0.0171, 0.0141, 0.0, 0.0439, 0.0282, 0.0],
+    "AlienGo": [0.0008  ,-0.0013  ,0.0,0.2028, 0.1600 ,0.0],
+    "Spot": [0.0034009, -0.0017307, -0.0004034, 0.0017193, 0.0062786, 0.00089678],
+    # "Spot": [0.0047, -0.0032, 0.00014296, 0.0014, 0.0025, 0.00026449], # Together Noise
     "NoNoise": [0.0,0.0,0.0,0.0,0.0,0.0],
 }
 
@@ -237,7 +238,7 @@ if not args.eval:
                 new_task_yaml_path
             )
         elif i.startswith("TOTAL_NUM_STEPS:"):
-            max_num_steps = 2e8 if args.control_type == "kinematic" else 5e7
+            max_num_steps = 5e8 if args.control_type == "kinematic" else 5e7
             exp_yaml_data[idx] = "TOTAL_NUM_STEPS: {}".format(max_num_steps)
         elif i.startswith("TENSORBOARD_DIR:"):
             exp_yaml_data[idx] = "TENSORBOARD_DIR:    '{}'".format(
