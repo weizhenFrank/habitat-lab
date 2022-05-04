@@ -363,6 +363,18 @@ else:
             eval_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(succ_radius)
         elif i.startswith("SEED:"):
             eval_yaml_data[idx] = "SEED: {}".format(args.seed)
+        elif i.startswith("      NOISE_MEAN_X:"):
+            eval_yaml_data[idx] = f"      NOISE_MEAN_X: {args.mean_x}"
+        elif i.startswith("      NOISE_MEAN_Y:"):
+            eval_yaml_data[idx] = f"      NOISE_MEAN_Y: {args.mean_y}"
+        elif i.startswith("      NOISE_MEAN_T:"):
+            eval_yaml_data[idx] = f"      NOISE_MEAN_T: {args.mean_t}"
+        elif i.startswith("      NOISE_VAR_X:"):
+            eval_yaml_data[idx] = f"      NOISE_VAR_X: {args.var_x}"
+        elif i.startswith("      NOISE_VAR_Y:"):
+            eval_yaml_data[idx] = f"      NOISE_VAR_Y: {args.var_y}"
+        elif i.startswith("      NOISE_VAR_T:"):
+            eval_yaml_data[idx] = f"      NOISE_VAR_T: {args.var_t}"
 
     with open(new_eval_task_yaml_path, "w") as f:
         f.write("\n".join(eval_yaml_data))
