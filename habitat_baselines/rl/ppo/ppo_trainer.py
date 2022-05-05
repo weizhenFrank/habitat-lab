@@ -16,9 +16,6 @@ import numpy as np
 import torch
 import tqdm
 from gym import spaces
-from torch import nn
-from torch.optim.lr_scheduler import LambdaLR
-
 from habitat import Config, VectorEnv, logger
 from habitat.core.spaces import ActionSpace, EmptySpace
 from habitat.utils import profiling_wrapper
@@ -27,36 +24,28 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch,
-    apply_obs_transforms_obs_space,
-    get_active_obs_transforms,
-)
+    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
+    get_active_obs_transforms)
 from habitat_baselines.common.rollout_storage import RolloutStorage
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.rl.ddppo.algo import DDPPO
-from habitat_baselines.rl.ddppo.ddp_utils import (
-    EXIT,
-    add_signal_handlers,
-    get_distrib_size,
-    init_distrib_slurm,
-    is_slurm_batch_job,
-    load_resume_state,
-    rank0_only,
-    requeue_job,
-    save_resume_state,
-)
-from habitat_baselines.rl.ddppo.policy import (
-    PointNavResNetPolicy,
-)  # noqa: F401.
+from habitat_baselines.rl.ddppo.ddp_utils import (EXIT, add_signal_handlers,
+                                                  get_distrib_size,
+                                                  init_distrib_slurm,
+                                                  is_slurm_batch_job,
+                                                  load_resume_state,
+                                                  rank0_only, requeue_job,
+                                                  save_resume_state)
+from habitat_baselines.rl.ddppo.policy import \
+    PointNavResNetPolicy  # noqa: F401.
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.ppo.policy import Policy
-from habitat_baselines.utils.common import (
-    ObservationBatchingCache,
-    action_to_velocity_control,
-    batch_obs,
-    generate_video,
-)
+from habitat_baselines.utils.common import (ObservationBatchingCache,
+                                            action_to_velocity_control,
+                                            batch_obs, generate_video)
 from habitat_baselines.utils.env_utils import construct_envs
+from torch import nn
+from torch.optim.lr_scheduler import LambdaLR
 
 
 @baseline_registry.register_trainer(name="ddppo")
@@ -267,11 +256,12 @@ class PPOTrainer(BaseRLTrainer):
         )
 
         self._init_envs()
-
         if self.config.RL.POLICY.action_distribution_type == "gaussian":
-
             self.policy_action_space = self.envs.action_spaces[0][self.action_type]
-            self.policy_action_space.n = 3
+            try:
+                self.policy_action_space.n = self.policy_action_space.shape[0]
+            except:
+                pass
             action_shape = self.policy_action_space.n
             discrete_actions = False
         else:
@@ -920,9 +910,10 @@ class PPOTrainer(BaseRLTrainer):
         if self.config.RL.POLICY.action_distribution_type == "gaussian":
             self.policy_action_space = self.envs.action_spaces[0][self.action_type]
             try:
-                self.policy_action_space.n = 3
+                self.policy_action_space.n = self.policy_action_space.shape[0]
             except:
                 pass
+
             action_shape = self.policy_action_space.n
             action_type = torch.float
         else:
@@ -1082,9 +1073,11 @@ class PPOTrainer(BaseRLTrainer):
                     if txt_dir != "":
                         if not os.path.isdir(txt_dir):
                             os.makedirs(txt_dir)
-                        episode_steps_filename = "{}.csv".format(
-                            os.path.basename(checkpoint_path[:-4]).replace(".", "_")
-                        )
+                        eval_split = getattr(self.config, "EVAL_SPLIT", -1)
+                        if eval_split != -1:
+                            episode_steps_filename = f"{os.path.basename(checkpoint_path[:-4]).replace('.', '_')}_{eval_split}.csv"
+                        else:
+                            episode_steps_filename = f"{os.path.basename(checkpoint_path[:-4]).replace('.', '_')}.csv"
                         episode_steps_filename = os.path.join(
                             txt_dir, episode_steps_filename
                         )
