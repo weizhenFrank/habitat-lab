@@ -1443,6 +1443,8 @@ class DynamicVelocityAction(VelocityAction):
         self.pos_gain = np.array([0.4, 0.4, 0.5])
         self.vel_gain = np.ones((3,)) * 1.0  # 1.5
         self.count_count = 0
+        self.log_dict_list = []
+        self.log_file = config.NOISE_LOG_FILE
     
 
     @property
@@ -1492,6 +1494,19 @@ class DynamicVelocityAction(VelocityAction):
 
         self._reset_robot(task, agent_pos, agent_rot)
         self.count_count = 0
+        if len(self.log_dict_list) > 0 and len(self.log_file) > 0:
+            f = open(self.log_file, 'a')
+            for k,data in enumerate(self.log_dict_list):
+                f.write('------------- step ' + str(k) + ' --------------\n' )
+                f.write('init pos:' + str(data['init pos']) + '\n')
+                f.write('init quat xyzw:' + str(data['init quat xyzw']) + '\n')
+                f.write('cur pos:' + str(data['cur pos']) + '\n')
+                f.write('cur quat xyzw:' + str(data['cur quat xyzw']) + '\n')
+                f.write('cmd:' + str(data['cmd']) + '\n')
+            f.close()
+            self.log_dict_list = []
+
+
 
         # Settle for 15 seconds to allow robot to land on ground and be still
         # self._sim.step_physics(15)
@@ -1641,21 +1656,25 @@ class DynamicVelocityAction(VelocityAction):
 
         
         
-        with open('/nethome/mrudolph8/noise/' + task.robot_wrapper.name + '_trajectory.txt', 'a') as f:
-            self.count_count += 1
-            print(self.count_count)
-            f.write('--------\n')
-            f.write('Yaw init: ' + str(init_yaw[-1]) + '\n')
-            f.write('Yaw final: ' + str(final_yaw[-1]) + '\n')
-            f.write('init pos: ' + str(init_position) + '\n')
-            f.write('true final pos: ' + str(final_position) + '\n')
-            f.write('cmd final pos: ' + str(cmd_final_position) + '\n')
-            f.write('commanded: ' + str(lin_hor) + ' ' + str(ang_vel) + '\n')
+        # with open('/nethome/mrudolph8/noise/' + task.robot_wrapper.name + '_trajectory.txt', 'a') as f:
+        #     self.count_count += 1
+        #     print(self.count_count)
+        #     f.write('--------\n')
+        #     f.write('Yaw init: ' + str(init_yaw[-1]) + '\n')
+        #     f.write('Yaw final: ' + str(final_yaw[-1]) + '\n')
+        #     f.write('init pos: ' + str(init_position) + '\n')
+        #     f.write('true final pos: ' + str(final_position) + '\n')
+        #     f.write('cmd final pos: ' + str(cmd_final_position) + '\n')
+        #     f.write('commanded: ' + str(lin_hor) + ' ' + str(ang_vel) + '\n')
 
-    
-            #self.prev_ang_vel = 0.0
-            #self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
-            #return agent_observations
+        state_dict = {}
+        state_dict['init pos'] = init_position
+        state_dict['init quat xyzw'] = init_rotation
+        state_dict['cur quat xyzw'] = final_rotation
+        state_dict['cur pos'] = final_position
+        state_dict['cmd'] = np.array([lin_vel, hor_vel, ang_vel, self.time_step])    
+        self.log_dict_list.append(state_dict)
+
 
 
         

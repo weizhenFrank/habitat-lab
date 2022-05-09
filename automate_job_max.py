@@ -35,6 +35,7 @@ parser.add_argument('-e','--eval', default=False, action='store_true')
 parser.add_argument('-cpt','--ckpt', type=int, default=-1)
 parser.add_argument('-v','--video', default=False, action='store_true')
 parser.add_argument('-ms', '--max_steps', type=int, default=150)
+parser.add_argument('-n', '--noise_log_path', default='')
 
 parser.add_argument('-d','--debug', default=False, action='store_true')
 args = parser.parse_args()
@@ -134,6 +135,7 @@ if not args.eval:
             task_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(robot_lengh[0])
         elif i.startswith('  SUCCESS_DISTANCE:'):
             task_yaml_data[idx] = "  SUCCESS_DISTANCE: {}".format(robot_lengh[0])
+
 
     with open(new_task_yaml_path,'w') as f:
         f.write('\n'.join(task_yaml_data))
@@ -253,6 +255,8 @@ else:
                 eval_yaml_data[idx] = "    POSITION: {}".format(robots_heights[0])
         elif i.startswith('  MAX_EPISODE_STEPS'):
             eval_yaml_data[idx] = "  MAX_EPISODE_STEPS: {}".format(args.max_steps)
+        elif i.startswith('      NOISE_LOG_FILE:'):
+            eval_yaml_data[idx] = "      NOISE_LOG_FILE: {}".format(args.noise_log_path)
 
     with open(new_eval_yaml_path,'w') as f:
         f.write('\n'.join(eval_yaml_data))
