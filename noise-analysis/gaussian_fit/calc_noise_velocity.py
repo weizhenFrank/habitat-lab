@@ -30,18 +30,22 @@ for file_name in collect_types:
     ang_errs = np.zeros((len(data_dict)))
     pose = np.zeros((len(data_dict), 3))
     cmd_vels = np.zeros((len(data_dict), 2))
-
+    init_vels = np.zeros((len(data_dict), 2))
+    vel_errs = np.zeros((len(data_dict), 2))
+    true_vels = np.zeros((len(data_dict), 2))
+    
     for i,data in enumerate(data_dict):
    
         if data == {}: 
             print(i)
             break
-        if ('cmd' in list(data.keys())) and ('init lin vel' in list(data.keys())):
+        if ('cmd' in list(data.keys())) and ('init lin vel' in list(data.keys())) and ('cur lin vel' in list(data.keys())):
             init_pos = data['init pos']
             init_quat = data['init quat xyzw']
             cur_quat = data['cur quat xyzw']
             cmd_vel = data['cmd']
             init_vel = data['init lin vel']
+            cur_vel = data['cur lin vel']
 
 
             lin_vel = cmd_vel[0]
@@ -113,69 +117,39 @@ for file_name in collect_types:
 
             ang_errs[i] = theta_goal - theta_true
             pose[i, :] = cmd_disp
-            cmd_vels[i, :] = np.array([lin_vel, hor_vel]) - init_vel[:2]
+            cmd_vels[i, :] = np.array([lin_vel, hor_vel])
+            init_vels[i, :] = init_vel[:2]
+            true_vels[i, :] = cur_vel[:2]
+            vel_errs[i, :] = cmd_vels[i, :] - true_vels[i, :]
 
 
 
-    # plt.subplot(2,1,1)
-    plt.clf()
+    fig, ax = plt.subplots(2,2)
+    ax[0,0].clear()
     colors = np.linalg.norm(cmd_vels, axis=1)
-    plt.scatter(disp_errs[:, 0], disp_errs[:,2],s=1,c=colors, cmap='jet')
-    cbar = plt.colorbar()
-    cbar.solids.set_edgecolor("face")
+    ax[0,0].scatter(vel_errs[:, 0], vel_errs[:,1],s=1,c=colors, cmap='jet')
+#     cbar = plt.colorbar()
+#     cbar.solids.set_edgecolor("face")
+    ax[0,0].axis('equal')
+    ax[0,0].set_xlabel('X Vel Error')
+    ax[0,0].set_ylabel('Y Vel Error')
+    ax[0,0].grid()
+    
+    ax[1,0].scatter(vel_errs[:,0], cmd_vels[:,0],s=1,c=colors, cmap='jet')
+    ax[1,0].axis('equal')
+    ax[1,0].set_xlabel('X Vel Error')
+    ax[1,0].set_ylabel('cmd x vel')
+    ax[1,0].grid()
+    
+    ax[0,1].scatter(vel_errs[:,1], cmd_vels[:,1],s=1,c=colors, cmap='jet')
+    ax[0,1].axis('equal')
+    ax[0,1].set_xlabel('Y Vel Error')
+    ax[0,1].set_ylabel('cmd y vel')
+    ax[0,1].grid()
+    fig.tight_layout()
+
+   
+
+    plt.savefig('results/' + file_name + "_vel.png")
 
 
-    plt.xlabel('X Displacement Error')
-    plt.ylabel('Y Displacement Error')
-
-    sig_xy = np.cov(disp_errs[:, [0,2]].T)
-    mu_xy = np.mean(disp_errs[:, [0,2]], axis=0)
-
-    mu_w = np.mean(ang_errs)
-    var_w = np.var(ang_errs)
-
-    print('Params for ' + file_name)
-    print('Mean (X,Y): ' + str(mu_xy))
-    print('Variance X: ' + str((np.abs(sig_xy))[0,0]) + ' (std: ' +  str(np.sqrt(sig_xy[0,0])) )
-    print('Variance Y: ' + str((np.abs(sig_xy))[1,1]) + ' (std: ' +  str(np.sqrt(sig_xy[1,1])) )
-
-    print('Mean (w degrees): ' + str(mu_w))
-    print('Variance (w degrees): ' + str(var_w) + ' (std: ' +  str(np.sqrt(var_w)) )
-
-    xrange = np.sqrt(sig_xy[0,0]) * 3
-    yrange = np.sqrt(sig_xy[1,1]) * 3
-
-
-    plt.title(r'Error for ' + file_name + ', data points: ' + str(disp_errs.shape[0])) # $\mu=$' + str(mu) + ' $\sigma_{x}=$' + str(sig[0]) + ' $\sigma_{y}=$' + str(sig[1,1]))
-
-    plt.grid()
-    N = 100
-    x1 = np.linspace(-xrange, xrange, num=N)
-    x2 = np.linspace(-yrange, yrange, num=N)
-    x1,x2 = np.meshgrid(x1,x2)
-    con = mvn(mean=mu_xy, cov=sig_xy)
-    vals = np.concatenate((x1.flatten()[:,np.newaxis], x2.flatten()[:,np.newaxis]), axis=1)
-
-    f = con.pdf(vals)
-
-    #plt.contour(x1, x2, np.reshape(f, (N,N)))
-
-    print(disp_errs.shape)
-    plt.axis('equal')
-    # plt.subplot(2,1,2)
-    alpha = 1.5
-    plt.axis([-xrange * alpha, xrange * alpha,-yrange * alpha,yrange * alpha])
-    # plt.hist(ang_errs, bins=40)
-    plt.savefig('results/' + file_name + "_colored.png")
-
-
-    # plt.subplot(1,3,1)
-    # plt.scatter(pose[:, 0], pose[:, 1])
-    # plt.axis('equal')
-    # plt.subplot(1,3,2)
-    # plt.scatter(pose[:, 0], pose[:, 2])
-    # plt.axis('equal')
-    # plt.subplot(1,3,3)
-    # plt.scatter(pose[:, 1], pose[:, 2])
-    # plt.axis('equal')
-    # plt.savefig(file_name + "_pose.png")

@@ -18,6 +18,7 @@ def read_data(data_path):
                 
                 line = lines[count]
                 data_name = line[:line.find(":")]
+                line = line.replace('vel', '')
                 line = line.replace('Vector', '')
                 data_string = (re.sub("[^e.0-9\s+\-]", "", line))
                 step_dict[data_name] = np.fromstring(data_string, sep=" ")

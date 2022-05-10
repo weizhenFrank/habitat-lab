@@ -41,6 +41,7 @@ for file_name in collect_types:
             init_quat = data['init quat xyzw']
             cur_quat = data['cur quat xyzw']
             cmd_vel = data['cmd']
+            init_vel = data['init lin vel']
 
 
             lin_vel = cmd_vel[0]
@@ -112,7 +113,10 @@ for file_name in collect_types:
 
             ang_errs[i] = theta_goal - theta_true
             pose[i, :] = cmd_disp
-            cmd_vels[i, :] = np.array([lin_vel, hor_vel])
+            cmd_vels[i, :] = np.array([lin_vel, hor_vel]) - init_vel[:2]
+            print(np.array([lin_vel, hor_vel]))
+            print(cmd_vels[i, :])
+            print('-------------------')
 
 
 

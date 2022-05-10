@@ -7,16 +7,17 @@ class VelocityDataset(Dataset):
     # load the dataset
     def __init__(self, path):
         # store the inputs and outputs
+        device = 'cpu' if torch.cuda.is_available() else 'cpu'
         print('Loading data from ' + path)
         data_dict = self.read_data(path)
         
-        input_data = ['init ang vel', 'init lin vel', 'cmd']
+        input_data = ['init lin vel', 'cmd']
         input_dim = 0
         for ke in input_data:
             input_dim += len(data_dict[0][ke])
             
-        self.X = torch.zeros((len(data_dict), input_dim)) # init ang vel, init lin vel, cmd
-        self.y = torch.zeros((len(data_dict), 3)) # x,y,w
+        self.X = torch.zeros((len(data_dict), input_dim)).to(device) # init ang vel, init lin vel, cmd
+        self.y = torch.zeros((len(data_dict), 3)).to(device) # x,y,w
         
         for i, data in enumerate(data_dict):
             
@@ -59,7 +60,8 @@ class VelocityDataset(Dataset):
                     step_dict[data_name] = np.fromstring(data_string, sep=" ")
 
                     count += 1
-                data_dict.append(step_dict)
+                if 'cmd' in list(step_dict.keys()):
+                    data_dict.append(step_dict)
             else:
                 count += 1
 

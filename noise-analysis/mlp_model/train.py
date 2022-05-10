@@ -6,8 +6,11 @@ from torch.optim import SGD
 import numpy as np
 from model import MLP
 from matplotlib import pyplot as plt
+import sys
 
-dataset = VelocityDataset('../data/data_y.txt')
+data_file = sys.argv[1]
+
+dataset = VelocityDataset('../data/' + data_file + '.txt')
 dps = dataset.__len__()
 
 input_dim = dataset.__getitem__(1)[0].shape[0]
@@ -19,12 +22,14 @@ train, test = random_split(dataset, [int(np.floor(dps * 0.9)), int(np.ceil(dps *
 train_dl = DataLoader(train, batch_size=32, shuffle=True)
 test_dl = DataLoader(test, batch_size=1024, shuffle=False)
 
-model = MLP(input_dim, 32, output_dim)
+device = 'cpu' if torch.cuda.is_available() else 'cpu'
+
+model = MLP(input_dim, 32, output_dim).to(device)
 criterion = MSELoss()
 optimizer = SGD(model.parameters(), lr=0.001, momentum=0.99)
 
 losses = []
-num_epochs = 1000
+num_epochs = 400
 for epoch in range(num_epochs):
     # enumerate mini batches
     for i, (inputs, targets) in enumerate(train_dl):
@@ -38,8 +43,10 @@ for epoch in range(num_epochs):
         loss.backward()
         # update model weights
         optimizer.step()
+        
     losses.append(loss.item())
     print('Epoch: ' + str(epoch) + '/' + str(num_epochs)  + '. Loss: ' + str(loss.item()))
-        
+    
+torch.save(model.state_dict(), 'models/' + data_file + '.pt')
 plt.plot(losses)
 plt.savefig('loss.png')
