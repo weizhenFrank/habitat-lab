@@ -246,6 +246,7 @@ def generate_pointnav_episode(
     num_trials = num_episodes * 100
     ctr = -1
     while episode_count < num_episodes or num_episodes < 0:
+        print('episode_count: ', episode_count)
         if ctr > num_trials:
             print("EPISODE COUNT: ", episode_count)
             break
