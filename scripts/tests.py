@@ -1,7 +1,7 @@
 import glob
 from os import path as osp
 
-glb_dir = '/coc/dataset/habitat-sim-datasets/hm3d/train'
+glb_dir = '/path/to/dataset/habitat-sim-datasets/hm3d/train'
 TRAIN = [
     '00000-kfPV7w3FaU5', '00001-UVdNNRcVyV1', '00002-FxCkHAfgh7A', '00003-NtVbfPCkBFy', '00004-VqCaAuuoeWk', 
     '00005-yPKGKBCyYx8', '00006-HkseAnWCgqk', '00007-UQuchpekHRJ', '00008-VYnUX657cVo', '00009-vLpv2VX547B', 
@@ -105,7 +105,7 @@ SCENES = list(filter(
 ))
 print(pths)
 
-# glb_dir = '/coc/dataset/habitat-sim-datasets/gibson_train_val'
+# glb_dir = '/path/to/dataset/habitat-sim-datasets/gibson_train_val'
 
 # VAL = [
 #     'Cantwell', 'Denmark', 'Eastville', 'Edgemere', 'Elmira', 'Eudora', 'Greigsville', 'Mosquito', 'Pablo',

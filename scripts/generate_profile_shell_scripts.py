@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # Path to Nsight Systems nsys command-line tool. This hard-coded path is
     # for the FAIR cluster.
-    nsys_path = "/private/home/eundersander/nsight-systems-2020.3.1/bin/nsys"
+    nsys_path = "/path/to/nsight-systems-2020.3.1/bin/nsys"
 
     # You can either capture a step range or a time range. Capturing a step
     # range is generally a better workflow, but it requires integrating
