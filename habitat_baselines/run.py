@@ -62,10 +62,10 @@ def execute_exp(config: Config, run_type: str) -> None:
         trainer.eval()
 
 PATHS_TO_JUNK = {
-    'LOG_FILE': '/private/home/naokiyokoyama/junk/train.log',
-    'CHECKPOINT_FOLDER': '/private/home/naokiyokoyama/junk',
-    'TENSORBOARD_DIR': '/private/home/naokiyokoyama/junk',
-    'VIDEO_DIR': '/private/home/naokiyokoyama/junk',
+    'LOG_FILE': '/path/to/junk/train.log',
+    'CHECKPOINT_FOLDER': '/path/to/junk',
+    'TENSORBOARD_DIR': '/path/to/junk',
+    'VIDEO_DIR': '/path/to/junk',
 }
 
 def run_exp(exp_config: str, run_type: str, opts=None) -> None:

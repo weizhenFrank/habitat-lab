@@ -47,7 +47,7 @@ class iGibsonSocialNav(HabitatSim):
         super().__init__(config=config)
         obj_templates_mgr = self.get_object_template_manager()
         self.people_template_ids = obj_templates_mgr.load_configs(
-            "/private/home/naokiyokoyama/gc/datasets/person_meshes"
+            "/path/to/gc/datasets/person_meshes"
         )
         self.person_ids = []
         self.people_mask = config.get('PEOPLE_MASK', False)
