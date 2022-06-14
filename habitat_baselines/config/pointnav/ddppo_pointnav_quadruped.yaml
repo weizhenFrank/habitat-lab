@@ -7,11 +7,11 @@ ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 VIDEO_OPTION: []
-TENSORBOARD_DIR:    '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/tb'
-VIDEO_DIR:          '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/video_dir'
-EVAL_CKPT_PATH_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
-CHECKPOINT_FOLDER:  '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
-TXT_DIR:            '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/txts'
+TENSORBOARD_DIR:    '/path/to/develop/flash_results/cont_ctrl_results/junk/tb'
+VIDEO_DIR:          '/path/to/develop/flash_results/cont_ctrl_results/junk/video_dir'
+EVAL_CKPT_PATH_DIR: '/path/to/develop/flash_results/cont_ctrl_results/junk/checkpoints'
+CHECKPOINT_FOLDER:  '/path/to/develop/flash_results/cont_ctrl_results/junk/checkpoints'
+TXT_DIR:            '/path/to/develop/flash_results/cont_ctrl_results/junk/txts'
 TEST_EPISODE_COUNT: -1
 NUM_ENVIRONMENTS: 8
 SENSORS: ["DEPTH_SENSOR"]

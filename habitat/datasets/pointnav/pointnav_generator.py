@@ -147,21 +147,21 @@ def generate_pointnav_episode(
 
     # Load Spot model
     if robot == 'A1':
-        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/a1/a1.urdf"
+        robot_file = "/path/to/data/URDF_demo_assets/a1/a1.urdf"
         init_joint_positions = [0.05, 0.60, -1.5,
                                 -0.05, 0.60, -1.5,
                                 0.05, 0.65, -1.5,
                                 -0.05, 0.65, -1.5]
         z_offset = 0.28
     elif robot == 'AlienGo':
-        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf"
+        robot_file = "/path/to/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf"
         init_joint_positions = [0.1, 0.60, -1.5,
                                 -0.1, 0.60, -1.5,
                                 0.1, 0.6, -1.5,
                                 -0.1, 0.6, -1.5]
         z_offset = 0.35
     elif robot == 'Daisy':
-        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/daisy/daisy_advanced_akshara.urdf"
+        robot_file = "/path/to/data/URDF_demo_assets/daisy/daisy_advanced.urdf"
         init_joint_positions = [0.0, 1.2, -0.5,
                                 0.0, -1.2, 0.5,
                                 0.0, 1.2, -0.5,
@@ -170,10 +170,10 @@ def generate_pointnav_episode(
                                 0.0, -1.2, 0.5]
         z_offset = 0.14
     elif robot == 'Locobot':
-        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/locobot/urdf/locobot_description2.urdf"
+        robot_file = "/path/to/data/URDF_demo_assets/locobot/urdf/locobot_description2.urdf"
         z_offset = -0.02
     elif robot == 'Spot':
-        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
+        robot_file = "/path/to/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
         init_joint_positions = [0.05, 0.7, -1.3,
                                 -0.05, 0.7, -1.3,
                                 0.05, 0.7, -1.3,

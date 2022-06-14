@@ -331,7 +331,7 @@ class Spot(A1):
                                          -0.05, 0.7, -1.3]
 
         # Spawn the URDF 0.425 meters above the navmesh upon reset
-        ## if evaluating coda episodes, manually increase offset by an extra 0.1m
+        ## if evaluating LAB episodes, manually increase offset by an extra 0.1m
         # self.robot_spawn_offset = np.array([0.0, 0.60, 0])
         self.robot_spawn_offset = np.array([0.0, 0.625, 0])
         self.robot_dist_to_goal = 0.425

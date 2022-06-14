@@ -60,7 +60,7 @@
 # %cd /content
 
 # !gdown --id 1Pc-J6pZzXEd8RSeLM94t3iwO8q_RQ853
-# !unzip -o /content/coda.zip -d /content/habitat-sim/data/scene_datasets
+# !unzip -o /content/LAB.zip -d /content/habitat-sim/data/scene_datasets
 
 # reload the cffi version
 import sys
@@ -298,7 +298,7 @@ settings = {
     "max_frames": 10,
     "width": 256,
     "height": 256,
-    "scene": "data/scene_datasets/coda/coda.glb",
+    "scene": "data/scene_datasets/LAB/LAB.glb",
     "default_agent_id": 0,
     "sensor_height": 1.5,  # Height of sensors in meters
     "rgb": True,  # RGB sensor
@@ -428,7 +428,7 @@ with habitat_sim.Simulator(cfg) as sim:
 # ```
 # {
 #   'episode_id': 0,
-#   'scene_id': 'data/scene_datasets/coda/coda.glb',
+#   'scene_id': 'data/scene_datasets/LAB/LAB.glb',
 #   'goals': {
 #     'position': [4.34, 0.67, -5.06],
 #     'rotation': [0.0, 0.0, 0.0, 1.0]
@@ -459,7 +459,7 @@ def get_rotation(sim, object_id):
 def init_episode_dict(episode_id, scene_id, agent_pos, agent_rot):
     episode_dict = {
         "episode_id": episode_id,
-        "scene_id": "data/scene_datasets/coda/coda.glb",
+        "scene_id": "data/scene_datasets/LAB/LAB.glb",
         "start_position": agent_pos,
         "start_rotation": agent_rot,
         "info": {},
@@ -519,7 +519,7 @@ with habitat_sim.Simulator(cfg) as sim:
 
     episodes = build_episode(sim, 1, object_id, goal_id)
 
-    dataset_content_path = "data/datasets/rearrangement/coda/v1/train/"
+    dataset_content_path = "data/datasets/rearrangement/LAB/v1/train/"
     if not os.path.exists(dataset_content_path):
         os.makedirs(dataset_content_path)
 
@@ -650,7 +650,7 @@ class RearrangementDatasetV0(PointNavDatasetV1):
 config = habitat.get_config("configs/datasets/pointnav/habitat_test.yaml")
 config.defrost()
 config.DATASET.DATA_PATH = (
-    "data/datasets/rearrangement/coda/v1/{split}/{split}.json.gz"
+    "data/datasets/rearrangement/LAB/v1/{split}/{split}.json.gz"
 )
 config.DATASET.TYPE = "RearrangementDataset-v0"
 config.freeze()
@@ -1315,7 +1315,7 @@ config.TASK.POSSIBLE_ACTIONS = ["STOP", "MOVE_FORWARD", "GRAB_RELEASE"]
 config.DATASET.TYPE = "RearrangementDataset-v0"
 config.DATASET.SPLIT = "train"
 config.DATASET.DATA_PATH = (
-    "data/datasets/rearrangement/coda/v1/{split}/{split}.json.gz"
+    "data/datasets/rearrangement/LAB/v1/{split}/{split}.json.gz"
 )
 config.freeze()
 

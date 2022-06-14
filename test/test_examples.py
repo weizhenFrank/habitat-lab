@@ -44,7 +44,7 @@ def run_main_subproc(args):
     or not osp.exists(
         "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
     )
-    or not osp.exists("data/scene_datasets/coda/coda.glb"),
+    or not osp.exists("data/scene_datasets/LAB/LAB.glb"),
     reason="Requires the habitat-test-scenes",
 )
 @pytest.mark.parametrize(
