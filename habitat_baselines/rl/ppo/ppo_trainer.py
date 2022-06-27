@@ -55,6 +55,9 @@ from habitat_baselines.utils.env_utils import construct_envs
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 
+import indoor2outdoornav.outdoor_policy
+from indoor2outdoornav.outdoor_ppo import OutdoorDDPPO, OutdoorPPO
+
 
 @baseline_registry.register_trainer(name="ddppo")
 @baseline_registry.register_trainer(name="ppo")
@@ -139,7 +142,10 @@ class PPOTrainer(BaseRLTrainer):
 
         return t
 
-    def _setup_actor_critic_agent(self, ppo_cfg: Config) -> None:
+    def _setup_actor_critic_agent(
+        self,
+        ppo_cfg: Config,
+    ) -> None:
         r"""Sets up actor critic and agent for PPO.
 
         Args:
@@ -157,8 +163,8 @@ class PPOTrainer(BaseRLTrainer):
             observation_space, self.obs_transforms
         )
         # hack to prevent training with RGB; but still be able to evaluate / generate videos with RGB
-        # if "rgb" in observation_space.spaces:
-        #     del observation_space.spaces["rgb"]
+        if "rgb" in observation_space.spaces:
+            del observation_space.spaces["rgb"]
 
         self.actor_critic = policy.from_config(
             self.config,
@@ -201,61 +207,76 @@ class PPOTrainer(BaseRLTrainer):
             nn.init.orthogonal_(self.actor_critic.critic.fc.weight)
             nn.init.constant_(self.actor_critic.critic.fc.bias, 0)
 
-        if self.config.RL.SPLITNET.pretrained_encoder:
-            pretrained_state = torch.load(
-                self.config.RL.SPLITNET.pretrained_weights, map_location="cpu"
-            )
-            prefix = "base.visual_encoder.module."
-            self.actor_critic.net.visual_encoder.load_state_dict(
-                {
-                    k[len(prefix) :]: v
-                    for k, v in pretrained_state.items()
-                    if k.startswith(prefix)
-                }
-            )
-            print("LOADED SPLITNET PRETRAINED ENCODER ")
+        if self.config.RL.POLICY.name == "PointNavSplitNetPolicy":
+            if self.config.RL.SPLITNET.pretrained_encoder:
+                pretrained_state = torch.load(
+                    self.config.RL.SPLITNET.pretrained_weights, map_location="cpu"
+                )
+                prefix = "base.visual_encoder.module."
+                self.actor_critic.net.visual_encoder.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_state.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                print("LOADED SPLITNET PRETRAINED ENCODER ")
 
-        visual_layers = self.actor_critic.net.visual_encoder
-        if self.config.RL.SPLITNET.freeze_encoder_features:
-            for param in visual_layers.encoder.parameters():
-                param.requires_grad = False
-        if self.config.RL.SPLITNET.freeze_visual_decoder_features:
-            if hasattr(visual_layers, "bridge"):
-                for param in visual_layers.bridge.parameters():
+            visual_layers = self.actor_critic.net.visual_encoder
+            if self.config.RL.SPLITNET.freeze_encoder_features:
+                for param in visual_layers.encoder.parameters():
                     param.requires_grad = False
-            if hasattr(visual_layers, "decoder"):
-                for param in visual_layers.decoder.parameters():
-                    param.requires_grad = False
-            if hasattr(visual_layers, "out"):
-                for param in visual_layers.out.parameters():
-                    param.requires_grad = False
-            if hasattr(visual_layers, "class_pred_layer"):
-                if visual_layers.class_pred_layer is not None:
-                    for param in visual_layers.class_pred_layer.parameters():
+            if self.config.RL.SPLITNET.freeze_visual_decoder_features:
+                if hasattr(visual_layers, "bridge"):
+                    for param in visual_layers.bridge.parameters():
                         param.requires_grad = False
+                if hasattr(visual_layers, "decoder"):
+                    for param in visual_layers.decoder.parameters():
+                        param.requires_grad = False
+                if hasattr(visual_layers, "out"):
+                    for param in visual_layers.out.parameters():
+                        param.requires_grad = False
+                if hasattr(visual_layers, "class_pred_layer"):
+                    if visual_layers.class_pred_layer is not None:
+                        for param in visual_layers.class_pred_layer.parameters():
+                            param.requires_grad = False
 
-        if (
-            self.config.RL.SPLITNET.freeze_motion_decoder_features
-            and self.config.RL.SPLITNET.freeze_policy_decoder_features
-        ):
-            for param in self.actor_critic.net.visual_fc.parameters():
-                param.requires_grad = False
+            if (
+                self.config.RL.SPLITNET.freeze_motion_decoder_features
+                and self.config.RL.SPLITNET.freeze_policy_decoder_features
+            ):
+                for param in self.actor_critic.net.visual_fc.parameters():
+                    param.requires_grad = False
 
-        if self.config.RL.SPLITNET.freeze_motion_decoder_features:
-            for param in self.actor_critic.net.egomotion_layer.parameters():
-                param.requires_grad = False
-            for param in self.actor_critic.net.motion_model_layer.parameters():
-                param.requires_grad = False
+            if self.config.RL.SPLITNET.freeze_motion_decoder_features:
+                for param in self.actor_critic.net.egomotion_layer.parameters():
+                    param.requires_grad = False
+                for param in self.actor_critic.net.motion_model_layer.parameters():
+                    param.requires_grad = False
 
-        if self.config.RL.SPLITNET.freeze_policy_decoder_features:
-            for param in self.actor_critic.net.state_encoder.parameters():
-                param.requires_grad = False
-            for param in self.actor_critic.critic.parameters():
-                param.requires_grad = False
-            for param in self.actor_critic.action_distribution.parameters():
-                param.requires_grad = False
+            if self.config.RL.SPLITNET.freeze_policy_decoder_features:
+                for param in self.actor_critic.net.state_encoder.parameters():
+                    param.requires_grad = False
+                for param in self.actor_critic.critic.parameters():
+                    param.requires_grad = False
+                for param in self.actor_critic.action_distribution.parameters():
+                    param.requires_grad = False
 
-        self.agent = (DDPPO if self._is_distributed else PPO)(
+        if self.config.RL.USE_OUTDOOR:
+            agent_type = OutdoorDDPPO if self._is_distributed else OutdoorPPO
+            kwargs = {
+                "dir_names": self.config.RL.OUTDOOR.dir_names,
+                "batch_size": int(
+                    (self.config.RL.PPO.num_steps * self.config.NUM_ENVIRONMENTS)
+                    / self.config.RL.PPO.num_mini_batch
+                ),
+                "use_second_optimizer": self.config.RL.OUTDOOR.use_second_optimizer,
+                "second_optimizer_key": self.config.RL.OUTDOOR.second_optimizer_key,
+            }
+        else:
+            agent_type = DDPPO if self._is_distributed else PPO
+            kwargs = {}
+        self.agent = agent_type(
             actor_critic=self.actor_critic,
             clip_param=ppo_cfg.clip_param,
             ppo_epoch=ppo_cfg.ppo_epoch,
@@ -266,6 +287,7 @@ class PPOTrainer(BaseRLTrainer):
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
             use_normalized_advantage=ppo_cfg.use_normalized_advantage,
+            **kwargs,
         )
 
     def _init_envs(self, config=None):
@@ -299,7 +321,8 @@ class PPOTrainer(BaseRLTrainer):
             self.config.defrost()
             self.config.TORCH_GPU_ID = local_rank
             self.config.SIMULATOR_GPU_ID = local_rank
-            # Multiply by the number of simulators to make sure they also get unique seeds
+            # Multiply by the number of simulators to make sure they also get unique
+            # seeds
             self.config.TASK_CONFIG.SEED += (
                 torch.distributed.get_rank() * self.config.NUM_ENVIRONMENTS
             )
@@ -347,6 +370,7 @@ class PPOTrainer(BaseRLTrainer):
         if rank0_only() and not os.path.isdir(self.config.CHECKPOINT_FOLDER):
             os.makedirs(self.config.CHECKPOINT_FOLDER)
 
+        task_cfg = self.config.TASK_CONFIG.TASK
         self._setup_actor_critic_agent(ppo_cfg)
         if self._is_distributed:
             self.agent.init_distributed(find_unused_params=True)
@@ -647,16 +671,16 @@ class PPOTrainer(BaseRLTrainer):
         )
 
         self.agent.train()
-
         (
             value_loss,
             action_loss,
             dist_entropy,
-            loss_total_epoch,
-            visual_loss_total,
-            visual_loss_dict,
-            egomotion_loss,
-            forward_model_loss,
+            # loss_total_epoch,
+            # visual_loss,
+            # visual_loss_dict,
+            # egomotion_loss,
+            # feature_pred_loss,
+            # splitnet_total_loss,
         ) = self.agent.update(self.rollouts)
 
         self.rollouts.after_update()
@@ -666,11 +690,12 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
-            loss_total_epoch,
-            visual_loss_total,
-            visual_loss_dict,
-            egomotion_loss,
-            forward_model_loss,
+            # loss_total_epoch,
+            # visual_loss,
+            # visual_loss_dict,
+            # egomotion_loss,
+            # feature_pred_loss,
+            # splitnet_total_loss,
         )
 
     def _coalesce_post_step(
@@ -727,7 +752,8 @@ class PPOTrainer(BaseRLTrainer):
         }
         if len(metrics) > 0:
             writer.add_scalars("metrics", metrics, self.num_steps_done)
-
+        if isinstance(self.agent, (OutdoorDDPPO, OutdoorPPO)):
+            losses.update(self.agent.losses)
         writer.add_scalars(
             "losses",
             losses,
@@ -908,19 +934,27 @@ class PPOTrainer(BaseRLTrainer):
                     value_loss,
                     action_loss,
                     dist_entropy,
-                    loss_total_epoch,
-                    visual_loss_total,
-                    visual_loss_dict,
-                    egomotion_loss,
-                    forward_model_loss,
+                    # loss_total_epoch,
+                    # visual_loss,
+                    # visual_loss_dict,
+                    # egomotion_loss,
+                    # feature_pred_loss,
+                    # splitnet_total_loss,
                 ) = self._update_agent()
 
                 if ppo_cfg.use_linear_lr_decay:
                     lr_scheduler.step()  # type: ignore
 
                 self.num_updates_done += 1
-                loss_dict = dict(value_loss=value_loss, action_loss=action_loss)
-                loss_dict.update(visual_loss_dict)
+                loss_dict = dict(
+                    value_loss=value_loss,
+                    action_loss=action_loss,
+                    # visual_loss=visual_loss,
+                    # egomotion_loss=egomotion_loss,
+                    # feature_pred_loss=feature_pred_loss,
+                    # splitnet_total_loss=splitnet_total_loss,
+                )
+                # loss_dict.update(visual_loss_dict)
                 losses = self._coalesce_post_step(
                     loss_dict,
                     count_steps_delta,
@@ -1002,6 +1036,7 @@ class PPOTrainer(BaseRLTrainer):
             action_shape = 1
             action_type = torch.long
 
+        task_cfg = self.config.TASK_CONFIG.TASK
         self._setup_actor_critic_agent(ppo_cfg)
 
         self.agent.load_state_dict(ckpt_dict["state_dict"])

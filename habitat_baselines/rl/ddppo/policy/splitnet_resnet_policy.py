@@ -12,20 +12,17 @@ import numpy as np
 import torch
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    EpisodicCompassSensor,
-    EpisodicGPSSensor,
-    HeadingSensor,
-    ImageGoalSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    PointGoalSensor,
-    ProximitySensor,
-)
+from habitat.tasks.nav.nav import (EpisodicCompassSensor, EpisodicGPSSensor,
+                                   HeadingSensor, ImageGoalSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   PointGoalSensor, ProximitySensor)
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.ddppo.policy import resnet
-from habitat_baselines.rl.ddppo.policy.running_mean_and_var import RunningMeanAndVar
-from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
+from habitat_baselines.rl.ddppo.policy.running_mean_and_var import \
+    RunningMeanAndVar
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.ppo import Net, Policy
 from torch import nn as nn
 from torch.nn import functional as F
@@ -34,7 +31,7 @@ DEQUE_LENGTH = 150
 
 
 @baseline_registry.register_policy
-class PointNavResNetPolicy(Policy):
+class PointNavResNetTmpPolicy(Policy):
     def __init__(
         self,
         observation_space: spaces.Dict,
@@ -423,6 +420,7 @@ class PointNavResNetNet(Net):
                     visual_feats = torch.cat(
                         [right_visual_feats, left_visual_feats], dim=1
                     )
+            observations["visual_features"] = visual_feats
             visual_feats = self.visual_fc(visual_feats)
             x.append(visual_feats)
 

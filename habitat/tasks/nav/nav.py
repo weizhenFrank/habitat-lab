@@ -22,7 +22,11 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import EmbodiedTask, Measure, SimulatorTaskAction
+from habitat.core.embodied_task import (
+    EmbodiedTask,
+    Measure,
+    SimulatorTaskAction,
+)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
 from habitat.core.simulator import (
@@ -61,17 +65,46 @@ from .robot_utils.raibert_controller import (
     Raibert_controller_turn_stable,
 )
 from .robot_utils.robot_env import *
+from .robot_utils.utils import *
 
 cv2 = try_cv2_import()
 
 MAP_THICKNESS_SCALAR: int = 128
+
+import torch
+import torch.nn.functional as F
+from scipy.spatial.transform import Rotation as R
+
+
+def depth_to_surface_normals(depth, surfnorm_scalar=256):
+    SURFNORM_KERNEL = torch.from_numpy(
+        np.array(
+            [
+                [[1, 2, 1], [0, 0, 0], [-1, -2, -1]],
+                [[1, 0, -1], [2, 0, -2], [1, 0, -1]],
+                [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+            ]
+        )
+    )[:, np.newaxis, ...].to(dtype=torch.float32, device=depth.device)
+    with torch.no_grad():
+        surface_normals = F.conv2d(
+            depth, surfnorm_scalar * SURFNORM_KERNEL, padding=1
+        )
+        surface_normals[:, 2, ...] = 1
+        surface_normals = surface_normals / surface_normals.norm(
+            dim=1, keepdim=True
+        )
+    return surface_normals
 
 
 def merge_sim_episode_config(sim_config: Config, episode: Episode) -> Any:
     sim_config.defrost()
     sim_config.SCENE = episode.scene_id
     sim_config.freeze()
-    if episode.start_position is not None and episode.start_rotation is not None:
+    if (
+        episode.start_position is not None
+        and episode.start_rotation is not None
+    ):
         agent_name = sim_config.AGENTS[sim_config.DEFAULT_AGENT_ID]
         agent_cfg = getattr(sim_config, agent_name)
         agent_cfg.defrost()
@@ -116,7 +149,9 @@ class NavigationEpisode(Episode):
         shortest_paths: list containing shortest paths to goals
     """
 
-    goals: List[NavigationGoal] = attr.ib(default=None, validator=not_none_validator)
+    goals: List[NavigationGoal] = attr.ib(
+        default=None, validator=not_none_validator
+    )
     start_room: Optional[str] = None
     shortest_paths: Optional[List[List[ShortestPathPoint]]] = None
 
@@ -145,7 +180,9 @@ class PointGoalSensor(Sensor):
     """
     cls_uuid: str = "pointgoal"
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         self._sim = sim
 
         self._goal_format = getattr(config, "GOAL_FORMAT", "CARTESIAN")
@@ -172,7 +209,9 @@ class PointGoalSensor(Sensor):
             dtype=np.float32,
         )
 
-    def _compute_pointgoal(self, source_position, source_rotation, goal_position):
+    def _compute_pointgoal(
+        self, source_position, source_rotation, goal_position
+    ):
         direction_vector = goal_position - source_position
         direction_vector_agent = quaternion_rotate_vector(
             source_rotation.inverse(), direction_vector
@@ -189,7 +228,8 @@ class PointGoalSensor(Sensor):
                     -direction_vector_agent[2], direction_vector_agent[0]
                 )
                 theta = np.arccos(
-                    direction_vector_agent[1] / np.linalg.norm(direction_vector_agent)
+                    direction_vector_agent[1]
+                    / np.linalg.norm(direction_vector_agent)
                 )
                 rho = np.linalg.norm(direction_vector_agent)
 
@@ -233,11 +273,15 @@ class ImageGoalSensor(Sensor):
     """
     cls_uuid: str = "imagegoal"
 
-    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any):
+    def __init__(
+        self, *args: Any, sim: Simulator, config: Config, **kwargs: Any
+    ):
         self._sim = sim
         sensors = self._sim.sensor_suite.sensors
         rgb_sensor_uuids = [
-            uuid for uuid, sensor in sensors.items() if isinstance(sensor, RGBSensor)
+            uuid
+            for uuid, sensor in sensors.items()
+            if isinstance(sensor, RGBSensor)
         ]
         if len(rgb_sensor_uuids) != 1:
             raise ValueError(
@@ -256,7 +300,9 @@ class ImageGoalSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        return self._sim.sensor_suite.observation_spaces.spaces[self._rgb_sensor_uuid]
+        return self._sim.sensor_suite.observation_spaces.spaces[
+            self._rgb_sensor_uuid
+        ]
 
     def _get_pointnav_episode_image_goal(self, episode: NavigationEpisode):
         goal_position = np.array(episode.goals[0].position, dtype=np.float32)
@@ -282,7 +328,9 @@ class ImageGoalSensor(Sensor):
         if episode_uniq_id == self._current_episode_id:
             return self._current_image_goal
 
-        self._current_image_goal = self._get_pointnav_episode_image_goal(episode)
+        self._current_image_goal = self._get_pointnav_episode_image_goal(
+            episode
+        )
         self._current_episode_id = episode_uniq_id
 
         return self._current_image_goal
@@ -315,7 +363,9 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
 
-    def get_observation(self, observations, episode, *args: Any, **kwargs: Any):
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
         agent_state = self._sim.get_agent_state()
         agent_position = agent_state.position
         rotation_world_agent = agent_state.rotation
@@ -337,7 +387,9 @@ class HeadingSensor(Sensor):
     """
     cls_uuid: str = "heading"
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         self._sim = sim
         super().__init__(config=config)
 
@@ -358,7 +410,9 @@ class HeadingSensor(Sensor):
         phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
         return np.array([phi], dtype=np.float32)
 
-    def get_observation(self, observations, episode, *args: Any, **kwargs: Any):
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
         agent_state = self._sim.get_agent_state()
         rotation_world_agent = agent_state.rotation
 
@@ -375,7 +429,9 @@ class EpisodicCompassSensor(HeadingSensor):
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
 
-    def get_observation(self, observations, episode, *args: Any, **kwargs: Any):
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
         agent_state = self._sim.get_agent_state()
         rotation_world_agent = agent_state.rotation
         rotation_world_start = quaternion_from_coeff(episode.start_rotation)
@@ -398,7 +454,9 @@ class EpisodicGPSSensor(Sensor):
     """
     cls_uuid: str = "gps"
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         self._sim = sim
 
         self._dimensionality = getattr(config, "DIMENSIONALITY", 2)
@@ -420,7 +478,9 @@ class EpisodicGPSSensor(Sensor):
             dtype=np.float32,
         )
 
-    def get_observation(self, observations, episode, *args: Any, **kwargs: Any):
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
         agent_state = self._sim.get_agent_state()
 
         origin = np.array(episode.start_position, dtype=np.float32)
@@ -432,7 +492,9 @@ class EpisodicGPSSensor(Sensor):
             rotation_world_start.inverse(), agent_position - origin
         )
         if self._dimensionality == 2:
-            return np.array([-agent_position[2], agent_position[0]], dtype=np.float32)
+            return np.array(
+                [-agent_position[2], agent_position[0]], dtype=np.float32
+            )
         else:
             return agent_position.astype(np.float32)
 
@@ -449,7 +511,9 @@ class ProximitySensor(Sensor):
 
     def __init__(self, sim, config, *args: Any, **kwargs: Any):
         self._sim = sim
-        self._max_detection_radius = getattr(config, "MAX_DETECTION_RADIUS", 2.0)
+        self._max_detection_radius = getattr(
+            config, "MAX_DETECTION_RADIUS", 2.0
+        )
         super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -466,7 +530,9 @@ class ProximitySensor(Sensor):
             dtype=np.float32,
         )
 
-    def get_observation(self, observations, *args: Any, episode, **kwargs: Any):
+    def get_observation(
+        self, observations, *args: Any, episode, **kwargs: Any
+    ):
         current_position = self._sim.get_agent_state().position
 
         return np.array(
@@ -488,7 +554,9 @@ class Success(Measure):
 
     cls_uuid: str = "success"
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         self._sim = sim
         self._config = config
 
@@ -503,7 +571,9 @@ class Success(Measure):
         )
         self.update_metric(episode=episode, task=task, *args, **kwargs)  # type: ignore
 
-    def update_metric(self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any):
+    def update_metric(
+        self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
+    ):
         distance_to_target = task.measurements.measures[
             DistanceToGoal.cls_uuid
         ].get_metric()
@@ -532,7 +602,9 @@ class SPL(Measure):
     performance for sophisticated goal areas.
     """
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         self._previous_position = None
         self._start_end_episode_distance = None
         self._agent_episode_distance: Optional[float] = None
@@ -562,7 +634,9 @@ class SPL(Measure):
     def _euclidean_distance(self, position_a, position_b):
         return np.linalg.norm(position_b - position_a, ord=2)
 
-    def update_metric(self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any):
+    def update_metric(
+        self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
+    ):
         ep_success = task.measurements.measures[Success.cls_uuid].get_metric()
 
         current_position = self._sim.get_agent_state().position
@@ -574,7 +648,9 @@ class SPL(Measure):
 
         self._metric = ep_success * (
             self._start_end_episode_distance
-            / max(self._start_end_episode_distance, self._agent_episode_distance)
+            / max(
+                self._start_end_episode_distance, self._agent_episode_distance
+            )
         )
 
 
@@ -597,15 +673,21 @@ class SCT(SPL):
         ].get_metric()
         self.update_metric(episode=episode, task=task, *args, **kwargs)
 
-    def update_metric(self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any):
+    def update_metric(
+        self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
+    ):
         ep_success = task.measurements.measures[Success.cls_uuid].get_metric()
         if not ep_success or not self._was_last_success:
             self._num_steps_taken += 1
         self._was_last_success = ep_success
 
-        oracle_time = self._start_end_episode_distance / self._config.HOLONOMIC_VELOCITY
+        oracle_time = (
+            self._start_end_episode_distance / self._config.HOLONOMIC_VELOCITY
+        )
         agent_time = self._num_steps_taken * self._config.TIME_STEP
-        self._metric = ep_success * (oracle_time / max(oracle_time, agent_time))
+        self._metric = ep_success * (
+            oracle_time / max(oracle_time, agent_time)
+        )
 
 
 @registry.register_measure
@@ -649,7 +731,9 @@ class SoftSPL(SPL):
 
         self._metric = ep_soft_success * (
             self._start_end_episode_distance
-            / max(self._start_end_episode_distance, self._agent_episode_distance)
+            / max(
+                self._start_end_episode_distance, self._agent_episode_distance
+            )
         )
 
 
@@ -680,7 +764,9 @@ class Collisions(Measure):
 class TopDownMap(Measure):
     r"""Top Down Map measure"""
 
-    def __init__(self, sim: "HabitatSim", config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: "HabitatSim", config: Config, *args: Any, **kwargs: Any
+    ):
         self._sim = sim
         self._config = config
         self._grid_delta = config.MAP_PADDING
@@ -750,7 +836,9 @@ class TopDownMap(Measure):
             for goal in episode.goals:
                 if self._is_on_same_floor(goal.position[1]):
                     try:
-                        self._draw_point(goal.position, maps.MAP_TARGET_POINT_INDICATOR)
+                        self._draw_point(
+                            goal.position, maps.MAP_TARGET_POINT_INDICATOR
+                        )
                     except AttributeError:
                         pass
 
@@ -760,12 +848,16 @@ class TopDownMap(Measure):
                 try:
                     sem_scene = self._sim.semantic_annotations()
                     object_id = goal.object_id
-                    assert int(sem_scene.objects[object_id].id.split("_")[-1]) == int(
+                    assert int(
+                        sem_scene.objects[object_id].id.split("_")[-1]
+                    ) == int(
                         goal.object_id
                     ), f"Object_id doesn't correspond to id in semantic scene objects dictionary for episode: {episode}"
 
                     center = sem_scene.objects[object_id].aabb.center
-                    x_len, _, z_len = sem_scene.objects[object_id].aabb.sizes / 2.0
+                    x_len, _, z_len = (
+                        sem_scene.objects[object_id].aabb.sizes / 2.0
+                    )
                     # Nodes to draw rectangle
                     corners = [
                         center + np.array([x, 0, z])
@@ -802,24 +894,36 @@ class TopDownMap(Measure):
         self, episode: NavigationEpisode, agent_position: AgentState
     ):
         if self._config.DRAW_SHORTEST_PATH:
-            _shortest_path_points = self._sim.get_straight_shortest_path_points(
-                agent_position, episode.goals[0].position
-            )
-            self._shortest_path_points = [
-                maps.to_grid(p[2], p[0], self._top_down_map.shape[0:2], sim=self._sim)
-                for p in _shortest_path_points
-            ]
-            maps.draw_path(
-                self._top_down_map,
-                self._shortest_path_points,
-                maps.MAP_SHORTEST_PATH_COLOR,
-                self.line_thickness,
-            )
+            for goal in episode.goals:
+                _shortest_path_points = (
+                    self._sim.get_straight_shortest_path_points(
+                        agent_position, goal.position
+                    )
+                )
+                self._shortest_path_points = [
+                    maps.to_grid(
+                        p[2],
+                        p[0],
+                        self._top_down_map.shape[0:2],
+                        sim=self._sim,
+                    )
+                    for p in _shortest_path_points
+                ]
+                maps.draw_path(
+                    self._top_down_map,
+                    self._shortest_path_points,
+                    maps.MAP_SHORTEST_PATH_COLOR,
+                    self.line_thickness,
+                )
+                agent_position = goal.position
 
-    def _is_on_same_floor(self, height, ref_floor_height=None, ceiling_height=2.0):
-        if ref_floor_height is None:
-            ref_floor_height = self._sim.get_agent(0).state.position[1]
-        return ref_floor_height < height < ref_floor_height + ceiling_height
+    def _is_on_same_floor(
+        self, height, ref_floor_height=None, ceiling_height=2.0
+    ):
+        # if ref_floor_height is None:
+        # ref_floor_height = self._sim.get_agent(0).state.position[1]
+        # return ref_floor_height < height < ref_floor_height + ceiling_height
+        return True
 
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._step_count = 0
@@ -844,7 +948,9 @@ class TopDownMap(Measure):
         self._draw_shortest_path(episode, agent_position)
 
         if self._config.DRAW_SOURCE:
-            self._draw_point(episode.start_position, maps.MAP_SOURCE_POINT_INDICATOR)
+            self._draw_point(
+                episode.start_position, maps.MAP_SOURCE_POINT_INDICATOR
+            )
 
     def update_metric(self, episode, action, *args: Any, **kwargs: Any):
         self._step_count += 1
@@ -908,7 +1014,9 @@ class TopDownMap(Measure):
                 self.get_polar_angle(),
                 fov=self._config.FOG_OF_WAR.FOV,
                 max_line_len=self._config.FOG_OF_WAR.VISIBILITY_DIST
-                / maps.calculate_meters_per_pixel(self._map_resolution, sim=self._sim),
+                / maps.calculate_meters_per_pixel(
+                    self._map_resolution, sim=self._sim
+                ),
             )
 
 
@@ -918,11 +1026,15 @@ class DistanceToGoal(Measure):
 
     cls_uuid: str = "distance_to_goal"
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         self._previous_position: Optional[Tuple[float, float, float]] = None
         self._sim = sim
         self._config = config
-        self._episode_view_points: Optional[List[Tuple[float, float, float]]] = None
+        self._episode_view_points: Optional[
+            List[Tuple[float, float, float]]
+        ] = None
 
         super().__init__(**kwargs)
 
@@ -940,7 +1052,9 @@ class DistanceToGoal(Measure):
             ]
         self.update_metric(episode=episode, *args, **kwargs)  # type: ignore
 
-    def update_metric(self, episode: NavigationEpisode, *args: Any, **kwargs: Any):
+    def update_metric(
+        self, episode: NavigationEpisode, *args: Any, **kwargs: Any
+    ):
         current_position = self._sim.get_agent_state().position
 
         if self._previous_position is None or not np.allclose(
@@ -977,7 +1091,9 @@ class EpisodeDistance(Measure):
 
     cls_uuid: str = "episode_distance"
 
-    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
         super().__init__(**kwargs)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -987,9 +1103,13 @@ class EpisodeDistance(Measure):
         task.measurements.check_measure_dependencies(
             self.uuid, [DistanceToGoal.cls_uuid]
         )
-        self._metric = task.measurements.measures[DistanceToGoal.cls_uuid].get_metric()
+        self._metric = task.measurements.measures[
+            DistanceToGoal.cls_uuid
+        ].get_metric()
 
-    def update_metric(self, episode: NavigationEpisode, *args: Any, **kwargs: Any):
+    def update_metric(
+        self, episode: NavigationEpisode, *args: Any, **kwargs: Any
+    ):
         pass
 
 
@@ -1123,6 +1243,7 @@ class VelocityAction(SimulatorTaskAction):
         self.min_abs_ang_speed = config.MIN_ABS_ANG_SPEED
         self.robot_file = config.ROBOT_URDF
         self.time_step = config.TIME_STEP
+        self.use_contact_test = config.CONTACT_TEST
 
         # Horizontal velocity
         self.min_hor_vel, self.max_hor_vel = config.HOR_VEL_RANGE
@@ -1135,6 +1256,15 @@ class VelocityAction(SimulatorTaskAction):
         self.ctrl_freq = config.CTRL_FREQ
 
         self.must_call_stop = config.MUST_CALL_STOP
+
+        self.min_rand_pitch = config.MIN_RAND_PITCH
+        self.max_rand_pitch = config.MAX_RAND_PITCH
+        if self._sim._sensors.get("spot_right_depth", False):
+            right_depth_sensor = self._sim._sensors["spot_right_depth"]
+            self.right_orig_ori = right_depth_sensor._spec.orientation.copy()
+
+            left_depth_sensor = self._sim._sensors["spot_left_depth"]
+            self.left_orig_ori = left_depth_sensor._spec.orientation.copy()
 
     @property
     def action_space(self):
@@ -1164,7 +1294,10 @@ class VelocityAction(SimulatorTaskAction):
         task.is_stop_called = False  # type: ignore
         self.prev_ang_vel = 0.0
 
-        if self.robot.robot_id is not None and self.robot.robot_id.object_id != -1:
+        if (
+            self.robot.robot_id is not None
+            and self.robot.robot_id.object_id != -1
+        ):
             ao_mgr = self._sim.get_articulated_object_manager()
             ao_mgr.remove_object_by_id(self.robot.robot_id.object_id)
             self.robot.robot_id = None
@@ -1177,7 +1310,123 @@ class VelocityAction(SimulatorTaskAction):
             self.robot.robot_id = robot_id
         agent_pos = kwargs["episode"].start_position
         agent_rot = kwargs["episode"].start_rotation
+        # print('KWARGS START POS :', kwargs["episode"].start_position)
+        # print('KWARGS GOAL POS :', kwargs["episode"].goals[0].position)
+        # start_end_dist = kwargs["episode"].info["geodesic_distance"]
+        # rand_goal_1 = self._sim.pathfinder.get_random_navigable_point()
+        # rand_goal_2 = self._sim.pathfinder.get_random_navigable_point()
+
+        # kwargs["episode"].goals.insert(0, NavigationGoal(position=rand_goal_1, radius=0.3))
+        # kwargs["episode"].goals.insert(1, NavigationGoal(position=rand_goal_2, radius=0.3))
+        # print('KWARGS GOAL POS AFTER:', kwargs["episode"])
+
+        rand_tilt = np.random.uniform(
+                self.min_rand_pitch, self.max_rand_pitch
+            )
+
+        left_ori = self.left_orig_ori + np.array([rand_tilt, 0, 0])
+        right_ori = self.right_orig_ori + np.array([rand_tilt, 0, 0])
+        self.set_camera_ori(left_ori, right_ori)
+
         self.robot.reset(agent_pos, agent_rot)
+        self.prev_rs = self._sim.pathfinder.snap_point(agent_pos)
+
+    def set_camera_ori(self, left_ori, right_ori):
+        # left ori and right ori is a np.array[(pitch, yaw, roll)]
+        if self._sim._sensors.get("spot_right_depth", False):
+            right_depth_sensor = self._sim._sensors["spot_right_depth"]
+            left_depth_sensor = self._sim._sensors["spot_left_depth"]
+
+            # curr_right_ori = right_depth_sensor._spec.orientation.copy()
+            # curr_left_ori = left_depth_sensor._spec.orientation.copy()
+            right_depth_sensor._spec.orientation = (right_ori)
+            right_depth_sensor._sensor_object.set_transformation_from_spec()
+
+            left_depth_sensor._spec.orientation = (left_ori)
+            left_depth_sensor._sensor_object.set_transformation_from_spec()
+
+    def get_camera_ori(self):
+        if self._sim._sensors.get("spot_right_depth", False):
+            right_depth_sensor = self._sim._sensors["spot_right_depth"]
+            left_depth_sensor = self._sim._sensors["spot_left_depth"]
+
+            curr_right_ori = right_depth_sensor._spec.orientation.copy()
+            curr_left_ori = left_depth_sensor._spec.orientation.copy()
+            return curr_left_ori, curr_right_ori
+
+    def append_text_to_image(self, image, lines):
+        """
+        Parameters:
+            image: (np.array): The frame to add the text to.
+            lines (list):
+        Returns:
+            image: (np.array): The modified image with the text appended.
+        """
+        font_size = 0.5
+        font_thickness = 1
+        font = cv2.FONT_HERSHEY_SIMPLEX
+
+        y = 0
+        image_copy = image.copy()
+        for line in lines:
+            textsize = cv2.getTextSize(line, font, font_size, font_thickness)[
+                0
+            ]
+            y += textsize[1] + 10
+            x = 10
+            for font_thickness, color in [
+                (4, (0, 0, 0)),
+                (1, (255, 255, 255)),
+            ]:
+                cv2.putText(
+                    image_copy,
+                    line,
+                    (x, y),
+                    font,
+                    font_size,
+                    color,
+                    font_thickness,
+                    lineType=cv2.LINE_AA,
+                )
+        return image_copy
+
+    def put_text(self, task, agent_observations, lin_vel, hor_vel, ang_vel):
+        try:
+            robot_rigid_state = self.robot.robot_id.rigid_state
+            img = np.copy(agent_observations["rgb"])
+            vel_text = "x: {:.2f}, y: {:.2f}, t: {:.2f}".format(
+                lin_vel, hor_vel, ang_vel
+            )
+            robot_pos_text = "p: {:.2f}, {:.2f}, {:.2f}".format(
+                robot_rigid_state.translation.x,
+                robot_rigid_state.translation.y,
+                robot_rigid_state.translation.z,
+            )
+            rot_quat = np.array([robot_rigid_state.rotation.scalar, *robot_rigid_state.rotation.vector])
+            r = R.from_quat(rot_quat)
+            scipy_rpy = r.as_euler('xzy', degrees=True)
+
+            # rpy = np.rad2deg(get_rpy(robot_rigid_state.rotation))
+            rpy = np.rad2deg(euler_from_quaternion(robot_rigid_state.rotation))
+            robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}, {:.2f}".format(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+            # robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}".format(
+            #     scipy_rpy[0],
+            #     scipy_rpy[1],
+            #     scipy_rpy[2],
+            # )
+            dist_to_goal_text = "Dist2Goal: {:.2f}".format(
+                task.measurements.measures["distance_to_goal"].get_metric()
+            )
+
+            lines = [
+                vel_text,
+                robot_pos_text,
+                robot_rot_text,
+                dist_to_goal_text,
+            ]
+            agent_observations["rgb"] = self.append_text_to_image(img, lines)
+        except:
+            pass
 
     def step(
         self,
@@ -1211,10 +1460,17 @@ class VelocityAction(SimulatorTaskAction):
         hor_vel = (hor_vel + 1.0) / 2.0
 
         # Scale actions
-        lin_vel = self.min_lin_vel + lin_vel * (self.max_lin_vel - self.min_lin_vel)
-        ang_vel = self.min_ang_vel + ang_vel * (self.max_ang_vel - self.min_ang_vel)
+        lin_vel = self.min_lin_vel + lin_vel * (
+            self.max_lin_vel - self.min_lin_vel
+        )
+        ang_vel = self.min_ang_vel + ang_vel * (
+            self.max_ang_vel - self.min_ang_vel
+        )
         ang_vel = np.deg2rad(ang_vel)
-        hor_vel = self.min_hor_vel + hor_vel * (self.max_hor_vel - self.min_hor_vel)
+        hor_vel = self.min_hor_vel + hor_vel * (
+            self.max_hor_vel - self.min_hor_vel
+        )
+
         called_stop = (
             abs(lin_vel) < self.min_abs_lin_speed
             and abs(ang_vel) < self.min_abs_ang_speed
@@ -1232,6 +1488,8 @@ class VelocityAction(SimulatorTaskAction):
                 position=None,
                 rotation=None,
             )
+        if not self.has_hor_vel:
+            hor_vel = 0.0
         self.vel_control.linear_velocity = np.array([-hor_vel, 0.0, -lin_vel])
         self.vel_control.angular_velocity = np.array([0.0, ang_vel, 0.0])
 
@@ -1249,6 +1507,84 @@ class VelocityAction(SimulatorTaskAction):
         goal_rigid_state = self.vel_control.integrate_transform(
             time_step, current_rigid_state
         )
+
+        # snap goal state to height at navmesh
+        snapped_goal_rigid_state = self._sim.pathfinder.snap_point(goal_rigid_state.translation)
+        goal_rigid_state.translation.x = snapped_goal_rigid_state.x
+        goal_rigid_state.translation.y = snapped_goal_rigid_state.y
+        goal_rigid_state.translation.z = snapped_goal_rigid_state.z
+
+        # # calculate new pitch of robot
+        rpy = euler_from_quaternion(goal_rigid_state.rotation)
+        yaw = wrap_heading(rpy[-1])
+        t_mat = np.array(
+            [
+                [np.cos(yaw), -np.sin(yaw), goal_rigid_state.translation.x],
+                [np.sin(yaw), np.cos(yaw), goal_rigid_state.translation.y],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+
+        front = t_mat.dot(np.array([-2.0, 0.0, 1.0]))
+        back = t_mat.dot(np.array([2.0, 0.0, 1.0]))
+
+        front = front / front[-1]
+        front[-1] = goal_rigid_state.translation.z
+
+        back = back / back[-1]
+        back[-1] = goal_rigid_state.translation.z
+        # back = np.array([*back[:2], goal_rigid_state.translation.z])
+
+        front_snap = self._sim.pathfinder.snap_point(front)
+        back_snap = self._sim.pathfinder.snap_point(back)
+
+        z_diff = front_snap.z - back_snap.z
+
+        front_xy = np.array([front_snap.x, front_snap.y])
+        back_xy = np.array([back_snap.x, back_snap.y])
+
+        xy_diff = np.linalg.norm(front_xy - back_xy)
+
+        pitch = np.arctan2(z_diff,xy_diff)
+
+        robot_T_agent_pitch_offset = mn.Matrix4.rotation_x(
+            mn.Rad(-pitch)
+        )
+
+        if self.min_rand_pitch == 0.0 and self.max_rand_pitch == 0.0:
+            left_ori = self.left_orig_ori + np.array([-pitch, 0.0, 0.0])
+            right_ori = self.right_orig_ori + np.array([-pitch, 0.0, 0.0])
+            self.set_camera_ori(left_ori, right_ori)
+
+        # goal_mn_quat = mn.Quaternion(
+        #     goal_rigid_state.rotation.vector, goal_rigid_state.rotation.scalar
+        # )
+        # agent_T_global = mn.Matrix4.from_(
+        #     goal_mn_quat.to_matrix(), goal_rigid_state.translation
+        # )
+
+        # robot_T_global_pitch = robot_T_agent_pitch_offset @ agent_T_global
+        # print('robot_T_global_pitch: ', robot_T_global_pitch)
+        # self.robot.robot_id.transformation = robot_T_global_pitch
+
+        # r = np.linalg.norm(np.array([*goal_rigid_state.translation]) - np.array([*self.prev_rs]))
+        # proj_rs = goal_rigid_state
+        # proj_rs.translation.y = self.prev_rs.y
+        # x = np.linalg.norm(np.array([*proj_rs.translation]) - np.array([*self.prev_rs]))
+        # pitch = np.arccos(x/r)
+        # # set goal rotation to pitch robot
+        # rot_quat = np.array([goal_rigid_state.rotation.scalar, *goal_rigid_state.rotation.vector])
+        # r = R.from_quat(rot_quat)
+        # scipy_rpy = r.as_euler('xzy', degrees=True)
+        # scipy_rpy[1] = -np.rad2deg(pitch)
+        # # scipy_rpy[1] = -60.0
+        # r = R.from_euler('xzy', [*scipy_rpy], degrees=True)
+        # new_rot = r.as_quat()
+        # goal_rigid_state.rotation.scalar = new_rot[0]
+        # goal_rigid_state.rotation.vector = mn.Vector3(new_rot[1:])
+        # print('robot ori: ', scipy_rpy)
+
+        # self.set_camera_ori(0, pitch, 0.0)
 
         """Check if point is on navmesh"""
         final_position = self._sim.pathfinder.try_step_no_sliding(  # type: ignore
@@ -1279,6 +1615,8 @@ class VelocityAction(SimulatorTaskAction):
                 agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
+            self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
+            self.prev_rs = goal_rigid_state.translation
             return agent_observations
 
         """Rotate robot to match the orientation of the agent"""
@@ -1288,39 +1626,41 @@ class VelocityAction(SimulatorTaskAction):
         agent_T_global = mn.Matrix4.from_(
             goal_mn_quat.to_matrix(), goal_rigid_state.translation
         )
+
         robot_T_agent_rot_offset = mn.Matrix4.rotation(
             mn.Rad(0.0), mn.Vector3((1.0, 0.0, 0.0))
         ).rotation()
+        # robot_T_agent_rot_offset = .rotation()
         robot_translation_offset = mn.Vector3(self.robot.robot_spawn_offset)
+
         robot_T_agent = mn.Matrix4.from_(
             robot_T_agent_rot_offset, robot_translation_offset
         )
         robot_T_global = robot_T_agent @ agent_T_global
-        robot_global_rotation_offset = mn.Matrix4.rotation(
-            mn.Rad(-np.pi / 2.0),
-            mn.Vector3((1.0, 0.0, 0.0)),
-        ) @ mn.Matrix4.rotation(
-            mn.Rad(np.pi / 2.0),
-            mn.Vector3((0.0, 0.0, 1.0)),
-        )
-        robot_T_global = robot_T_global @ robot_global_rotation_offset
+        # pitch robot afterwards to correct for slope changes
+        robot_T_global = robot_T_global @ robot_T_agent_pitch_offset
         self.robot.robot_id.transformation = robot_T_global
-
+        
         """See if goal state causes interpenetration with surroundings"""
-        collided = self._sim.contact_test(self.robot.robot_id.object_id)
-        if collided:
-            self.robot.robot_id.transformation = curr_rs
-            agent_observations = self._sim.get_observations_at()
-            self._sim._prev_sim_obs["collided"] = True  # type: ignore
-            agent_observations["hit_navmesh"] = True
-            agent_observations["moving_backwards"] = False
-            agent_observations["moving_sideways"] = False
-            agent_observations["ang_accel"] = 0.0
-            if kwargs.get("num_steps", -1) != -1:
-                agent_observations["num_steps"] = kwargs["num_steps"]
+        if self.use_contact_test:
+            collided = self._sim.contact_test(self.robot.robot_id.object_id)
+            if collided:
+                self.robot.robot_id.transformation = curr_rs
+                agent_observations = self._sim.get_observations_at()
+                self._sim._prev_sim_obs["collided"] = True  # type: ignore
+                agent_observations["hit_navmesh"] = True
+                agent_observations["moving_backwards"] = False
+                agent_observations["moving_sideways"] = False
+                agent_observations["ang_accel"] = 0.0
+                if kwargs.get("num_steps", -1) != -1:
+                    agent_observations["num_steps"] = kwargs["num_steps"]
 
-            self.prev_ang_vel = 0.0
-            return agent_observations
+                self.prev_ang_vel = 0.0
+                self.put_text(
+                    task, agent_observations, lin_vel, hor_vel, ang_vel
+                )
+                self.prev_rs = goal_rigid_state.translation
+                return agent_observations
 
         final_rotation = [
             *goal_rigid_state.rotation.vector,
@@ -1336,12 +1676,18 @@ class VelocityAction(SimulatorTaskAction):
         self._sim._prev_sim_obs["collided"] = collided  # type: ignore
         agent_observations["hit_navmesh"] = collided
         agent_observations["moving_backwards"] = lin_vel < 0
-        agent_observations["moving_sideways"] = abs(hor_vel) > self.min_abs_hor_speed
-        agent_observations["ang_accel"] = (ang_vel - self.prev_ang_vel) / self.time_step
+        agent_observations["moving_sideways"] = (
+            abs(hor_vel) > self.min_abs_hor_speed
+        )
+        agent_observations["ang_accel"] = (
+            ang_vel - self.prev_ang_vel
+        ) / self.time_step
         if kwargs.get("num_steps", -1) != -1:
             agent_observations["num_steps"] = kwargs["num_steps"]
 
         self.prev_ang_vel = ang_vel
+        self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
+        self.prev_rs = goal_rigid_state.translation
         return agent_observations
 
 
@@ -1418,10 +1764,16 @@ class DynamicVelocityAction(VelocityAction):
         hor_vel = (hor_vel + 1.0) / 2.0
 
         # Scale actions
-        lin_vel = self.min_lin_vel + lin_vel * (self.max_lin_vel - self.min_lin_vel)
-        ang_vel = self.min_ang_vel + ang_vel * (self.max_ang_vel - self.min_ang_vel)
+        lin_vel = self.min_lin_vel + lin_vel * (
+            self.max_lin_vel - self.min_lin_vel
+        )
+        ang_vel = self.min_ang_vel + ang_vel * (
+            self.max_ang_vel - self.min_ang_vel
+        )
         ang_vel = np.deg2rad(ang_vel)
-        hor_vel = self.min_hor_vel + hor_vel * (self.max_hor_vel - self.min_hor_vel)
+        hor_vel = self.min_hor_vel + hor_vel * (
+            self.max_hor_vel - self.min_hor_vel
+        )
 
         called_stop = (
             abs(lin_vel) < self.min_abs_lin_speed
@@ -1462,7 +1814,9 @@ class DynamicVelocityAction(VelocityAction):
             self.raibert_controller.update_latent_action(state, latent_action)
 
             for j in range(self.time_per_step):
-                raibert_action = self.raibert_controller.get_action(state, j + 1)
+                raibert_action = self.raibert_controller.get_action(
+                    state, j + 1
+                )
                 self.robot.set_pose_jms(
                     raibert_action[self.robot.gibson_mapping], False
                 )
@@ -1496,8 +1850,12 @@ class DynamicVelocityAction(VelocityAction):
 
         # TODO: Make a better way to flag collisions
         agent_observations["moving_backwards"] = lin_vel < 0
-        agent_observations["moving_sideways"] = abs(hor_vel) > self.min_abs_hor_speed
-        agent_observations["ang_accel"] = (ang_vel - self.prev_ang_vel) / self.dt
+        agent_observations["moving_sideways"] = (
+            abs(hor_vel) > self.min_abs_hor_speed
+        )
+        agent_observations["ang_accel"] = (
+            ang_vel - self.prev_ang_vel
+        ) / self.dt
 
         if kwargs.get("num_steps", -1) != -1:
             agent_observations["num_steps"] = kwargs["num_steps"]
@@ -1607,7 +1965,9 @@ class SpotDepthSensor(HabitatSimDepthSensor):
     def get_observation(self, sim_obs):
         obs = sim_obs.get(self.uuid, None)
         assert isinstance(obs, np.ndarray)
-        obs[obs > self.config.MAX_DEPTH] = 0.0  # Spot blacks out far pixels
+        # obs[obs > self.config.MAX_DEPTH] = 0.0  # Make far pixels white
+        obs[obs > self.config.MAX_DEPTH] = 255.0  # Make far pixels white
+        obs[obs == 0] = 255.0  # Make inf values white
         obs = np.clip(obs, self.config.MIN_DEPTH, self.config.MAX_DEPTH)
         obs = cv2.resize(obs, (128, 256))
 
@@ -1631,3 +1991,38 @@ class SpotLeftDepthSensor(SpotDepthSensor):
 class SpotRightDepthSensor(SpotDepthSensor):
     def _get_uuid(self, *args, **kwargs):
         return "spot_right_depth"
+
+
+@registry.register_sensor
+class SpotSurfaceNormalSensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "surface_normals"
+
+    ## Hack to get Spot cameras resized to 256,256 after concatenation
+    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
+        return spaces.Box(
+            low=0,
+            high=2,
+            shape=(256, 256, 3),
+            dtype=np.float32,
+        )
+
+    def get_observation(self, sim_obs):
+        left_depth_obs = sim_obs.get("spot_left_depth", None)
+        right_depth_obs = sim_obs.get("spot_right_depth", None)
+
+        depth_obs = np.concatenate(
+            [
+                # Spot is cross-eyed; right is on the left on the FOV
+                right_depth_obs,
+                left_depth_obs,
+            ],
+            axis=1,
+        )
+
+        depth_obs = depth_obs.reshape(1, 1, *depth_obs.shape[:2])
+        sn = depth_to_surface_normals(torch.from_numpy(depth_obs))
+        sn = sn.squeeze(0)
+        sn = sn.permute(1, 2, 0)  # CHW => HWC
+        # sn = sn.permute((0, 3, 1, 2))  # NHWC => NCHW
+        return sn

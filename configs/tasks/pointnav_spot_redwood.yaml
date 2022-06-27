@@ -1,5 +1,6 @@
-NVIRONMENT:
-  MAX_EPISODE_STEPS: 150
+SEED: 100
+ENVIRONMENT:
+  MAX_EPISODE_STEPS: 500
   CURRICULUM: False
 SIMULATOR:
   AGENT_0:
@@ -8,6 +9,12 @@ SIMULATOR:
     RADIUS: 0.3
   HABITAT_SIM_V0:
     ALLOW_SLIDING: False
+  RGB_SENSOR:
+    WIDTH: 256
+    HEIGHT: 256
+    HFOV: 70
+    ORIENTATION: [ -0.7, 0.0, 0.0 ]
+    POSITION: [ 0.0, 1.1, 1.0 ]
   SPOT_LEFT_GRAY_SENSOR:
     TYPE: "SpotLeftGraySensor"
     WIDTH: 120
@@ -30,8 +37,11 @@ SIMULATOR:
     ORIENTATION: [ -0.4415683, -0.57648225, 0.270526 ]  # Euler's angles (pitch yaw roll)
     POSITION: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]
     MAX_DEPTH: 3.5
-    MIN_DEPTH: 0.0
+    MIN_DEPTH: 0.3
     NORMALIZE_DEPTH: True
+    NOISE_MODEL: "RedwoodDepthNoiseModel"
+    NOISE_MODEL_KWARGS:
+      noise_multiplier: 2.0
   SPOT_RIGHT_DEPTH_SENSOR:
     TYPE: "SpotRightDepthSensor"
     WIDTH: 120
@@ -40,15 +50,18 @@ SIMULATOR:
     ORIENTATION: [ -0.4415683, 0.57648225, -0.270526 ]  # Euler's angles
     POSITION: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]
     MAX_DEPTH: 3.5
-    MIN_DEPTH: 0.0
+    MIN_DEPTH: 0.3
     NORMALIZE_DEPTH: True
+    NOISE_MODEL: "RedwoodDepthNoiseModel"
+    NOISE_MODEL_KWARGS:
+      noise_multiplier: 2.0
   SPOT_SURFACE_NORMAL_SENSOR:
     TYPE: "SpotSurfaceNormalSensor"
     WIDTH: 256
     HEIGHT: 256
 TASK:
   TYPE: Nav-v0
-  ROBOT: 'Spot'
+  ROBOT: "Spot"
   SUCCESS_DISTANCE: 0.375
 
   SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR']
@@ -67,9 +80,9 @@ TASK:
       MIN_ABS_LIN_SPEED: 0.035
       MIN_ABS_ANG_SPEED: 1.0
       LIN_VEL_RANGE: [ -0.5, 0.5 ]  # meters per sec
-      ANG_VEL_RANGE: [ -30.0, 30.0 ]  # deg per sec
+      ANG_VEL_RANGE: [ -40.0, 40.0 ]  # deg per sec
       HOR_VEL_RANGE: [ -0.5, 0.5 ] # meters per sec
-      ROBOT_URDF: /coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf
+      ROBOT_URDF: "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
 
   MEASUREMENTS: ['DISTANCE_TO_GOAL', 'EPISODE_DISTANCE', 'SUCCESS', 'SPL', 'COLLISIONS']
   SUCCESS:

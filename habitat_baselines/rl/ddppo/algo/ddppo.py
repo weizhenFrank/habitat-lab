@@ -7,10 +7,9 @@
 from typing import Tuple
 
 import torch
-from torch import distributed as distrib
-
 from habitat_baselines.common.rollout_storage import RolloutStorage
 from habitat_baselines.rl.ppo import PPO
+from torch import distributed as distrib
 
 EPS_PPO = 1e-5
 
@@ -56,15 +55,24 @@ class _EvalActionsWrapper(torch.nn.Module):
         return self.actor_critic.evaluate_actions(*args, **kwargs)
 
 
+class _AfterStepWrapper(torch.nn.Module):
+    r"""Wrapper on evaluate_actions that allows that to be called from forward.
+    This is needed to interface with DistributedDataParallel's forward call
+    """
+
+    def __init__(self, actor_critic):
+        super().__init__()
+        self.actor_critic = actor_critic
+
+    def forward(self):
+        return self.actor_critic.after_step()
+
+
 class DecentralizedDistributedMixin:
-    def _get_advantages_distributed(
-        self, rollouts: RolloutStorage
-    ) -> torch.Tensor:
+    def _get_advantages_distributed(self, rollouts: RolloutStorage) -> torch.Tensor:
         advantages = (
             rollouts.buffers["returns"][: rollouts.current_rollout_step_idx]
-            - rollouts.buffers["value_preds"][
-                : rollouts.current_rollout_step_idx
-            ]
+            - rollouts.buffers["value_preds"][: rollouts.current_rollout_step_idx]
         )
         if not self.use_normalized_advantage:  # type: ignore
             return advantages
@@ -113,6 +121,43 @@ class DecentralizedDistributedMixin:
         return self._evaluate_actions_wrapper.ddp(
             observations, rnn_hidden_states, prev_actions, masks, action
         )
+
+
+class OutdoorDecentralizedDistributedMixin:
+    def init_distributed(self, find_unused_params: bool = True) -> None:
+        r"""Initializes distributed training for the model
+
+        1. Broadcasts the model weights from world_rank 0 to all other workers
+        2. Adds gradient hooks to the model
+
+        :param find_unused_params: Whether or not to filter out unused parameters
+                                   before gradient reduction.  This *must* be True if
+                                   there are any parameters in the model that where unused in the
+                                   forward pass, otherwise the gradient reduction
+                                   will not work correctly.
+        """
+        # NB: Used to hide the hooks from the nn.Module,
+        # so they don't show up in the state_dict
+        class Guard:
+            def __init__(self, model, device):
+                if torch.cuda.is_available():
+                    self.ddp = torch.nn.parallel.DistributedDataParallel(
+                        model,
+                        device_ids=[device],
+                        output_device=device,
+                        find_unused_parameters=find_unused_params,
+                    )
+                else:
+                    self.ddp = torch.nn.parallel.DistributedDataParallel(
+                        model,
+                        find_unused_parameters=find_unused_params,
+                    )
+
+        self._evaluate_actions_wrapper = Guard(_EvalActionsWrapper(self.actor_critic), self.device)  # type: ignore
+        self._after_step_wrapper = Guard(_AfterStepWrapper(self.actor_critic), self.device)  # type: ignore
+
+    def after_step(self):
+        return self._after_step_wrapper.ddp()
 
 
 class DDPPO(DecentralizedDistributedMixin, PPO):

@@ -22,19 +22,42 @@ parser.add_argument("experiment_name")
 # Training
 parser.add_argument("-sd", "--seed", type=int, default=100)
 parser.add_argument("-r", "--robot", default="Spot")
-parser.add_argument("-c", "--control-type", required=True)
+parser.add_argument("-c", "--control-type", default="kinematic")
 parser.add_argument("-p", "--partition", default="long")
+parser.add_argument("-s", "--sliding", default=False, action="store_true")
+parser.add_argument("-nct", "--no-contact-test", default=False, action="store_true")
+parser.add_argument("-nhv", "--no-hor-vel", default=False, action="store_true")
+parser.add_argument("-cp", "--collision-penalty", type=float, default=0.03)
+parser.add_argument("-bp", "--backwards-penalty", type=float, default=0.03)
+parser.add_argument("-ap", "--acc-penalty", type=float, default=0.0)
+parser.add_argument("-vy", "--velocity-y", type=float, default=-1.0)
+parser.add_argument("-rpl", "--randomize-pitch-min", type=float, default=0.0)
+parser.add_argument("-rpu", "--randomize-pitch-max", type=float, default=0.0)
+parser.add_argument("-ts", "--time-step", type=float, default=1.0)
+parser.add_argument("-odn", "--outdoor-nav", default=False, action="store_true")
+parser.add_argument("--constraint", default="x")
+
 ## options for dataset are hm3d_gibson, hm3d, gibson
+parser.add_argument("--policy-name", default="PointNavResNetPolicy")
 parser.add_argument("-ds", "--dataset", default="hm3d_gibson")
+parser.add_argument("-ne", "--num_environments", type=int, default=24)
+parser.add_argument("-ngpu", "--num_gpus", type=int, default=8)
+
 parser.add_argument("-g", "--use_gray", default=False, action="store_true")
 parser.add_argument("-gd", "--use_gray_depth", default=False, action="store_true")
-parser.add_argument("-o", "--outdoor", default=False, action="store_true")
 parser.add_argument("--coda", default=False, action="store_true")
 
-parser.add_argument("-nre", "--no_roll_eyes", default=False, action="store_true")
+parser.add_argument("--splitnet", default=False, action="store_true")
+parser.add_argument("-sn", "--surface_normal", default=False, action="store_true")
+parser.add_argument("-ve", "--visual-encoder", default="resnet")
+parser.add_argument("-ml", "--motion_loss", default=False, action="store_true")
+
 parser.add_argument("-2cnn", "--two_cnns", default=False, action="store_true")
 
 parser.add_argument("-pn", "--pepper_noise", default=False, action="store_true")
+parser.add_argument("-rn", "--redwood_noise", default=False, action="store_true")
+parser.add_argument("-mb", "--median_blur", default=False, action="store_true")
+parser.add_argument("-ks", "--kernel_size", type=float, default=9)
 parser.add_argument("-np", "--noise_percent", type=float, default=0.4)
 parser.add_argument("-cn", "--cutout_noise", default=False, action="store_true")
 parser.add_argument("-curr", "--curriculum", default=False, action="store_true")
@@ -49,8 +72,15 @@ parser.add_argument("-x", default=False, action="store_true")
 parser.add_argument("--ext", default="")
 args = parser.parse_args()
 
-EXP_YAML = "habitat_baselines/config/pointnav/ddppo_pointnav_spot.yaml"
-TASK_YAML = "configs/tasks/pointnav_spot.yaml"
+if args.splitnet:
+    EXP_YAML = "habitat_baselines/config/pointnav/ddppo_pointnav_spot_splitnet.yaml"
+else:
+    EXP_YAML = "habitat_baselines/config/pointnav/ddppo_pointnav_spot.yaml"
+
+if args.redwood_noise:
+    TASK_YAML = "configs/tasks/pointnav_spot_redwood.yaml"
+else:
+    TASK_YAML = "configs/tasks/pointnav_spot.yaml"
 
 experiment_name = args.experiment_name
 
@@ -63,28 +93,35 @@ task_yaml_path = os.path.join(HABITAT_LAB, TASK_YAML)
 new_task_yaml_path = os.path.join(dst_dir, os.path.basename(task_yaml_path))
 new_exp_yaml_path = os.path.join(dst_dir, os.path.basename(exp_yaml_path))
 
-exp_name = "_{}".format(args.control_type)
+exp_name = f"_{args.control_type}"
 
 if args.eval:
     exp_name += "_eval"
 if args.ckpt != -1:
-    exp_name += "_ckpt_{}".format(args.ckpt)
-    eval_dst_dir += "_ckpt_{}".format(args.ckpt)
+    exp_name += f"_ckpt_{args.ckpt}"
+    eval_dst_dir += f"_ckpt_{args.ckpt}"
 if args.video:
     exp_name += "_video"
     eval_dst_dir += "_video"
 if args.ext != "":
     exp_name += "_" + args.ext
     eval_dst_dir += "_" + args.ext
-if args.outdoor:
-    exp_name += "_ferst"
-    eval_dst_dir += "_ferst"
-if args.dataset == "coda":
-    exp_name += "_coda"
-    eval_dst_dir += "_coda"
+if args.dataset != "hm3d_gibson":
+    exp_name += f"_{args.dataset}"
+    eval_dst_dir += f"_{args.dataset}"
 if args.pepper_noise:
-    exp_name += "_pepper_noise_{}".format(args.noise_percent)
-    eval_dst_dir += "_pepper_noise_{}".format(args.noise_percent)
+    exp_name += f"_pepper_noise_{args.noise_percent}"
+    eval_dst_dir += f"_pepper_noise_{args.noise_percent}"
+if args.redwood_noise:
+    exp_name += f"_redwood_noise_{args.noise_percent}"
+    eval_dst_dir += f"_redwood_noise_{args.noise_percent}"
+if args.median_blur:
+    exp_name += f"_median_blur_{args.kernel_size}"
+    eval_dst_dir += f"_median_blur_{args.kernel_size}"
+if args.sliding:
+    eval_dst_dir += f"_sliding"
+if args.no_contact_test:
+    eval_dst_dir += f"_no_contact_test"
 
 new_eval_task_yaml_path = (
     os.path.join(eval_dst_dir, os.path.basename(task_yaml_path)).split(".yaml")[0]
@@ -101,7 +138,7 @@ robot_urdfs_dict = {
     "A1": "/coc/testnvme/jtruong33/data/URDF_demo_assets/a1/a1.urdf",
     "AlienGo": "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf",
     "Daisy": "/coc/testnvme/jtruong33/data/URDF_demo_assets/daisy/daisy_advanced_akshara.urdf",
-    "Spot": "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf",
+    "Spot": "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid_rot_fix.urdf",
     "Locobot": "/coc/testnvme/jtruong33/data/URDF_demo_assets/locobot/urdf/locobot_description2.urdf",
 }
 
@@ -124,11 +161,9 @@ robot_radius = robot_radius_dict[robot]
 if not args.eval:
     # Create directory
     if os.path.isdir(dst_dir):
-        response = input(
-            "'{}' already exists. Delete or abort? [d/A]: ".format(dst_dir)
-        )
+        response = input(f"'{dst_dir}' already exists. Delete or abort? [d/A]: ")
         if response == "d":
-            print("Deleting {}".format(dst_dir))
+            print(f"Deleting {dst_dir}")
             shutil.rmtree(dst_dir)
         else:
             print("Aborting.")
@@ -148,50 +183,97 @@ if not args.eval:
 
     for idx, i in enumerate(task_yaml_data):
         if i.startswith("  CURRICULUM:"):
-            task_yaml_data[idx] = "  CURRICULUM: {}".format(args.curriculum)
-        elif i.startswith("    ORIENTATION: [ -0.4415683, -0.57648225, 0.270526 ]"):
-            if args.no_roll_eyes:
-                task_yaml_data[
-                    idx
-                ] = "    ORIENTATION: [ -0.4415683, -0.57648225, 0.0 ]"
-        elif i.startswith("    ORIENTATION: [ -0.4415683, 0.57648225, -0.270526 ]"):
-            if args.no_roll_eyes:
-                task_yaml_data[idx] = "    ORIENTATION: [ -0.4415683, 0.57648225, 0.0 ]"
+            task_yaml_data[idx] = f"  CURRICULUM: {args.curriculum}"
         elif i.startswith("    RADIUS:"):
-            task_yaml_data[idx] = "    RADIUS: {}".format(robot_radius)
+            task_yaml_data[idx] = f"    RADIUS: {robot_radius}"
         elif i.startswith("  ROBOT:"):
-            task_yaml_data[idx] = "  ROBOT: '{}'".format(robot)
+            task_yaml_data[idx] = f"  ROBOT: '{robot}'"
         elif i.startswith("      ROBOT_URDF:"):
-            task_yaml_data[idx] = "      ROBOT_URDF: {}".format(robot_urdf)
+            task_yaml_data[idx] = f"      ROBOT_URDF: {robot_urdf}"
         elif i.startswith("  POSSIBLE_ACTIONS:"):
             if args.control_type == "dynamic":
                 control_type = "DYNAMIC_VELOCITY_CONTROL"
             else:
                 control_type = "VELOCITY_CONTROL"
-            task_yaml_data[idx] = '  POSSIBLE_ACTIONS: ["{}"]'.format(control_type)
+            task_yaml_data[idx] = f'  POSSIBLE_ACTIONS: ["{control_type}"]'
         elif i.startswith("    VELOCITY_CONTROL:"):
             if args.control_type == "dynamic":
                 task_yaml_data[idx] = "    DYNAMIC_VELOCITY_CONTROL:"
         elif i.startswith("    DYNAMIC_VELOCITY_CONTROL:"):
             if not args.control_type == "dynamic":
                 task_yaml_data[idx] = "    VELOCITY_CONTROL:"
+        elif i.startswith("      HOR_VEL_RANGE:"):
+            if args.velocity_y != -1.0:
+                task_yaml_data[
+                    idx
+                ] = f"      HOR_VEL_RANGE: [ {-args.velocity_y, -args.velocity_y} ]"
+            if args.no_hor_vel:
+                task_yaml_data[idx] = "      HOR_VEL_RANGE: [ 0.0, 0.0 ]"
+        elif i.startswith("      MIN_RAND_PITCH:"):
+            task_yaml_data[idx] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
+        elif i.startswith("      MAX_RAND_PITCH:"):
+            task_yaml_data[idx] = f"      MAX_RAND_PITCH: {args.randomize_pitch_max}"
         elif i.startswith("      TIME_STEP:"):
+            task_yaml_data[idx] = f"      TIME_STEP: {args.time_step}"
             if args.control_type == "dynamic":
                 task_yaml_data[idx] = "      TIME_STEP: 0.33"
         elif i.startswith("  SUCCESS_DISTANCE:"):
-            task_yaml_data[idx] = "  SUCCESS_DISTANCE: {}".format(succ_radius - 0.05)
+            task_yaml_data[idx] = f"  SUCCESS_DISTANCE: {succ_radius - 0.05}"
         elif i.startswith("    SUCCESS_DISTANCE:"):
-            task_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(succ_radius - 0.05)
+            task_yaml_data[idx] = f"    SUCCESS_DISTANCE: {succ_radius - 0.05}"
         elif i.startswith("SEED:"):
-            task_yaml_data[idx] = "SEED: {}".format(args.seed)
+            task_yaml_data[idx] = f"SEED: {args.seed}"
         elif i.startswith("  DATA_PATH:"):
-            if args.outdoor:
+            if args.dataset == "ferst":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/{split}/{split}.json.gz"
-                task_yaml_data[idx] = "  DATA_PATH: {}".format(data_path)
-            if args.dataset == "coda":
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test/coda_spot_test.json.gz"
-                task_yaml_data[idx] = "  DATA_PATH: {}".format(data_path)
-
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_5m_straight":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_5m/coda_spot_test_straight_5m.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_6m_straight":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_6m/coda_spot_test_straight_6m.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_7m_straight":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_7m/coda_spot_test_straight_7m.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_8m_straight":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_8m/coda_spot_test_straight_8m.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_9m_straight":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_9m/coda_spot_test_straight_9m.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_10m_straight":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_10m/coda_spot_test_straight_10m.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_lobby":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_lobby/coda_lobby.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_lobby_hard":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_lobby_hard/coda_lobby_hard.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "ny":
+                data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "hm3d_gibson_0.5":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson/pointnav_spot_0.5/{split}/{split}.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "ny_uf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson_ny_unfurnished/{split}/{split}.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "uf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_spot_unfurnished/train/content/{split}/{split}.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "hm3d_mf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor/{split}/{split}.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "hm3d_mf_uf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_mf_unfurnished/{split}/{split}.json.gz"
+                task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+        elif i.startswith("      noise_multiplier:"):
+            task_yaml_data[idx] = f"      noise_multiplier: {args.noise_percent}"
     with open(new_task_yaml_path, "w") as f:
         f.write("\n".join(task_yaml_data))
     print("Created " + new_task_yaml_path)
@@ -202,21 +284,22 @@ if not args.eval:
 
     for idx, i in enumerate(exp_yaml_data):
         if i.startswith("BASE_TASK_CONFIG_PATH:"):
-            exp_yaml_data[idx] = "BASE_TASK_CONFIG_PATH: '{}'".format(
-                new_task_yaml_path
-            )
+            exp_yaml_data[idx] = f"BASE_TASK_CONFIG_PATH: '{new_task_yaml_path}'"
         elif i.startswith("TOTAL_NUM_STEPS:"):
             max_num_steps = 5e8 if args.control_type == "kinematic" else 5e7
-            exp_yaml_data[idx] = "TOTAL_NUM_STEPS: {}".format(max_num_steps)
+            exp_yaml_data[idx] = f"TOTAL_NUM_STEPS: {max_num_steps}"
         elif i.startswith("TENSORBOARD_DIR:"):
-            exp_yaml_data[idx] = "TENSORBOARD_DIR:    '{}'".format(
-                os.path.join(dst_dir, "tb")
-            )
+            exp_yaml_data[idx] = f"TENSORBOARD_DIR:    '{os.path.join(dst_dir, 'tb')}'"
         elif i.startswith("NUM_ENVIRONMENTS:"):
-            if args.use_gray or args.use_gray_depth:
-                exp_yaml_data[idx] = "NUM_ENVIRONMENTS: 8"
-            if args.outdoor or args.dataset == "coda":
+            exp_yaml_data[idx] = f"NUM_ENVIRONMENTS: {args.num_environments}"
+            if "ferst" in args.dataset or "coda" in args.dataset:
                 exp_yaml_data[idx] = "NUM_ENVIRONMENTS: 1"
+        elif i.startswith("  COLLISION_PENALTY:"):
+            exp_yaml_data[idx] = f"  COLLISION_PENALTY: {args.collision_penalty}"
+        elif i.startswith("  BACKWARDS_PENALTY:"):
+            exp_yaml_data[idx] = f"  BACKWARDS_PENALTY: {args.backwards_penalty}"
+        elif i.startswith("  ANG_ACCEL_PENALTY_COEFF:"):
+            exp_yaml_data[idx] = f"  ANG_ACCEL_PENALTY_COEFF: {args.acc_penalty}"
         elif i.startswith("SENSORS:"):
             if args.use_gray:
                 exp_yaml_data[
@@ -226,32 +309,72 @@ if not args.eval:
                 exp_yaml_data[
                     idx
                 ] = "SENSORS: ['SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR', 'SPOT_LEFT_GRAY_SENSOR', 'SPOT_RIGHT_GRAY_SENSOR']"
+            if args.surface_normal:
+                exp_yaml_data[
+                    idx
+                ] = "SENSORS: ['SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR', 'SPOT_SURFACE_NORMAL_SENSOR']"
         elif i.startswith("VIDEO_DIR:"):
-            exp_yaml_data[idx] = "VIDEO_DIR:          '{}'".format(
-                os.path.join(dst_dir, "video_dir")
-            )
+            exp_yaml_data[
+                idx
+            ] = f"VIDEO_DIR:          '{os.path.join(dst_dir, 'video_dir')}'"
         elif i.startswith("EVAL_CKPT_PATH_DIR:"):
-            exp_yaml_data[idx] = "EVAL_CKPT_PATH_DIR: '{}'".format(
-                os.path.join(dst_dir, "checkpoints")
-            )
+            exp_yaml_data[
+                idx
+            ] = f"EVAL_CKPT_PATH_DIR: '{os.path.join(dst_dir, 'checkpoints')}'"
         elif i.startswith("CHECKPOINT_FOLDER:"):
-            exp_yaml_data[idx] = "CHECKPOINT_FOLDER:  '{}'".format(
-                os.path.join(dst_dir, "checkpoints")
-            )
+            exp_yaml_data[
+                idx
+            ] = f"CHECKPOINT_FOLDER:  '{os.path.join(dst_dir, 'checkpoints')}'"
         elif i.startswith("TXT_DIR:"):
-            exp_yaml_data[idx] = "TXT_DIR:            '{}'".format(
-                os.path.join(dst_dir, "txts")
-            )
+            exp_yaml_data[
+                idx
+            ] = f"TXT_DIR:            '{os.path.join(dst_dir, 'txts')}'"
         elif i.startswith("    num_cnns:"):
             if args.two_cnns:
                 exp_yaml_data[idx] = "    num_cnns: 2"
+        elif i.startswith("    name:"):
+            if args.policy_name == "cnn":
+                exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
+            if args.outdoor_nav:
+                exp_yaml_data[idx] = "    name: OutdoorPolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
             elif args.cutout_noise:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
+            elif args.median_blur:
+                exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
         elif i.startswith("        NOISE_PERCENT:"):
-            exp_yaml_data[idx] = "        NOISE_PERCENT: {}".format(args.noise_percent)
+            exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
+        elif i.startswith("        KERNEL_SIZE:"):
+            exp_yaml_data[idx] = f"        KERNEL_SIZE: {args.kernel_size}"
+        elif i.startswith("    decoder_output:"):
+            if args.splitnet and args.surface_normal:
+                exp_yaml_data[idx] = "    decoder_output: ['depth', 'surface_normals']"
+        elif i.startswith("    use_motion_loss:"):
+            if args.splitnet and args.motion_loss:
+                exp_yaml_data[idx] = "    use_visual_loss: True"
+        elif i.startswith("    update_motion_decoder_features:"):
+            if args.splitnet and args.motion_loss:
+                exp_yaml_data[idx] = "    update_motion_decoder_features: True"
+        elif i.startswith("    visual_encoder:"):
+            if args.splitnet:
+                if args.visual_encoder == "shallow":
+                    visual_encoder = "ShallowVisualEncoder"
+                elif args.visual_encoder == "resnet":
+                    visual_encoder = "BaseResNetEncoder"
+                exp_yaml_data[idx] = f"    visual_encoder: {visual_encoder}"
+        elif i.startswith("    tasks: "):
+            if args.splitnet:
+                if args.motion_loss:
+                    exp_yaml_data[
+                        idx
+                    ] = f"    tasks: ['VisualReconstructionTask', 'EgomotionPredictionTask']"
+                else:
+                    exp_yaml_data[idx] = f"    tasks: ['VisualReconstructionTask']"
+        elif i.startswith("  USE_OUTDOOR:"):
+            if args.outdoor_nav:
+                exp_yaml_data[idx] = f"  USE_OUTDOOR: True"
 
     with open(new_exp_yaml_path, "w") as f:
         f.write("\n".join(exp_yaml_data))
@@ -269,8 +392,15 @@ if not args.eval:
     if args.debug:
         slurm_data = slurm_data.replace("$GPUS", "1")
     else:
-        slurm_data = slurm_data.replace("$GPUS", "8")
-
+        slurm_data = slurm_data.replace("$GPUS", f"{args.num_gpus}")
+    if args.constraint == "6000_a40":
+        slurm_data = slurm_data.replace(
+            "# CONSTRAINT", "#SBATCH --constraint rtx_6000|a40"
+        )
+    elif args.constraint == "6000":
+        slurm_data = slurm_data.replace("# CONSTRAINT", "#SBATCH --constraint rtx_6000")
+    elif args.constraint == "a40":
+        slurm_data = slurm_data.replace("# CONSTRAINT", "#SBATCH --constraint a40")
     slurm_path = os.path.join(dst_dir, experiment_name + ".sh")
     with open(slurm_path, "w") as f:
         f.write(slurm_data)
@@ -284,15 +414,13 @@ if not args.eval:
         print(slurm_data)
 
     print(
-        "\nSee output with:\ntail -F {}".format(
-            os.path.join(dst_dir, experiment_name + ".err")
-        )
+        f"\nSee output with:\ntail -F {os.path.join(dst_dir, experiment_name + '.err')}"
     )
 
 # Evaluation
 else:
     # Make sure folder exists
-    assert os.path.isdir(dst_dir), "{} directory does not exist".format(dst_dir)
+    assert os.path.isdir(dst_dir), f"{dst_dir} directory does not exist"
     os.makedirs(eval_dst_dir, exist_ok=True)
     with open(os.path.join(eval_dst_dir, "automate_job_cmd.txt"), "w") as f:
         f.write(automate_command)
@@ -306,49 +434,109 @@ else:
 
     for idx, i in enumerate(eval_yaml_data):
         if i.startswith("  CURRICULUM:"):
-            eval_yaml_data[idx] = "  CURRICULUM: {}".format(args.curriculum)
-        elif i.startswith("    ORIENTATION: [ -0.4415683, -0.57648225, 0.270526 ]"):
-            if args.no_roll_eyes:
-                eval_yaml_data[
-                    idx
-                ] = "    ORIENTATION: [ -0.4415683, -0.57648225, 0.0 ]"
-        elif i.startswith("    ORIENTATION: [ -0.4415683, 0.57648225, -0.270526 ]"):
-            if args.no_roll_eyes:
-                eval_yaml_data[idx] = "    ORIENTATION: [ -0.4415683, 0.57648225, 0.0 ]"
+            eval_yaml_data[idx] = f"  CURRICULUM: {args.curriculum}"
         elif i.startswith("    RADIUS:"):
-            eval_yaml_data[idx] = "    RADIUS: {}".format(robot_radius)
+            eval_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+        elif i.startswith("    ALLOW_SLIDING:"):
+            if args.sliding:
+                eval_yaml_data[idx] = f"    ALLOW_SLIDING: True"
+        elif i.startswith("      CONTACT_TEST:"):
+            if args.no_contact_test:
+                eval_yaml_data[idx] = f"      CONTACT_TEST: False"
         elif i.startswith("  ROBOT:"):
-            eval_yaml_data[idx] = "  ROBOT: '{}'".format(robot)
+            eval_yaml_data[idx] = f"  ROBOT: '{robot}'"
         elif i.startswith("      ROBOT_URDF:"):
-            eval_yaml_data[idx] = "      ROBOT_URDF: {}".format(robot_urdf)
+            eval_yaml_data[idx] = f"      ROBOT_URDF: {robot_urdf}"
         elif i.startswith("  POSSIBLE_ACTIONS:"):
             if args.control_type == "dynamic":
                 control_type = "DYNAMIC_VELOCITY_CONTROL"
             else:
                 control_type = "VELOCITY_CONTROL"
-            eval_yaml_data[idx] = '  POSSIBLE_ACTIONS: ["{}"]'.format(control_type)
+            eval_yaml_data[idx] = f'  POSSIBLE_ACTIONS: ["{control_type}"]'
         elif i.startswith("    VELOCITY_CONTROL:"):
             if args.control_type == "dynamic":
                 eval_yaml_data[idx] = "    DYNAMIC_VELOCITY_CONTROL:"
         elif i.startswith("    DYNAMIC_VELOCITY_CONTROL:"):
             if not args.control_type == "dynamic":
                 eval_yaml_data[idx] = "    VELOCITY_CONTROL:"
+        elif i.startswith("      HOR_VEL_RANGE:"):
+            if args.velocity_y != -1.0:
+                eval_yaml_data[
+                    idx
+                ] = f"      HOR_VEL_RANGE: [ {-args.velocity_y, -args.velocity_y} ]"
+            if args.no_hor_vel:
+                eval_yaml_data[idx] = "      HOR_VEL_RANGE: [ 0.0, 0.0 ]"
+        elif i.startswith("      MIN_RAND_PITCH:"):
+            eval_yaml_data[idx] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
+        elif i.startswith("      MAX_RAND_PITCH:"):
+            eval_yaml_data[idx] = f"      MAX_RAND_PITCH: {args.randomize_pitch_max}"
         elif i.startswith("      TIME_STEP:"):
+            eval_yaml_data[idx] = f"      TIME_STEP: {args.time_step}"
             if args.control_type == "dynamic":
                 eval_yaml_data[idx] = "      TIME_STEP: 0.33"
         elif i.startswith("  SUCCESS_DISTANCE:"):
-            eval_yaml_data[idx] = "  SUCCESS_DISTANCE: {}".format(robot_goal)
+            eval_yaml_data[idx] = f"  SUCCESS_DISTANCE: {robot_goal}"
         elif i.startswith("    SUCCESS_DISTANCE:"):
-            eval_yaml_data[idx] = "    SUCCESS_DISTANCE: {}".format(robot_goal)
+            eval_yaml_data[idx] = f"    SUCCESS_DISTANCE: {robot_goal}"
         elif i.startswith("SEED:"):
-            eval_yaml_data[idx] = "SEED: {}".format(args.seed)
+            eval_yaml_data[idx] = f"SEED: {args.seed}"
         elif i.startswith("  DATA_PATH:"):
-            if args.outdoor:
+            if args.dataset == "ferst":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/{split}/{split}.json.gz"
-                eval_yaml_data[idx] = "  DATA_PATH: {}".format(data_path)
-            if args.dataset == "coda":
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test/coda_spot_test.json.gz"
-                eval_yaml_data[idx] = "  DATA_PATH: {}".format(data_path)
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_straight_5m":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_5m/coda_spot_test_straight_5m.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_straight_6m":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_6m/coda_spot_test_straight_6m.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_straight_7m":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_7m/coda_spot_test_straight_7m.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_straight_8m":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_8m/coda_spot_test_straight_8m.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_straight_9m":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_9m/coda_spot_test_straight_9m.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_straight_10m":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_spot_test_straight_10m/coda_spot_test_straight_10m.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_lobby":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_lobby/coda_lobby.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "coda_lobby_hard":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_lobby_hard/coda_lobby_hard.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "google":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/google/mtv1157-1_lab/train/content/mtv1157-1_lab.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "ny":
+                data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "hm3d_gibson_0.5":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson/pointnav_spot_0.5/{split}/{split}.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "uf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_spot_unfurnished/train/train.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "ferst_mf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/multi_floor/val/val.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "ferst_mf_1":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/multi_floor/val_1/val.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "ferst_stairs":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/ferst/stairs/val/val.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+            elif args.dataset == "hm3d_mf":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor/{split}/{split}.json.gz"
+                eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
+        elif i.startswith("      noise_multiplier:"):
+            eval_yaml_data[idx] = f"      noise_multiplier: {args.noise_percent}"
     with open(new_eval_task_yaml_path, "w") as f:
         f.write("\n".join(eval_yaml_data))
     print("Created " + new_eval_task_yaml_path)
@@ -359,49 +547,54 @@ else:
 
     for idx, i in enumerate(eval_exp_yaml_data):
         if i.startswith("BASE_TASK_CONFIG_PATH:"):
-            eval_exp_yaml_data[idx] = "BASE_TASK_CONFIG_PATH: '{}'".format(
-                new_eval_task_yaml_path
-            )
+            eval_exp_yaml_data[
+                idx
+            ] = f"BASE_TASK_CONFIG_PATH: '{new_eval_task_yaml_path}'"
         elif i.startswith("TENSORBOARD_DIR:"):
-            tb_dir = "tb_eval_{}".format(args.control_type)
+            tb_dir = f"tb_eval_{args.control_type}"
             if args.ckpt != -1:
-                tb_dir += "_ckpt_{}".format(args.ckpt)
+                tb_dir += f"_ckpt_{args.ckpt}"
             if args.video:
                 tb_dir += "_video"
-            eval_exp_yaml_data[idx] = "TENSORBOARD_DIR:    '{}'".format(
-                os.path.join(eval_dst_dir, "tb_evals", tb_dir)
-            )
+            eval_exp_yaml_data[
+                idx
+            ] = f"TENSORBOARD_DIR:    '{os.path.join(eval_dst_dir, 'tb_evals', tb_dir)}'"
         elif i.startswith("NUM_PROCESSES:"):
             eval_exp_yaml_data[idx] = "NUM_PROCESSES: 13"
+        elif i.startswith("    name:"):
+            if args.policy_name == "cnn":
+                eval_exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
+            if args.outdoor_nav:
+                eval_exp_yaml_data[idx] = "    name: OutdoorPolicy"
+        elif i.startswith("  COLLISION_PENALTY:"):
+            eval_exp_yaml_data[idx] = f"  COLLISION_PENALTY: {args.collision_penalty}"
         elif i.startswith("CHECKPOINT_FOLDER:"):
-            eval_exp_yaml_data[idx] = "CHECKPOINT_FOLDER:  '{}'".format(
-                os.path.join(dst_dir, "checkpoints")
-            )
+            eval_exp_yaml_data[
+                idx
+            ] = f"CHECKPOINT_FOLDER:  '{os.path.join(dst_dir, 'checkpoints')}'"
         elif i.startswith("EVAL_CKPT_PATH_DIR:"):
             if args.ckpt == -1:
-                eval_exp_yaml_data[idx] = "EVAL_CKPT_PATH_DIR: '{}'".format(
-                    os.path.join(dst_dir, "checkpoints")
-                )
+                eval_exp_yaml_data[
+                    idx
+                ] = f"EVAL_CKPT_PATH_DIR: '{os.path.join(dst_dir, 'checkpoints')}'"
             else:
-                eval_exp_yaml_data[idx] = "EVAL_CKPT_PATH_DIR: '{}/ckpt.{}.pth'".format(
-                    os.path.join(dst_dir, "checkpoints"), args.ckpt
-                )
+                eval_exp_yaml_data[
+                    idx
+                ] = f"EVAL_CKPT_PATH_DIR: '{os.path.join(dst_dir, 'checkpoints')}/ckpt.{args.ckpt}.pth'"
         elif i.startswith("TXT_DIR:"):
-            txt_dir = "txts_eval_{}".format(args.control_type)
+            txt_dir = f"txts_eval_{args.control_type}"
             if args.ckpt != -1:
-                txt_dir += "_ckpt_{}".format(args.ckpt)
-            eval_exp_yaml_data[idx] = "TXT_DIR:            '{}'".format(
-                os.path.join(eval_dst_dir, "txts", txt_dir)
-            )
+                txt_dir += f"_ckpt_{args.ckpt}"
+            eval_exp_yaml_data[
+                idx
+            ] = f"TXT_DIR:            '{os.path.join(eval_dst_dir, 'txts', txt_dir)}'"
         elif i.startswith("VIDEO_OPTION:"):
             if args.video:
                 eval_exp_yaml_data[idx] = "VIDEO_OPTION: ['disk']"
             else:
                 eval_exp_yaml_data[idx] = "VIDEO_OPTION: []"
         elif i.startswith("NUM_ENVIRONMENTS:"):
-            if args.use_gray or args.use_gray_depth:
-                eval_exp_yaml_data[idx] = "NUM_ENVIRONMENTS: 8"
-            if args.outdoor or args.dataset == "coda":
+            if "ferst" in args.dataset or "coda" in args.dataset or "google" in args.dataset:
                 eval_exp_yaml_data[idx] = "NUM_ENVIRONMENTS: 1"
         elif i.startswith("SENSORS:"):
             if args.video:
@@ -416,15 +609,23 @@ else:
                     eval_exp_yaml_data[
                         idx
                     ] = "SENSORS: ['RGB_SENSOR', 'SPOT_LEFT_GRAY_SENSOR', 'SPOT_RIGHT_GRAY_SENSOR']"
+            elif args.use_gray_depth:
+                eval_exp_yaml_data[
+                    idx
+                ] = "SENSORS: ['SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR', 'SPOT_LEFT_GRAY_SENSOR', 'SPOT_RIGHT_GRAY_SENSOR']"
+                if args.video:
+                    eval_exp_yaml_data[
+                        idx
+                    ] = "SENSORS: ['RGB_SENSOR', 'SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR', 'SPOT_LEFT_GRAY_SENSOR', 'SPOT_RIGHT_GRAY_SENSOR']"
         elif i.startswith("VIDEO_DIR:"):
             video_dir = (
                 "video_dir"
                 if args.ckpt == -1
-                else "video_dir_{}_ckpt_{}".format(args.control_type, args.ckpt)
+                else f"video_dir_{args.control_type}_ckpt_{args.ckpt}"
             )
-            eval_exp_yaml_data[idx] = "VIDEO_DIR:          '{}'".format(
-                os.path.join(eval_dst_dir, "videos", video_dir)
-            )
+            eval_exp_yaml_data[
+                idx
+            ] = f"VIDEO_DIR:          '{os.path.join(eval_dst_dir, 'videos', video_dir)}'"
         elif i.startswith("    SPLIT:"):
             if args.dataset == "hm3d":
                 eval_exp_yaml_data[idx] = "    SPLIT: val"
@@ -438,19 +639,31 @@ else:
                 eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
             elif args.cutout_noise:
                 eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
+            elif args.median_blur:
+                eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
         elif i.startswith("        NOISE_PERCENT:"):
-            eval_exp_yaml_data[idx] = "        NOISE_PERCENT: {}".format(
-                args.noise_percent
-            )
+            eval_exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
+        elif i.startswith("        KERNEL_SIZE:"):
+            eval_exp_yaml_data[idx] = f"        KERNEL_SIZE: {args.kernel_size}"
+        elif i.startswith("    decoder_output:"):
+            if args.splitnet and args.surface_normal:
+                eval_exp_yaml_data[
+                    idx
+                ] = "    decoder_output: ['depth', 'surface_normals']"
+        elif i.startswith("    visual_encoder:"):
+            if args.splitnet:
+                if args.visual_encoder == "shallow":
+                    visual_encoder = "ShallowVisualEncoder"
+                elif args.visual_encoder == "resnet":
+                    visual_encoder = "BaseResNetEncoder"
+                eval_exp_yaml_data[idx] = f"    visual_encoder: {visual_encoder}"
 
     if os.path.isdir(tb_dir):
         response = input(
-            "{} directory already exists. Delete, continue, or abort? [d/c/A]: ".format(
-                tb_dir
-            )
+            f"{tb_dir} directory already exists. Delete, continue, or abort? [d/c/A]: "
         )
         if response == "d":
-            print("Deleting {}".format(tb_dir))
+            print(f"Deleting {tb_dir}")
             shutil.rmtree(tb_dir)
         elif response == "c":
             print("Continuing.")
@@ -489,7 +702,5 @@ else:
     else:
         print(slurm_data)
     print(
-        "\nSee output with:\ntail -F {}".format(
-            os.path.join(eval_dst_dir, eval_experiment_name + ".err")
-        )
+        f"\nSee output with:\ntail -F {os.path.join(eval_dst_dir, eval_experiment_name + '.err')}"
     )

@@ -13,7 +13,7 @@ EVAL_CKPT_PATH_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_res
 CHECKPOINT_FOLDER:  '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
 TXT_DIR:            '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/txts'
 TEST_EPISODE_COUNT: -1
-NUM_ENVIRONMENTS: 8
+NUM_ENVIRONMENTS: 24
 SENSORS: ['SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR']
 NUM_UPDATES: -1
 LOG_INTERVAL: 10
@@ -27,7 +27,10 @@ RL:
   SLACK_REWARD: -0.002
   COLLISION_PENALTY: 0.003
   BACKWARDS_PENALTY: 0.003
+  ANG_ACCEL_PENALTY_COEFF: 0.0
+  MAX_ANG_ACCEL_PENALTY: 0.1
   FULL_GEODESIC_DECAY: -1.0
+  USE_OUTDOOR: False
 
   POLICY:
     name: "PointNavResNetPolicy"
@@ -37,9 +40,12 @@ RL:
       ENABLED_TRANSFORMS: [ ]
       PEPPER_NOISE:
         NOISE_PERCENT: 0.1
-        WHITE: False
+        WHITE: True
       CUTOUT:
-        WHITE: False
+        WHITE: True
+      MEDIAN_BLUR:
+        KERNEL_SIZE: 9
+        NUM_ITERS: 1
   PPO:
     # ppo params
     clip_param: 0.2
@@ -86,5 +92,6 @@ RL:
     backbone: resnet18
     rnn_type: LSTM
     num_recurrent_layers: 2
+
 EVAL:
     SPLIT: "val"

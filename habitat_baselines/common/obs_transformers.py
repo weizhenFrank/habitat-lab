@@ -28,6 +28,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
 from habitat.core.logging import logger
@@ -1151,7 +1152,7 @@ class Equirect2CubeMap(ProjectionTransformer):
 
 
 import cv2
-from torchvision.transforms import Compose, RandomErasing, RandomResizedCrop
+from torchvision.transforms import Compose, RandomErasing, RandomResizedCrop, RandomHorizontalFlip
 
 
 @baseline_registry.register_obs_transformer(name="CUTOUT")
@@ -1203,6 +1204,55 @@ class Cutout(ObservationTransformer):
         )
         return observations
 
+@baseline_registry.register_obs_transformer(name="FLIP")
+class Flip(ObservationTransformer):
+    """Flip images along vertical axis"""
+
+    def __init__(
+        self,
+        trans_keys: Tuple[str] = (
+            "spot_left_depth",
+            "spot_right_depth",
+        ),
+    ):
+        """Args:
+        noise_percent: what percent of randomly selected pixel turn black
+        trans_keys: list of keys it will try to transform from obs
+        """
+        super().__init__()
+        self.trans_keys = trans_keys
+        self.flip = RandomHorizontalFlip(p=1.0)
+
+    def _transform_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        # NHWC -> NCHW
+        obs = obs.permute(0, 3, 1, 2)
+        
+        obs = self.flip(obs)
+
+        # NCHW -> NHWC
+        obs = obs.permute(0, 2, 3, 1)
+        return obs
+
+    @classmethod
+    def from_config(cls, config: Config):
+        return cls()
+
+    def transform_observation_space(self, observation_space: spaces.Dict):
+        # No transform needed
+        return observation_space
+
+    @torch.no_grad()
+    def forward(self, observations: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        observations.update(
+            {
+                sensor: self._transform_obs(observations[sensor])
+                for sensor in self.trans_keys
+                if sensor in observations
+            }
+        )
+        observations['spot_left_depth'], observations['spot_right_depth'], = observations['spot_right_depth'], observations['spot_left_depth']
+
+        return observations
 
 @baseline_registry.register_obs_transformer(name="SPOT_DR")
 class SpotDr(ObservationTransformer):
@@ -1302,7 +1352,6 @@ class SpotDr(ObservationTransformer):
             )
         return observations
 
-
 @baseline_registry.register_obs_transformer(name="PEPPER_NOISE")
 class PepperNoise(ObservationTransformer):
     """Speckle noise"""
@@ -1343,6 +1392,83 @@ class PepperNoise(ObservationTransformer):
     def from_config(cls, config: Config):
         pepper_noise_config = config.RL.POLICY.OBS_TRANSFORMS.PEPPER_NOISE
         return cls(pepper_noise_config.WHITE, pepper_noise_config.NOISE_PERCENT)
+
+    def transform_observation_space(self, observation_space: spaces.Dict):
+        # No transform needed
+        return observation_space
+
+    @torch.no_grad()
+    def forward(self, observations: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        observations.update(
+            {
+                sensor: self._transform_obs(observations[sensor])
+                for sensor in self.trans_keys
+                if sensor in observations
+            }
+        )
+        return observations
+
+
+@baseline_registry.register_obs_transformer(name="MEDIAN_BLUR")
+class MedianBlur(ObservationTransformer):
+    """Median blur"""
+
+    def __init__(
+        self,
+        kernel_size: float,
+        trans_keys: Tuple[str] = (
+            "depth",
+            "spot_left_depth",
+            "spot_right_depth",
+        ),
+    ):
+        """Args:
+        kernel_size: kernel size for blurring
+        trans_keys: list of keys it will try to transform from obs
+        """
+        super().__init__()
+        self.trans_keys = trans_keys
+        self.kernel = self.get_binary_kernel2d((kernel_size, kernel_size))
+        self.padding = self._compute_zero_padding((kernel_size, kernel_size))
+
+    def get_binary_kernel2d(self, window_size: Tuple[int, int]) -> torch.Tensor:
+        r"""Create a binary kernel to extract the patches. If the window size
+        is HxW will create a (H*W)xHxW kernel.
+        """
+        window_range: int = window_size[0] * window_size[1]
+        kernel: torch.Tensor = torch.zeros(window_range, window_range)
+        for i in range(window_range):
+            kernel[i, i] += 1.0
+        return kernel.view(window_range, 1, window_size[0], window_size[1])
+
+    def _compute_zero_padding(self, kernel_size: Tuple[int, int]) -> Tuple[int, int]:
+        r"""Utility function that computes zero padding tuple."""
+        computed: List[int] = [(k - 1) // 2 for k in kernel_size]
+        return computed[0], computed[1]
+
+    def _transform_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        # NHWC -> NCHW
+        obs = obs.permute(0, 3, 1, 2)
+        b, c, h, w = obs.shape
+
+        kernel = self.kernel.to(obs)
+        # map the local window to single vector
+        features = F.conv2d(
+            obs.reshape(b * c, 1, h, w), kernel, padding=self.padding, stride=1
+        )
+        features = features.view(b, c, -1, h, w)  # BxCx(K_h * K_w)xHxW
+
+        # compute the median along the feature axis
+        res = torch.median(features, dim=2)[0]
+
+        # NCHW -> NHWC
+        median = res.permute(0, 2, 3, 1)
+        return median
+
+    @classmethod
+    def from_config(cls, config: Config):
+        median_blur_config = config.RL.POLICY.OBS_TRANSFORMS.MEDIAN_BLUR
+        return cls(median_blur_config.KERNEL_SIZE)
 
     def transform_observation_space(self, observation_space: spaces.Dict):
         # No transform needed
