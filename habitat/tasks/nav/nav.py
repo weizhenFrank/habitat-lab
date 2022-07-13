@@ -203,12 +203,20 @@ class PointGoalSensor(Sensor):
     ):
         if self._project_goal != -1:
             try:
-                slope = (goal_position[2] - source_position[2]) / (goal_position[0] - source_position[0])
+                slope = (goal_position[2] - source_position[2]) / (
+                    goal_position[0] - source_position[0]
+                )
                 proj_goal_x = self._project_goal + source_position[0]
                 proj_goal_y = (self._project_goal * slope) + source_position[2]
-                proj_goal_position = np.array([proj_goal_x, goal_position[1], proj_goal_y])
-                direction_vector_proj = np.linalg.norm(proj_goal_position - source_position)
-                direction_vector_norm = np.linalg.norm(goal_position - source_position)
+                proj_goal_position = np.array(
+                    [proj_goal_x, goal_position[1], proj_goal_y]
+                )
+                direction_vector_proj = np.linalg.norm(
+                    proj_goal_position - source_position
+                )
+                direction_vector_norm = np.linalg.norm(
+                    goal_position - source_position
+                )
                 if direction_vector_proj < direction_vector_norm:
                     goal_position[2] = proj_goal_y
                     goal_position[0] = proj_goal_x
@@ -380,6 +388,7 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
             agent_position, rotation_world_agent, goal_position
         )
 
+
 @registry.register_sensor
 class HeadingSensor(Sensor):
     r"""Sensor for observing the agent's heading in the global coordinate
@@ -548,6 +557,7 @@ class ProximitySensor(Sensor):
             dtype=np.float32,
         )
 
+
 @registry.register_sensor
 class ContextSensor(Sensor):
     r"""Sensor for observing the agent's heading in the global coordinate
@@ -563,48 +573,47 @@ class ContextSensor(Sensor):
         self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
     ):
         self._sim = sim
-        self._map_resolution = getattr(
-            config, "MAP_RESOLUTION", 100
-        )
-        
+        self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
+        self._rotate_map = getattr(config, "ROTATE_MAP", False)
         self.map_shape = (self._map_resolution, self._map_resolution)
         self.meters_per_pixel = getattr(
             config, "METERS_PER_PIXEL", 0.5
-        ) # 50cm per pixel; robot sees 25m around itself
-
+        )  # 50cm per pixel; robot sees 25m around itself
         self.p = getattr(
             config.CUTOUT, "NOISE_PERCENT", 0.0
-        ) # percentage of image for cutout
+        )  # percentage of image for cutout
         self.min_cutout = getattr(
             config.CUTOUT, "MIN_CUTOUT", 2.0
-        ) # min number of pixels for cutout
+        )  # min number of pixels for cutout
         self.max_cutout = getattr(
             config.CUTOUT, "MAX_CUTOUT", 10.0
-        ) # max number of pixels for cutout
+        )  # max number of pixels for cutout
 
         self._top_down_map = maps.get_topdown_map_from_sim(
             self._sim,
             map_resolution=self._map_resolution,
             draw_border=False,
-            meters_per_pixel=self.meters_per_pixel
+            meters_per_pixel=self.meters_per_pixel,
         )
         self.ep_id = 0
         self.ctr = 0
-        self.occupied_cutout = Cutout(max_height=self.max_cutout, 
-                                      max_width=self.max_cutout, 
-                                      min_height=self.min_cutout, 
-                                      min_width=self.min_cutout, 
-                                      fill_value_mode=0, 
-                                      p=self.p)
-        self.unoccupied_cutout = Cutout(max_height=self.max_cutout, 
-                                        max_width=self.max_cutout, 
-                                        min_height=self.min_cutout, 
-                                        min_width=self.min_cutout, 
-                                        fill_value_mode=1, 
-                                        p=self.p)
-        self.debug = getattr(
-            config, "DEBUG", ""
-        ) 
+        self.occupied_cutout = Cutout(
+            max_height=self.max_cutout,
+            max_width=self.max_cutout,
+            min_height=self.min_cutout,
+            min_width=self.min_cutout,
+            fill_value_mode=0,
+            p=self.p,
+        )
+        self.unoccupied_cutout = Cutout(
+            max_height=self.max_cutout,
+            max_width=self.max_cutout,
+            min_height=self.min_cutout,
+            min_width=self.min_cutout,
+            fill_value_mode=1,
+            p=self.p,
+        )
+        self.debug = getattr(config, "DEBUG", "")
         super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -616,17 +625,31 @@ class ContextSensor(Sensor):
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         # 0 if occupied, 1 if unoccupied
         # return spaces.Box(low=0, high=1, shape=self.map_shape, dtype=np.uint8)
-        return spaces.Box(low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32)
+        return spaces.Box(
+            low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32
+        )
 
     def save_map(self, top_down_map, name, agent_coord=None):
         h, w = top_down_map.shape
         color_map = maps.colorize_topdown_map(top_down_map)
-        rs = cv2.resize(color_map, (int(w*10), int(h*10)), interpolation = cv2.INTER_AREA)
-        print('agent coord: ', agent_coord)
+        rs = color_map
+
+        # rs = cv2.resize(
+        #     color_map, (int(w * 10), int(h * 10)), interpolation=cv2.INTER_AREA
+        #     (int(w), int(h)),
+        #     interpolation=cv2.INTER_AREA,
+        # )
         if agent_coord is not None:
             rs = maps.draw_agent(
                 image=rs,
-                agent_center_coord=(int(agent_coord[0]*10), int(agent_coord[1]*10)),
+                # agent_center_coord=(
+                #     int(agent_coord[0] * 10),
+                #     int(agent_coord[1] * 10),
+                # ),
+                agent_center_coord=(
+                    int(agent_coord[0]),
+                    int(agent_coord[1]),
+                ),
                 agent_rotation=self.get_polar_angle(),
                 agent_radius_px=min(rs.shape[0:2]) // 32,
             )
@@ -636,7 +659,7 @@ class ContextSensor(Sensor):
             f"{save_name}",
             rs,
         )
-        print(f'saved: {save_name}')
+        print(f"saved: {save_name}")
 
     def get_polar_angle(self):
         agent_state = self._sim.get_agent_state()
@@ -652,43 +675,41 @@ class ContextSensor(Sensor):
         return np.array(phi) + z_neg_z_flip
 
     def crop_at_point(self, img, center_coord, size):
-        # max(a_x - int(self._map_resolution/2), 0) : min(a_x + int(self._map_resolution/2)+1, h),
-        # max(a_y - int(self._map_resolution/2), 0) : min(a_y + int(self._map_resolution/2)+1, w),
         h, w = np.array(img).shape[:2]
-        # h, w, c = np.array(img).shape
         a_x, a_y = center_coord
-        top = max(a_x - size//2, 0)
-        bottom = min(a_x + size//2, h)
-        left = max(a_y - size//2, 0)
-        right = min(a_y + size//2, w)
-        # return img[top:bottom, left:right, :]
+        top = max(a_x - size // 2, 0)
+        bottom = min(a_x + size // 2, h)
+        left = max(a_y - size // 2, 0)
+        right = min(a_y + size // 2, w)
         return img[top:bottom, left:right]
 
     def get_rotated_point(self, img, im_rot, xy, agent_rotation):
         yx = xy[::-1]
         a = -(agent_rotation - np.pi)
-        org_center = (np.array(img.shape[:2][::-1])-1)//2
-        rot_center = (np.array(im_rot.shape[:2][::-1])-1)//2
-        org = yx-org_center
-        new = np.array([org[0]*np.cos(a) + org[1]*np.sin(a),
-                        -org[0]*np.sin(a) + org[1]*np.cos(a)])
-        rotated_pt = new+rot_center
+        org_center = (np.array(img.shape[:2][::-1]) - 1) // 2
+        rot_center = (np.array(im_rot.shape[:2][::-1]) - 1) // 2
+        org = yx - org_center
+        new = np.array(
+            [
+                org[0] * np.cos(a) + org[1] * np.sin(a),
+                -org[0] * np.sin(a) + org[1] * np.cos(a),
+            ]
+        )
+        rotated_pt = new + rot_center
         return int(rotated_pt[1]), int(rotated_pt[0])
 
     def get_observation(
         self, observations, episode, *args: Any, **kwargs: Any
-    ): 
+    ):
         self.ep_id = int(episode.episode_id)
-        self.ctr +=1
+        self.ctr += 1
         # get local map from gt_top_down_map
         self._top_down_map = maps.get_topdown_map_from_sim(
             self._sim,
             map_resolution=self._map_resolution,
             draw_border=False,
-            meters_per_pixel=self.meters_per_pixel
+            meters_per_pixel=self.meters_per_pixel,
         )
-        h, w = self._top_down_map.shape
-
         agent_rotation = self.get_polar_angle()
         current_position = self._sim.get_agent_state().position
         ### a_x is along height, a_y is along width
@@ -699,86 +720,53 @@ class ContextSensor(Sensor):
             sim=self._sim,
         )
 
-        # color_map = maps.colorize_topdown_map(self._top_down_map)
-        # color_map = cv2.resize(
-        #     color_map,
-        #     (w*10, h*10),
-        #     interpolation=cv2.INTER_CUBIC,
-        # )
-        # color_map = maps.draw_agent(
-        #     image=color_map,
-        #     agent_center_coord=(a_x*10, a_y*10),
-        #     # agent_center_coord=(a_x, a_y),
-        #     agent_rotation=agent_rotation,
-        #     agent_radius_px=min(color_map.shape[0:2]) // 32,
-        # )
-        # cv2.imwrite(
-        #     f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/context_topdown_map_agent_{self.ep_id}_{self.ctr}.png",
-        #     color_map,
-        # )
+        if self._rotate_map:
+            rot_angle = -(agent_rotation - np.pi)
+            top_down_map_rot = scipy.ndimage.interpolation.rotate(
+                self._top_down_map, np.rad2deg(rot_angle), reshape=True
+            )
+            # self.save_map(self._top_down_map, 'context_topdown_map')
 
-        rot_angle = -(agent_rotation - np.pi)
-        top_down_map_rot = scipy.ndimage.interpolation.rotate(
-            self._top_down_map, np.rad2deg(rot_angle), reshape=True
-            # local_top_down_map, (np.pi/2) * 180 / np.pi
-        )
-        # self.save_map(self._top_down_map, 'context_topdown_map')
+            ## rotate top down map to match agent's heading
+            a_x, a_y = self.get_rotated_point(
+                self._top_down_map,
+                top_down_map_rot,
+                np.array([a_x, a_y]),
+                agent_rotation,
+            )
+            self._top_down_map = top_down_map_rot
 
-        # tmp_map = self._top_down_map.copy()
-        # self._top_down_map[
-        #     a_x - point_padding : a_x + point_padding + 1,
-        #     a_y - point_padding : a_y + point_padding + 1,
-        # ] = 2
-        # maps.MAP_SOURCE_POINT_INDICATOR
-
-        # draw_agent(im_position, relative_position, agent_heading, agent_radius_px)
-        # maps.draw_agent()
-
-        ## rotate top down map to match agent's heading
-        rot_a_x, rot_a_y = self.get_rotated_point(self._top_down_map, top_down_map_rot, np.array([a_x, a_y]), agent_rotation)
-        self._top_down_map = top_down_map_rot
-        h, w = self._top_down_map.shape
         point_padding = 0
         self._top_down_map[
-            rot_a_x - point_padding : rot_a_x + point_padding + 1,
-            rot_a_y - point_padding : rot_a_y + point_padding + 1,
+            a_x - point_padding : a_x + point_padding + 1,
+            a_y - point_padding : a_y + point_padding + 1,
         ] = 2
-        self.save_map(self._top_down_map, '_top_down_map')
 
-        # color_map = maps.colorize_topdown_map(self._top_down_map)
-        # color_map = cv2.resize(
-        #     color_map,
-        #     (w*10, h*10),
-        #     interpolation=cv2.INTER_CUBIC,
-        # )
-        # color_map = maps.draw_agent(
-        #     image=color_map,
-        #     agent_center_coord=(int(rot_a_x*10), int(rot_a_y*10)),
-        #     # agent_center_coord=(a_x, a_y),
-        #     agent_rotation=agent_rotation,
-        #     agent_radius_px=min(color_map.shape[0:2]) // 32,
-        # )
-        # cv2.imwrite(
-        #     f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/context_topdown_map_agent_rot_{self.ep_id}_{self.ctr}.png",
-        #     color_map,
-        # )
+        pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
+        pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
 
-        pad_top = max(int(self._map_resolution/2) - a_x - 1, 0)
-        pad_bot = max(a_x + int(self._map_resolution/2) - h, 0)
-        pad_left = max(int(self._map_resolution/2) - a_y - 1, 0)
-        pad_right = max(a_y + int(self._map_resolution/2) - w, 0)
-
-        local_top_down_map = self.crop_at_point(self._top_down_map, (int(rot_a_x), int(rot_a_y)), self._map_resolution)
+        local_top_down_map = self.crop_at_point(
+            self._top_down_map,
+            (a_x, a_y),
+            self._map_resolution,
+        )
         lh, lw = local_top_down_map.shape
-        # self.save_map(local_top_down_map, 'local_top_down_map', (lh-(h-rot_a_x), lw-(w-rot_a_y)))
 
-        local_top_down_map_corroded = self.unoccupied_cutout(local_top_down_map)
-        local_top_down_map_corroded = self.occupied_cutout(local_top_down_map_corroded)
+        if self.p > 0:
+            local_top_down_map_corroded = self.unoccupied_cutout(
+                local_top_down_map
+            )
+            local_top_down_map_corroded = self.occupied_cutout(
+                local_top_down_map_corroded
+            )
+            local_top_down_map = local_top_down_map_corroded
         # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
 
         local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
-        local_top_down_map_filled[pad_top:pad_top+lh,pad_left:pad_left+lw] = local_top_down_map_corroded
-        self.save_map(local_top_down_map_filled, 'local_top_down_map_filled')
+        local_top_down_map_filled[
+            pad_top : pad_top + lh, pad_left : pad_left + lw
+        ] = local_top_down_map
+        self.save_map(local_top_down_map_filled, "local_top_down_map_filled")
 
         # 0 (white) if occupied, 1 (gray) if unoccupied
         if self.debug == "WHITE":
@@ -787,6 +775,7 @@ class ContextSensor(Sensor):
             return np.ones_like(local_top_down_map_filled, dtype=np.float32)
         else:
             return local_top_down_map_filled.astype(np.float32)
+
 
 @registry.register_measure
 class Success(Measure):
@@ -1062,7 +1051,7 @@ class TopDownMap(Measure):
             position[0],
             self._top_down_map.shape[0:2],
             sim=self._sim,
-        )   
+        )
         self._top_down_map[
             t_x - self.point_padding : t_x + self.point_padding + 1,
             t_y - self.point_padding : t_y + self.point_padding + 1,
@@ -1578,9 +1567,7 @@ class VelocityAction(SimulatorTaskAction):
         # kwargs["episode"].goals.insert(1, NavigationGoal(position=rand_goal_2, radius=0.3))
         # print('KWARGS GOAL POS AFTER:', kwargs["episode"])
 
-        rand_tilt = np.random.uniform(
-                self.min_rand_pitch, self.max_rand_pitch
-            )
+        rand_tilt = np.random.uniform(self.min_rand_pitch, self.max_rand_pitch)
 
         left_ori = self.left_orig_ori + np.array([rand_tilt, 0, 0])
         right_ori = self.right_orig_ori + np.array([rand_tilt, 0, 0])
@@ -1597,10 +1584,10 @@ class VelocityAction(SimulatorTaskAction):
 
             # curr_right_ori = right_depth_sensor._spec.orientation.copy()
             # curr_left_ori = left_depth_sensor._spec.orientation.copy()
-            right_depth_sensor._spec.orientation = (right_ori)
+            right_depth_sensor._spec.orientation = right_ori
             right_depth_sensor._sensor_object.set_transformation_from_spec()
 
-            left_depth_sensor._spec.orientation = (left_ori)
+            left_depth_sensor._spec.orientation = left_ori
             left_depth_sensor._sensor_object.set_transformation_from_spec()
 
     def get_camera_ori(self):
@@ -1660,13 +1647,20 @@ class VelocityAction(SimulatorTaskAction):
                 robot_rigid_state.translation.y,
                 robot_rigid_state.translation.z,
             )
-            rot_quat = np.array([robot_rigid_state.rotation.scalar, *robot_rigid_state.rotation.vector])
+            rot_quat = np.array(
+                [
+                    robot_rigid_state.rotation.scalar,
+                    *robot_rigid_state.rotation.vector,
+                ]
+            )
             r = R.from_quat(rot_quat)
-            scipy_rpy = r.as_euler('xzy', degrees=True)
+            scipy_rpy = r.as_euler("xzy", degrees=True)
 
             # rpy = np.rad2deg(get_rpy(robot_rigid_state.rotation))
             rpy = np.rad2deg(euler_from_quaternion(robot_rigid_state.rotation))
-            robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}, {:.2f}".format(rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3])
+            robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}, {:.2f}".format(
+                rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3]
+            )
             # robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}".format(
             #     scipy_rpy[0],
             #     scipy_rpy[1],
@@ -1767,7 +1761,9 @@ class VelocityAction(SimulatorTaskAction):
         )
 
         # snap goal state to height at navmesh
-        snapped_goal_rigid_state = self._sim.pathfinder.snap_point(goal_rigid_state.translation)
+        snapped_goal_rigid_state = self._sim.pathfinder.snap_point(
+            goal_rigid_state.translation
+        )
         goal_rigid_state.translation.x = snapped_goal_rigid_state.x
         goal_rigid_state.translation.y = snapped_goal_rigid_state.y
         goal_rigid_state.translation.z = snapped_goal_rigid_state.z
@@ -1803,11 +1799,9 @@ class VelocityAction(SimulatorTaskAction):
 
         xy_diff = np.linalg.norm(front_xy - back_xy)
 
-        pitch = np.arctan2(z_diff,xy_diff)
+        pitch = np.arctan2(z_diff, xy_diff)
 
-        robot_T_agent_pitch_offset = mn.Matrix4.rotation_x(
-            mn.Rad(-pitch)
-        )
+        robot_T_agent_pitch_offset = mn.Matrix4.rotation_x(mn.Rad(-pitch))
 
         if self.min_rand_pitch == 0.0 and self.max_rand_pitch == 0.0:
             left_ori = self.left_orig_ori + np.array([-pitch, 0.0, 0.0])
@@ -1898,7 +1892,7 @@ class VelocityAction(SimulatorTaskAction):
         # pitch robot afterwards to correct for slope changes
         robot_T_global = robot_T_global @ robot_T_agent_pitch_offset
         self.robot.robot_id.transformation = robot_T_global
-        
+
         """See if goal state causes interpenetration with surroundings"""
         if self.use_contact_test:
             collided = self._sim.contact_test(self.robot.robot_id.object_id)
