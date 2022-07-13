@@ -50,13 +50,6 @@ class PPO(nn.Module):
         self.use_clipped_value_loss = use_clipped_value_loss
 
         self.use_second_optimizer = use_second_optimizer
-        print("ACTOR CRITIC PARAMS: ")
-        print(
-            "USE SECOND OPTIMIZER: ",
-            use_second_optimizer,
-            " KEY : ",
-            second_optimizer_key,
-        )
         params_1, params_2 = [], []
         for name, p in actor_critic.named_parameters():
             if not p.requires_grad:

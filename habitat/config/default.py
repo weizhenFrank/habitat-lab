@@ -172,6 +172,17 @@ _C.TASK.PROXIMITY_SENSOR = CN()
 _C.TASK.PROXIMITY_SENSOR.TYPE = "ProximitySensor"
 _C.TASK.PROXIMITY_SENSOR.MAX_DETECTION_RADIUS = 2.0
 # -----------------------------------------------------------------------------
+# CONTEXT SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.CONTEXT_SENSOR = CN()
+_C.TASK.CONTEXT_SENSOR.TYPE = "ContextSensor"
+_C.TASK.CONTEXT_SENSOR.MAP_RESOLUTION = 100
+_C.TASK.CONTEXT_SENSOR.METERS_PER_PIXEL = 0.5
+_C.TASK.CONTEXT_SENSOR.CUTOUT = CN()
+_C.TASK.CONTEXT_SENSOR.CUTOUT.NOISE_PERCENT = 0.0
+_C.TASK.CONTEXT_SENSOR.CUTOUT.MIN_CUTOUT = 2.0
+_C.TASK.CONTEXT_SENSOR.CUTOUT.MAX_CUTOUT = 10.0
+# -----------------------------------------------------------------------------
 # SUCCESS MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.TASK.SUCCESS = CN()

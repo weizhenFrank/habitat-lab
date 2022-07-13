@@ -22,34 +22,21 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (
-    EmbodiedTask,
-    Measure,
-    SimulatorTaskAction,
-)
+from habitat.core.embodied_task import (EmbodiedTask, Measure,
+                                        SimulatorTaskAction)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (
-    AgentState,
-    RGBSensor,
-    Sensor,
-    SensorTypes,
-    ShortestPathPoint,
-    Simulator,
-)
+from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
+                                    ShortestPathPoint, Simulator)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor,
-    HabitatSimRGBSensor,
-)
+    HabitatSimDepthSensor, HabitatSimRGBSensor)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (
-    euler_from_quaternion,
-    quaternion_from_coeff,
-    quaternion_rotate_vector,
-)
+from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
+                                          quaternion_from_coeff,
+                                          quaternion_rotate_vector)
 from habitat.utils.visualizations import fog_of_war, maps
 
 try:
@@ -60,10 +47,8 @@ try:
 except ImportError:
     pass
 
-from .robot_utils.raibert_controller import (
-    Raibert_controller_turn,
-    Raibert_controller_turn_stable,
-)
+from .robot_utils.raibert_controller import (Raibert_controller_turn,
+                                             Raibert_controller_turn_stable)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -71,6 +56,7 @@ cv2 = try_cv2_import()
 
 MAP_THICKNESS_SCALAR: int = 128
 
+import scipy.ndimage
 import torch
 import torch.nn.functional as F
 from scipy.spatial.transform import Rotation as R
@@ -191,6 +177,9 @@ class PointGoalSensor(Sensor):
         self._dimensionality = getattr(config, "DIMENSIONALITY", 2)
         assert self._dimensionality in [2, 3]
 
+        self._project_goal = getattr(config, "PROJECT_GOAL", -1)
+        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+
         super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -212,6 +201,20 @@ class PointGoalSensor(Sensor):
     def _compute_pointgoal(
         self, source_position, source_rotation, goal_position
     ):
+        if self._project_goal != -1:
+            try:
+                slope = (goal_position[2] - source_position[2]) / (goal_position[0] - source_position[0])
+                proj_goal_x = self._project_goal + source_position[0]
+                proj_goal_y = (self._project_goal * slope) + source_position[2]
+                proj_goal_position = np.array([proj_goal_x, goal_position[1], proj_goal_y])
+                direction_vector_proj = np.linalg.norm(proj_goal_position - source_position)
+                direction_vector_norm = np.linalg.norm(goal_position - source_position)
+                if direction_vector_proj < direction_vector_norm:
+                    goal_position[2] = proj_goal_y
+                    goal_position[0] = proj_goal_x
+            except:
+                pass
+
         direction_vector = goal_position - source_position
         direction_vector_agent = quaternion_rotate_vector(
             source_rotation.inverse(), direction_vector
@@ -222,6 +225,8 @@ class PointGoalSensor(Sensor):
                 rho, phi = cartesian_to_polar(
                     -direction_vector_agent[2], direction_vector_agent[0]
                 )
+                if self.log_pointgoal:
+                    return np.array([np.log(rho), -phi], dtype=np.float32)
                 return np.array([rho, -phi], dtype=np.float32)
             else:
                 _, phi = cartesian_to_polar(
@@ -374,7 +379,6 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
         return self._compute_pointgoal(
             agent_position, rotation_world_agent, goal_position
         )
-
 
 @registry.register_sensor
 class HeadingSensor(Sensor):
@@ -544,6 +548,245 @@ class ProximitySensor(Sensor):
             dtype=np.float32,
         )
 
+@registry.register_sensor
+class ContextSensor(Sensor):
+    r"""Sensor for observing the agent's heading in the global coordinate
+    frame.
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the sensor.
+    """
+    cls_uuid: str = "context"
+
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        self._sim = sim
+        self._map_resolution = getattr(
+            config, "MAP_RESOLUTION", 100
+        )
+        
+        self.map_shape = (self._map_resolution, self._map_resolution)
+        self.meters_per_pixel = getattr(
+            config, "METERS_PER_PIXEL", 0.5
+        ) # 50cm per pixel; robot sees 25m around itself
+
+        self.p = getattr(
+            config.CUTOUT, "NOISE_PERCENT", 0.0
+        ) # percentage of image for cutout
+        self.min_cutout = getattr(
+            config.CUTOUT, "MIN_CUTOUT", 2.0
+        ) # min number of pixels for cutout
+        self.max_cutout = getattr(
+            config.CUTOUT, "MAX_CUTOUT", 10.0
+        ) # max number of pixels for cutout
+
+        self._top_down_map = maps.get_topdown_map_from_sim(
+            self._sim,
+            map_resolution=self._map_resolution,
+            draw_border=False,
+            meters_per_pixel=self.meters_per_pixel
+        )
+        self.ep_id = 0
+        self.ctr = 0
+        self.occupied_cutout = Cutout(max_height=self.max_cutout, 
+                                      max_width=self.max_cutout, 
+                                      min_height=self.min_cutout, 
+                                      min_width=self.min_cutout, 
+                                      fill_value_mode=0, 
+                                      p=self.p)
+        self.unoccupied_cutout = Cutout(max_height=self.max_cutout, 
+                                        max_width=self.max_cutout, 
+                                        min_height=self.min_cutout, 
+                                        min_width=self.min_cutout, 
+                                        fill_value_mode=1, 
+                                        p=self.p)
+        self.debug = getattr(
+            config, "DEBUG", ""
+        ) 
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.MEASUREMENT
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        # 0 if occupied, 1 if unoccupied
+        # return spaces.Box(low=0, high=1, shape=self.map_shape, dtype=np.uint8)
+        return spaces.Box(low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32)
+
+    def save_map(self, top_down_map, name, agent_coord=None):
+        h, w = top_down_map.shape
+        color_map = maps.colorize_topdown_map(top_down_map)
+        rs = cv2.resize(color_map, (int(w*10), int(h*10)), interpolation = cv2.INTER_AREA)
+        print('agent coord: ', agent_coord)
+        if agent_coord is not None:
+            rs = maps.draw_agent(
+                image=rs,
+                agent_center_coord=(int(agent_coord[0]*10), int(agent_coord[1]*10)),
+                agent_rotation=self.get_polar_angle(),
+                agent_radius_px=min(rs.shape[0:2]) // 32,
+            )
+
+        save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/{name}_{self.ep_id}_{self.ctr}.png"
+        cv2.imwrite(
+            f"{save_name}",
+            rs,
+        )
+        print(f'saved: {save_name}')
+
+    def get_polar_angle(self):
+        agent_state = self._sim.get_agent_state()
+        # quaternion is in x, y, z, w format
+        ref_rotation = agent_state.rotation
+
+        heading_vector = quaternion_rotate_vector(
+            ref_rotation.inverse(), np.array([0, 0, -1])
+        )
+
+        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+        z_neg_z_flip = np.pi
+        return np.array(phi) + z_neg_z_flip
+
+    def crop_at_point(self, img, center_coord, size):
+        # max(a_x - int(self._map_resolution/2), 0) : min(a_x + int(self._map_resolution/2)+1, h),
+        # max(a_y - int(self._map_resolution/2), 0) : min(a_y + int(self._map_resolution/2)+1, w),
+        h, w = np.array(img).shape[:2]
+        # h, w, c = np.array(img).shape
+        a_x, a_y = center_coord
+        top = max(a_x - size//2, 0)
+        bottom = min(a_x + size//2, h)
+        left = max(a_y - size//2, 0)
+        right = min(a_y + size//2, w)
+        # return img[top:bottom, left:right, :]
+        return img[top:bottom, left:right]
+
+    def get_rotated_point(self, img, im_rot, xy, agent_rotation):
+        yx = xy[::-1]
+        a = -(agent_rotation - np.pi)
+        org_center = (np.array(img.shape[:2][::-1])-1)//2
+        rot_center = (np.array(im_rot.shape[:2][::-1])-1)//2
+        org = yx-org_center
+        new = np.array([org[0]*np.cos(a) + org[1]*np.sin(a),
+                        -org[0]*np.sin(a) + org[1]*np.cos(a)])
+        rotated_pt = new+rot_center
+        return int(rotated_pt[1]), int(rotated_pt[0])
+
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ): 
+        self.ep_id = int(episode.episode_id)
+        self.ctr +=1
+        # get local map from gt_top_down_map
+        self._top_down_map = maps.get_topdown_map_from_sim(
+            self._sim,
+            map_resolution=self._map_resolution,
+            draw_border=False,
+            meters_per_pixel=self.meters_per_pixel
+        )
+        h, w = self._top_down_map.shape
+
+        agent_rotation = self.get_polar_angle()
+        current_position = self._sim.get_agent_state().position
+        ### a_x is along height, a_y is along width
+        a_x, a_y = maps.to_grid(
+            current_position[2],
+            current_position[0],
+            self._top_down_map.shape[0:2],
+            sim=self._sim,
+        )
+
+        # color_map = maps.colorize_topdown_map(self._top_down_map)
+        # color_map = cv2.resize(
+        #     color_map,
+        #     (w*10, h*10),
+        #     interpolation=cv2.INTER_CUBIC,
+        # )
+        # color_map = maps.draw_agent(
+        #     image=color_map,
+        #     agent_center_coord=(a_x*10, a_y*10),
+        #     # agent_center_coord=(a_x, a_y),
+        #     agent_rotation=agent_rotation,
+        #     agent_radius_px=min(color_map.shape[0:2]) // 32,
+        # )
+        # cv2.imwrite(
+        #     f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/context_topdown_map_agent_{self.ep_id}_{self.ctr}.png",
+        #     color_map,
+        # )
+
+        rot_angle = -(agent_rotation - np.pi)
+        top_down_map_rot = scipy.ndimage.interpolation.rotate(
+            self._top_down_map, np.rad2deg(rot_angle), reshape=True
+            # local_top_down_map, (np.pi/2) * 180 / np.pi
+        )
+        # self.save_map(self._top_down_map, 'context_topdown_map')
+
+        # tmp_map = self._top_down_map.copy()
+        # self._top_down_map[
+        #     a_x - point_padding : a_x + point_padding + 1,
+        #     a_y - point_padding : a_y + point_padding + 1,
+        # ] = 2
+        # maps.MAP_SOURCE_POINT_INDICATOR
+
+        # draw_agent(im_position, relative_position, agent_heading, agent_radius_px)
+        # maps.draw_agent()
+
+        ## rotate top down map to match agent's heading
+        rot_a_x, rot_a_y = self.get_rotated_point(self._top_down_map, top_down_map_rot, np.array([a_x, a_y]), agent_rotation)
+        self._top_down_map = top_down_map_rot
+        h, w = self._top_down_map.shape
+        point_padding = 0
+        self._top_down_map[
+            rot_a_x - point_padding : rot_a_x + point_padding + 1,
+            rot_a_y - point_padding : rot_a_y + point_padding + 1,
+        ] = 2
+        self.save_map(self._top_down_map, '_top_down_map')
+
+        # color_map = maps.colorize_topdown_map(self._top_down_map)
+        # color_map = cv2.resize(
+        #     color_map,
+        #     (w*10, h*10),
+        #     interpolation=cv2.INTER_CUBIC,
+        # )
+        # color_map = maps.draw_agent(
+        #     image=color_map,
+        #     agent_center_coord=(int(rot_a_x*10), int(rot_a_y*10)),
+        #     # agent_center_coord=(a_x, a_y),
+        #     agent_rotation=agent_rotation,
+        #     agent_radius_px=min(color_map.shape[0:2]) // 32,
+        # )
+        # cv2.imwrite(
+        #     f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/context_topdown_map_agent_rot_{self.ep_id}_{self.ctr}.png",
+        #     color_map,
+        # )
+
+        pad_top = max(int(self._map_resolution/2) - a_x - 1, 0)
+        pad_bot = max(a_x + int(self._map_resolution/2) - h, 0)
+        pad_left = max(int(self._map_resolution/2) - a_y - 1, 0)
+        pad_right = max(a_y + int(self._map_resolution/2) - w, 0)
+
+        local_top_down_map = self.crop_at_point(self._top_down_map, (int(rot_a_x), int(rot_a_y)), self._map_resolution)
+        lh, lw = local_top_down_map.shape
+        # self.save_map(local_top_down_map, 'local_top_down_map', (lh-(h-rot_a_x), lw-(w-rot_a_y)))
+
+        local_top_down_map_corroded = self.unoccupied_cutout(local_top_down_map)
+        local_top_down_map_corroded = self.occupied_cutout(local_top_down_map_corroded)
+        # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
+
+        local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
+        local_top_down_map_filled[pad_top:pad_top+lh,pad_left:pad_left+lw] = local_top_down_map_corroded
+        self.save_map(local_top_down_map_filled, 'local_top_down_map_filled')
+
+        # 0 (white) if occupied, 1 (gray) if unoccupied
+        if self.debug == "WHITE":
+            return np.zeros_like(local_top_down_map_filled, dtype=np.float32)
+        elif self.debug == "GRAY":
+            return np.ones_like(local_top_down_map_filled, dtype=np.float32)
+        else:
+            return local_top_down_map_filled.astype(np.float32)
 
 @registry.register_measure
 class Success(Measure):
@@ -785,10 +1028,19 @@ class TopDownMap(Measure):
         self.point_padding = 2 * int(
             np.ceil(self._map_resolution / MAP_THICKNESS_SCALAR)
         )
+        self.ctr = 0
+
         super().__init__()
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return "top_down_map"
+
+    def save_map(self, top_down_map, name):
+        color_map = maps.colorize_topdown_map(top_down_map)
+        cv2.imwrite(
+            f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/{name}_{self.ctr}.png",
+            color_map,
+        )
 
     def get_original_map(self):
         top_down_map = maps.get_topdown_map_from_sim(
@@ -810,7 +1062,7 @@ class TopDownMap(Measure):
             position[0],
             self._top_down_map.shape[0:2],
             sim=self._sim,
-        )
+        )   
         self._top_down_map[
             t_x - self.point_padding : t_x + self.point_padding + 1,
             t_y - self.point_padding : t_y + self.point_padding + 1,
@@ -920,15 +1172,15 @@ class TopDownMap(Measure):
     def _is_on_same_floor(
         self, height, ref_floor_height=None, ceiling_height=2.0
     ):
-        # if ref_floor_height is None:
-        # ref_floor_height = self._sim.get_agent(0).state.position[1]
-        # return ref_floor_height < height < ref_floor_height + ceiling_height
-        return True
+        if ref_floor_height is None:
+            ref_floor_height = self._sim.get_agent(0).state.position[1]
+        return ref_floor_height < height < ref_floor_height + ceiling_height
+        # return True
 
     def reset_metric(self, episode, *args: Any, **kwargs: Any):
         self._step_count = 0
-        self._metric = None
         self._top_down_map = self.get_original_map()
+
         agent_position = self._sim.get_agent_state().position
         a_x, a_y = maps.to_grid(
             agent_position[2],
@@ -951,6 +1203,12 @@ class TopDownMap(Measure):
             self._draw_point(
                 episode.start_position, maps.MAP_SOURCE_POINT_INDICATOR
             )
+        self._metric = {
+            "map": self._top_down_map,
+            "fog_of_war_mask": self._fog_of_war_mask,
+            "agent_map_coord": (a_x, a_y),
+            "agent_angle": self.get_polar_angle(),
+        }
 
     def update_metric(self, episode, action, *args: Any, **kwargs: Any):
         self._step_count += 1

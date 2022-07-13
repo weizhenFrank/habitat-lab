@@ -58,10 +58,10 @@ def is_compatible_episode(
 ) -> Union[Tuple[bool, float], Tuple[bool, int]]:
     euclid_dist = np.power(np.power(np.array(s) - np.array(t), 2).sum(0), 0.5)
 
-    if not multi_floor:
-        if np.abs(s[1] - t[1]) < 0.5:  # check height difference to assure s and
-            #  t are from same floor
-            return False, 0
+    if not multi_floor and np.abs(s[1] - t[1]) > 0.5:  # check height difference to assure s and t are from same floor
+        return False, 0
+    elif multi_floor and np.abs(s[1] - t[1]) < 0.5:
+        return False, 0
     d_separation = sim.geodesic_distance(s, [t])
     if d_separation == np.inf:
         return False, 0

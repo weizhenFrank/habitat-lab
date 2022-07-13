@@ -173,6 +173,7 @@ class PPOTrainer(BaseRLTrainer):
         )
 
         print("SELF.ACTOR_CRITIC: ", self.actor_critic)
+        print("OBSERVATION SPACE: ", observation_space.spaces.keys())
         self.obs_space = observation_space
         self.actor_critic.to(self.device)
 
@@ -395,6 +396,20 @@ class PPOTrainer(BaseRLTrainer):
                     **obs_space.spaces,
                 }
             )
+        if self.config.RL.POLICY.name == "PointNavContextPolicy":
+            map_res = self.config.TASK_CONFIG.TASK.CONTEXT_SENSOR.MAP_RESOLUTION
+            obs_space = spaces.Dict(
+                {
+                    "context": spaces.Box(
+                        low=np.finfo(np.float32).min,
+                        high=np.finfo(np.float32).max,
+                        shape=(map_res, map_res),
+                        dtype=np.float32,
+                    ),
+                    **obs_space.spaces,
+                }
+            )
+
 
         self._nbuffers = 2 if ppo_cfg.use_double_buffered_sampler else 1
         self.rollouts = RolloutStorage(

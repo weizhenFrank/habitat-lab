@@ -256,6 +256,13 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
     if "human_collision" in info and info["human_collision"]:
         egocentric_view = draw_human_collision(egocentric_view)
 
+    # draw human collision
+    if "context" in observation:
+        color_map = maps.colorize_draw_local_map_and_fit_to_height(
+            observation["context"].cpu().numpy(), info["top_down_map"], egocentric_view.shape[0]
+        )
+        egocentric_view = np.concatenate((egocentric_view, color_map), axis=1)
+
     frame = egocentric_view
 
     if "top_down_map" in info:

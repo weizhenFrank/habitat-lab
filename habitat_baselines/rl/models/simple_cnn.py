@@ -10,6 +10,7 @@ import os
 DEBUGGING = False
 SAVE_PTH = "/coc/testnvme/jtruong33/google_nav/habitat-lab/depth_img_tmp/"
 
+
 class SimpleCNN(nn.Module):
     r"""A Simple 3-Conv CNN followed by a fully connected layer
 
@@ -97,7 +98,9 @@ class SimpleCNN(nn.Module):
             cnn_dims = np.array([height, width], dtype=np.float32)
 
         if self.is_blind:
-            print('#################### WARNING!!!! POLICY IS BLIND !!!!! ####################')
+            print(
+                "#################### WARNING!!!! POLICY IS BLIND !!!!! ####################"
+            )
             self.cnn = nn.Sequential()
         else:
             for kernel_size, stride in zip(
@@ -113,7 +116,9 @@ class SimpleCNN(nn.Module):
 
             self.cnn = nn.Sequential(
                 nn.Conv2d(
-                    in_channels=self._n_input_rgb + self._n_input_gray + self._n_input_depth,
+                    in_channels=self._n_input_rgb
+                    + self._n_input_gray
+                    + self._n_input_depth,
                     out_channels=32,
                     kernel_size=self._cnn_layers_kernel_size[0],
                     stride=self._cnn_layers_stride[0],
@@ -142,7 +147,9 @@ class SimpleCNN(nn.Module):
         self.count = 0
         self.debug_prefix = f"{time.time() * 1e7:.0f}"[-5:]
 
-    def _conv_output_dim(self, dimension, padding, dilation, kernel_size, stride):
+    def _conv_output_dim(
+        self, dimension, padding, dilation, kernel_size, stride
+    ):
         r"""Calculates the output height and width based on the input
         height and width to the convolution layer.
 
@@ -172,13 +179,17 @@ class SimpleCNN(nn.Module):
     def layer_init(self):
         for layer in self.cnn:  # type: ignore
             if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_normal_(layer.weight, nn.init.calculate_gain("relu"))
+                nn.init.kaiming_normal_(
+                    layer.weight, nn.init.calculate_gain("relu")
+                )
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, val=0)
 
     @property
     def is_blind(self):
-        return self._n_input_rgb + self._n_input_gray + self._n_input_depth == 0
+        return (
+            self._n_input_rgb + self._n_input_gray + self._n_input_depth == 0
+        )
 
     def forward(self, observations: Dict[str, torch.Tensor]):
         cnn_input = []
@@ -186,29 +197,23 @@ class SimpleCNN(nn.Module):
             rgb_observations = observations["rgb"]
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             rgb_observations = rgb_observations.permute(0, 3, 1, 2)
-            rgb_observations = rgb_observations.float() / 255.0  # normalize RGB
+            rgb_observations = (
+                rgb_observations.float() / 255.0
+            )  # normalize RGB
             cnn_input.append(rgb_observations)
 
         if self._n_input_depth > 0:
             if self.using_one_camera:
                 depth_observations = observations["depth"]
             elif self.using_two_cameras:
-                if DEBUGGING:
-                    img = cv2.imread("/coc/testnvme/jtruong33/google_nav/habitat-lab/depth_img/depth_61218_000028.png")
-                    depth_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    exp_1 = np.expand_dims(depth_img, axis=0)
-                    exp_2 = np.expand_dims(exp_1, axis=3)
-                    obs = torch.from_numpy(exp_2 / 255.0)
-                    depth_observations = obs.to(observations["spot_right_depth"].device, dtype=torch.float)
-                else:
-                    depth_observations = torch.cat(
-                        [
-                            # Spot is cross-eyed; right is on the left on the FOV
-                            observations["spot_right_depth"],
-                            observations["spot_left_depth"],
-                        ],
-                        dim=2,
-                    )
+                depth_observations = torch.cat(
+                    [
+                        # Spot is cross-eyed; right is on the left on the FOV
+                        observations["spot_right_depth"],
+                        observations["spot_left_depth"],
+                    ],
+                    dim=2,
+                )
                 # if DEBUGGING:
                 #     img = (depth_observations.squeeze().cpu().numpy() * 255.0).astype(np.uint8)
                 #     out_path = os.path.join(SAVE_PTH, f"depth_{self.debug_prefix}_{self.count:06}.png")
@@ -234,8 +239,13 @@ class SimpleCNN(nn.Module):
                     dim=2,
                 )
                 if DEBUGGING:
-                    img = (gray_observations.squeeze().cpu().numpy()).astype(np.uint8)
-                    out_path = os.path.join(SAVE_PTH, f"gray_{self.debug_prefix}_{self.count:06}.png")
+                    img = (gray_observations.squeeze().cpu().numpy()).astype(
+                        np.uint8
+                    )
+                    out_path = os.path.join(
+                        SAVE_PTH,
+                        f"gray_{self.debug_prefix}_{self.count:06}.png",
+                    )
                     cv2.imwrite(out_path, img)
                     print("Saved visual observations to", out_path)
                     self.count += 1
@@ -243,9 +253,93 @@ class SimpleCNN(nn.Module):
                 raise Exception("Not implemented")
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             gray_observations = gray_observations.permute(0, 3, 1, 2)
-            gray_observations = gray_observations.float() / 255.0  # normalize RGB
+            gray_observations = (
+                gray_observations.float() / 255.0
+            )  # normalize RGB
             cnn_input.append(gray_observations)
-            
+
         cnn_inputs = torch.cat(cnn_input, dim=1)
 
         return self.cnn(cnn_inputs)
+
+
+class SimpleCNNContext(SimpleCNN):
+    r"""A Simple 3-Conv CNN followed by a fully connected layer
+
+    Takes in observations and produces an embedding of the rgb and/or depth components
+
+    Args:
+        observation_space: The observation_space of the agent
+        output_size: The size of the embedding vector
+    """
+
+    def __init__(
+        self,
+        observation_space,
+        output_size,
+    ):
+        super().__init__(
+            observation_space=observation_space, output_size=output_size
+        )
+
+        # kernel size for different CNN layers
+        self._cnn_layers_kernel_size = [(8, 8), (4, 4), (3, 3)]
+
+        # strides for different CNN layers
+        self._cnn_layers_stride = [(4, 4), (2, 2), (1, 1)]
+
+        cnn_dims = np.array(
+            observation_space.spaces["context"].shape[:2], dtype=np.float32
+        )
+
+        for kernel_size, stride in zip(
+            self._cnn_layers_kernel_size, self._cnn_layers_stride
+        ):
+            cnn_dims = self._conv_output_dim(
+                dimension=cnn_dims,
+                padding=np.array([0, 0], dtype=np.float32),
+                dilation=np.array([1, 1], dtype=np.float32),
+                kernel_size=np.array(kernel_size, dtype=np.float32),
+                stride=np.array(stride, dtype=np.float32),
+            )
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=32,
+                kernel_size=self._cnn_layers_kernel_size[0],
+                stride=self._cnn_layers_stride[0],
+            ),
+            nn.ReLU(True),
+            nn.Conv2d(
+                in_channels=32,
+                out_channels=64,
+                kernel_size=self._cnn_layers_kernel_size[1],
+                stride=self._cnn_layers_stride[1],
+            ),
+            nn.ReLU(True),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=32,
+                kernel_size=self._cnn_layers_kernel_size[2],
+                stride=self._cnn_layers_stride[2],
+            ),
+            #  nn.ReLU(True),
+            nn.Flatten(),
+            nn.Linear(32 * cnn_dims[0] * cnn_dims[1], output_size),
+            nn.ReLU(True),
+        )
+
+        self.layer_init()
+        self.count = 0
+        self.debug_prefix = f"{time.time() * 1e7:.0f}"[-5:]
+
+    @property
+    def is_blind(self):
+        return False
+
+    def forward(self, observations: Dict[str, torch.Tensor]):
+        context_observations = observations["context"]
+        # [BATCH x CHANNEL x HEIGHT X WIDTH]
+        context_observations = torch.unsqueeze(context_observations, axis=1)
+        return self.cnn(context_observations)

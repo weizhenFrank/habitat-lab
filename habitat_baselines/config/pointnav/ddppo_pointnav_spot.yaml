@@ -67,6 +67,7 @@ RL:
     use_normalized_advantage: False
 
     hidden_size: 512
+    context_hidden_size: 512
 
     # Use double buffered sampling, typically helps
     # when environment time is similar or large than

@@ -62,6 +62,16 @@ TASK:
   POINTGOAL_WITH_GPS_COMPASS_SENSOR:
     GOAL_FORMAT: "POLAR"
     DIMENSIONALITY: 2
+    PROJECT_GOAL: -1
+    LOG_POINTGOAL: False
+  CONTEXT_SENSOR:
+    MAP_RESOLUTION: 100
+    METERS_PER_PIXEL: 0.5
+    DEBUG: ""
+    CUTOUT: 
+      NOISE_PERCENT: 0.0
+      MIN_CUTOUT: 2.0
+      MIN_CUTOUT: 10.0
   GOAL_SENSOR_UUID: pointgoal_with_gps_compass
 
   POSSIBLE_ACTIONS: ["VELOCITY_CONTROL"]
@@ -78,7 +88,6 @@ TASK:
       HOR_VEL_RANGE: [ -0.5, 0.5 ] # meters per sec
       MIN_RAND_PITCH: 0.0
       MAX_RAND_PITCH: 0.0
-      # ROBOT_URDF: "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
       ROBOT_URDF: "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid_rot_fix.urdf"
       CONTACT_TEST: True
 
@@ -90,4 +99,3 @@ DATASET:
   TYPE: PointNav-v1
   SPLIT: train
   DATA_PATH: /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson/pointnav_spot_0.3/{split}/{split}.json.gz
-  # DATA_PATH: /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor/train/train.json.gz
