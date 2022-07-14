@@ -1,11 +1,11 @@
+import os
+import time
 from typing import Dict
 
+import cv2
 import numpy as np
 import torch
 from torch import nn as nn
-import time
-import cv2
-import os
 
 DEBUGGING = False
 SAVE_PTH = "/coc/testnvme/jtruong33/google_nav/habitat-lab/depth_img_tmp/"
@@ -338,8 +338,7 @@ class SimpleCNNContext(SimpleCNN):
     def is_blind(self):
         return False
 
-    def forward(self, observations: Dict[str, torch.Tensor]):
-        context_observations = observations["context"]
+    def forward(self, observations: torch.Tensor):
         # [BATCH x CHANNEL x HEIGHT X WIDTH]
-        context_observations = torch.unsqueeze(context_observations, axis=1)
+        context_observations = torch.unsqueeze(observations, axis=1)
         return self.cnn(context_observations)
