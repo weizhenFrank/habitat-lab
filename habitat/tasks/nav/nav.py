@@ -47,6 +47,8 @@ try:
 except ImportError:
     pass
 
+import time
+
 from .robot_utils.raibert_controller import (Raibert_controller_turn,
                                              Raibert_controller_turn_stable)
 from .robot_utils.robot_env import *
@@ -59,6 +61,7 @@ MAP_THICKNESS_SCALAR: int = 128
 import scipy.ndimage
 import torch
 import torch.nn.functional as F
+from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R
 
 
@@ -578,7 +581,8 @@ class ContextSensor(Sensor):
         self.map_shape = (self._map_resolution, self._map_resolution)
         self.meters_per_pixel = getattr(
             config, "METERS_PER_PIXEL", 0.5
-        )  # 50cm per pixel; robot sees 25m around itself
+        )  # cm per pixel; decreasing this makes map bigger, need more pixels to get 25m radius around robot
+        # self.meters_per_pixel = 0.05
         self.p = getattr(
             config.CUTOUT, "NOISE_PERCENT", 0.0
         )  # percentage of image for cutout
@@ -589,12 +593,12 @@ class ContextSensor(Sensor):
             config.CUTOUT, "MAX_CUTOUT", 10.0
         )  # max number of pixels for cutout
 
-        self._top_down_map = maps.get_topdown_map_from_sim(
-            self._sim,
-            map_resolution=self._map_resolution,
-            draw_border=False,
-            meters_per_pixel=self.meters_per_pixel,
-        )
+        self.context_type = getattr(config, "CONTEXT_TYPE", "MAP")
+        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+
+        self._current_episode_id = None
+        self._top_down_map = None
+
         self.ep_id = 0
         self.ctr = 0
         self.occupied_cutout = Cutout(
@@ -625,9 +629,12 @@ class ContextSensor(Sensor):
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         # 0 if occupied, 1 if unoccupied
         # return spaces.Box(low=0, high=1, shape=self.map_shape, dtype=np.uint8)
-        return spaces.Box(
-            low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32
-        )
+        if self.context_type == "WAYPOINT":
+            return spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
+        else:
+            return spaces.Box(
+                low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32
+            )
 
     def save_map(self, top_down_map, name, agent_coord=None):
         h, w = top_down_map.shape
@@ -654,12 +661,72 @@ class ContextSensor(Sensor):
                 agent_radius_px=min(rs.shape[0:2]) // 32,
             )
 
-        save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps/{name}_{self.ep_id}_{self.ctr}.png"
+        save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_{self.ep_id}_{self.ctr}.png"
         cv2.imwrite(
             f"{save_name}",
             rs,
         )
         print(f"saved: {save_name}")
+
+    def _compute_pointgoal(
+        self, agent_position, rotation_world_agent, goal_position
+    ):
+        direction_vector = goal_position - agent_position
+        direction_vector_agent = quaternion_rotate_vector(
+            rotation_world_agent.inverse(), direction_vector
+        )
+        rho, phi = cartesian_to_polar(
+            -direction_vector_agent[2], direction_vector_agent[0]
+        )
+        if self.log_pointgoal:
+            return np.array([np.log(rho), -phi], dtype=np.float32)
+        return np.array([rho, -phi], dtype=np.float32)
+
+    def get_next_shortest_path_point(self, episode):
+        agent_position = self._sim.get_agent_state().position
+        for goal in episode.goals:
+            _shortest_path_points = (
+                self._sim.get_straight_shortest_path_points(
+                    agent_position, goal.position
+                )
+            )
+            if len(_shortest_path_points) > 0:
+                curr_pt = _shortest_path_points[0]
+                next_pt = _shortest_path_points[1]
+                rho = np.linalg.norm(next_pt - curr_pt)
+
+                if int(rho) > 1:
+                    xnew = np.linspace(
+                        curr_pt[0], next_pt[0], num=int(rho), endpoint=False
+                    )
+                    x = [curr_pt[0], next_pt[0]]
+                    y = [curr_pt[2], next_pt[2]]
+                    f = interp1d(x, y)
+                    interp_pts = f(xnew)
+                    next_shortest_path_point = np.array(
+                        [xnew[1], curr_pt[1], interp_pts[1]]
+                    )
+                else:
+                    next_shortest_path_point = next_pt
+            else:
+                next_shortest_path_point = goal
+            # grid_coords = maps.to_grid(
+            #     next_shortest_path_point[2],
+            #     next_shortest_path_point[0],
+            #     self._top_down_map.shape[0:2],
+            #     sim=self._sim,
+            # )
+
+            agent_state = self._sim.get_agent_state()
+            agent_position = agent_state.position
+            rotation_world_agent = agent_state.rotation
+            goal_position = next_shortest_path_point
+
+            goal_vector = self._compute_pointgoal(
+                agent_position, rotation_world_agent, goal_position
+            )
+        # return goal_vector, grid_coords
+        return goal_vector
 
     def get_polar_angle(self):
         agent_state = self._sim.get_agent_state()
@@ -701,43 +768,76 @@ class ContextSensor(Sensor):
     def get_observation(
         self, observations, episode, *args: Any, **kwargs: Any
     ):
+        print("episode: ", episode)
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
+
+        if self.context_type == "WAYPOINT":
+            waypoint_vector = self.get_next_shortest_path_point(episode)
+            # visualize on map
+            # curr_top_down_map[
+            #     waypoint_grid[0]
+            #     - point_padding : waypoint_grid[0]
+            #     + point_padding
+            #     + 1,
+            #     waypoint_grid[1]
+            #     - point_padding : waypoint_grid[1]
+            #     + point_padding
+            #     + 1,
+            # ] = 2
+            return waypoint_vector
+            # print("shortest pts: ", gxy[0], gxy[1])
+            # self.save_map(curr_top_down_map, "context_topdown_map")
+            # compute goal vector using meters_per_pixel conversion
+
         # get local map from gt_top_down_map
-        self._top_down_map = maps.get_topdown_map_from_sim(
-            self._sim,
-            map_resolution=self._map_resolution,
-            draw_border=False,
-            meters_per_pixel=self.meters_per_pixel,
-        )
+        # start = time.time()
+        episode_uniq_id = f"{episode.scene_id} {episode.episode_id}"
+        if episode_uniq_id != self._current_episode_id:
+            self._top_down_map = maps.get_topdown_map_from_sim(
+                self._sim,
+                map_resolution=self._map_resolution,
+                draw_border=False,
+                meters_per_pixel=self.meters_per_pixel,
+            )
+            # self.save_map(self._top_down_map, "topdown_map")
+            self._current_episode_id = episode_uniq_id
+
+        curr_top_down_map = self._top_down_map.copy()
         agent_rotation = self.get_polar_angle()
         current_position = self._sim.get_agent_state().position
         ### a_x is along height, a_y is along width
         a_x, a_y = maps.to_grid(
             current_position[2],
             current_position[0],
-            self._top_down_map.shape[0:2],
+            curr_top_down_map.shape[0:2],
             sim=self._sim,
         )
+        point_padding = 1
+        # visualize agent
+        curr_top_down_map[
+            a_x - point_padding : a_x + point_padding + 1,
+            a_y - point_padding : a_y + point_padding + 1,
+        ] = 2
 
         if self._rotate_map:
             rot_angle = -(agent_rotation - np.pi)
             top_down_map_rot = scipy.ndimage.interpolation.rotate(
-                self._top_down_map, np.rad2deg(rot_angle), reshape=True
+                curr_top_down_map, np.rad2deg(rot_angle), reshape=True
             )
             # self.save_map(self._top_down_map, 'context_topdown_map')
 
             ## rotate top down map to match agent's heading
             a_x, a_y = self.get_rotated_point(
-                self._top_down_map,
+                curr_top_down_map,
                 top_down_map_rot,
                 np.array([a_x, a_y]),
                 agent_rotation,
             )
-            self._top_down_map = top_down_map_rot
+            curr_top_down_map = top_down_map_rot
 
         point_padding = 0
-        self._top_down_map[
+        curr_top_down_map[
             a_x - point_padding : a_x + point_padding + 1,
             a_y - point_padding : a_y + point_padding + 1,
         ] = 2
@@ -746,7 +846,7 @@ class ContextSensor(Sensor):
         pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
 
         local_top_down_map = self.crop_at_point(
-            self._top_down_map,
+            curr_top_down_map,
             (a_x, a_y),
             self._map_resolution,
         )
