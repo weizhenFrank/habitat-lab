@@ -9,8 +9,8 @@ import torch
 from gym import spaces
 from habitat.config import Config
 from habitat.tasks.nav.nav import (
-    IntegratedPointGoalGPSAndCompassSensor,
     ContextSensor,
+    IntegratedPointGoalGPSAndCompassSensor,
 )
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.models.rnn_state_encoder import (
@@ -280,10 +280,22 @@ class PointNavContextNet(PointNavBaselineNet):
             observation_space=observation_space,
             hidden_size=hidden_size,
         )
+        if observation_space["context"].shape == (2,):
+            self.context_type = "waypoint"
+        else:
+            self.context_type = "map"
         self.context_hidden_size = context_hidden_size
-        self.context_encoder = SimpleCNNContext(
-            observation_space, self.context_hidden_size
-        )
+        if self.context_type == "map":
+            self.context_encoder = SimpleCNNContext(
+                observation_space, self.context_hidden_size
+            )
+        else:
+            self.context_encoder = nn.Sequential(
+                nn.Linear(2, self.tgt_embeding_size),
+                nn.ReLU(),
+                nn.Linear(self.tgt_embeding_size, self.context_hidden_size),
+                nn.ReLU(),
+            )
         self.state_encoder = build_rnn_state_encoder(
             (0 if self.is_blind else self._hidden_size)
             + self.tgt_embeding_size
@@ -307,7 +319,7 @@ class PointNavContextNet(PointNavBaselineNet):
             te = self.tgt_encoder(goal_observations)
             x.append(te)
         if ContextSensor.cls_uuid in observations:
-            ce = self.context_encoder(observations)
+            ce = self.context_encoder(observations[ContextSensor.cls_uuid])
             x.append(ce)
         x_out = torch.cat(x, dim=1)
         x_out, rnn_hidden_states = self.state_encoder(
