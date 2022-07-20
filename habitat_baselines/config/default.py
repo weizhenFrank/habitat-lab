@@ -92,7 +92,16 @@ _C.RL.preemption.save_state_batch_only = False
 # -----------------------------------------------------------------------------
 _C.RL.POLICY = CN()
 _C.RL.POLICY.name = "PointNavResNetPolicy"
-_C.RL.POLICY.action_distribution_type = "categorical"
+_C.RL.POLICY.action_distribution_type = "gaussian"
+# For gaussian action distribution:
+_C.RL.POLICY.ACTION_DIST = CN()
+_C.RL.POLICY.ACTION_DIST.use_log_std = False
+# If True, the std will be clamped to the specified min and max std values
+_C.RL.POLICY.ACTION_DIST.clamp_std = True
+_C.RL.POLICY.ACTION_DIST.min_std = 1e-6
+_C.RL.POLICY.ACTION_DIST.max_std = 1
+_C.RL.POLICY.ACTION_DIST.min_log_std = -5
+_C.RL.POLICY.ACTION_DIST.max_log_std = 2
 # -----------------------------------------------------------------------------
 # SPLITNET CONFIG
 # -----------------------------------------------------------------------------
@@ -154,6 +163,11 @@ _C.RL.PPO.tau = 0.95
 _C.RL.PPO.reward_window_size = 50
 _C.RL.PPO.use_normalized_advantage = False
 _C.RL.PPO.hidden_size = 512
+_C.RL.PPO.tgt_hidden_size = 512
+_C.RL.PPO.tgt_encoding = "linear_2"
+_C.RL.PPO.context_hidden_size = 512
+_C.RL.PPO.context_encoding = "cnn"
+_C.RL.PPO.use_prev_action = False
 # Use double buffered sampling, typically helps
 # when environment time is similar or large than
 # policy inference time during rollout generation

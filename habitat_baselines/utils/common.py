@@ -11,32 +11,24 @@ import shutil
 import tarfile
 from collections import defaultdict
 from io import BytesIO
-from typing import (
-    Any,
-    DefaultDict,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import (Any, DefaultDict, Dict, Iterable, List, Optional, Tuple,
+                    Union)
 
 import attr
 import numpy as np
 import torch
 from gym.spaces import Box
-from PIL import Image
-from torch import Size, Tensor
-from torch import nn as nn
-
 from habitat import logger
+from habitat.config import Config
 from habitat.core.dataset import Episode
 from habitat.core.utils import try_cv2_import
 from habitat.utils import profiling_wrapper
 from habitat.utils.visualizations.utils import images_to_video
 from habitat_baselines.common.tensor_dict import DictTree, TensorDict
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
+from PIL import Image
+from torch import Size, Tensor
+from torch import nn as nn
 
 cv2 = try_cv2_import()
 
@@ -96,26 +88,38 @@ class GaussianNet(nn.Module):
         self,
         num_inputs: int,
         num_outputs: int,
-        std_min: float = 1e-6,
-        std_max: float = 1,
+        config: Config,
     ) -> None:
         super().__init__()
 
         self.mu = nn.Linear(num_inputs, num_outputs)
         self.std = nn.Linear(num_inputs, num_outputs)
-        self.std_min = std_min
-        self.std_max = std_max
+        self.use_log_std = config.use_log_std
+        self.clamp_std = config.clamp_std
+        if self.use_log_std:
+            self.std_min = config.min_log_std
+            self.std_max = config.max_log_std
+            std_init = 0.0  # initialize std value so that exp(std) ~ 1
+        else:
+            self.std_min = config.min_std
+            self.std_max = config.max_std
+            std_init = 1.0  # initialize std value so that std ~ 1
 
         nn.init.orthogonal_(self.mu.weight, gain=0.01)
         nn.init.constant_(self.mu.bias, 0)
         nn.init.orthogonal_(self.std.weight, gain=0.01)
-        nn.init.constant_(self.std.bias, 0)
+        nn.init.constant_(self.std.bias, std_init)
 
     def forward(self, x: Tensor) -> CustomNormal:
         mu = torch.tanh(self.mu(x))
-        std = torch.clamp(self.std(x), min=self.std_min, max=self.std_max)
-
+        std = self.std(x)
+        if self.clamp_std:
+            std = torch.clamp(std, min=self.std_min, max=self.std_max)
+        if self.use_log_std:
+            std = torch.exp(std)
+        # std = torch.clamp(self.std(x), min=self.std_min, max=self.std_min)
         return CustomNormal(mu, std)
+
 
 def linear_decay(epoch: int, total_num_updates: int) -> float:
     r"""Returns a multiplicative factor for linear value decay
@@ -254,28 +258,26 @@ def poll_checkpoint_folder(
     assert os.path.isdir(checkpoint_folder), (
         f"invalid checkpoint folder " f"path {checkpoint_folder}"
     )
-    models_paths = list(
-        filter(os.path.isfile, glob.glob(checkpoint_folder + "/*"))
-    )
-    models_paths.sort(key=os.path.getmtime)
-    ind = previous_ckpt_ind + 1
-    if ind < len(models_paths):
-        return models_paths[ind]
-    return None
     # models_paths = list(
-    #     filter(
-    #         lambda x: not os.path.isfile(x+'.done'),
-    #         glob.glob(os.path.join(checkpoint_folder, '*.pth'))
-    #     )
+    #     filter(os.path.isfile, glob.glob(checkpoint_folder + "/*"))
     # )
-    # models_paths = sorted(models_paths, key=lambda x: int(x.split('.')[-2]))
-    # if len(models_paths) > 0:
-    #     # with open(models_paths[0]+'.done','w') as f:
-    #     #     pass
-    #     return models_paths[0]
-    # else:
-    #     exit()
+    # models_paths.sort(key=os.path.getmtime)
+    # ind = previous_ckpt_ind + 1
+    # if ind < len(models_paths):
+    #     return models_paths[ind]
     # return None
+    models_paths = list(
+        filter(
+            lambda x: not os.path.isfile(x + ".done"),
+            glob.glob(os.path.join(checkpoint_folder, "*.pth")),
+        )
+    )
+    models_paths = sorted(models_paths, key=lambda x: int(x.split(".")[-2]))
+    if len(models_paths) > 0:
+        with open(models_paths[0] + ".done", "w") as f:
+            pass
+        return models_paths[0]
+    return None
 
 
 def generate_video(

@@ -35,6 +35,9 @@ RL:
   POLICY:
     name: "PointNavResNetPolicy"
     action_distribution_type: "gaussian"
+    ACTION_DIST:
+      use_log_std: False
+      clamp_std: True
     num_cnns: 1
     OBS_TRANSFORMS:
       ENABLED_TRANSFORMS: [ ]
@@ -68,6 +71,10 @@ RL:
 
     hidden_size: 512
     context_hidden_size: 512
+    tgt_hidden_size: 512
+    tgt_encoding: "linear_2"
+    context_encoding: "cnn"
+    use_prev_action: False
 
     # Use double buffered sampling, typically helps
     # when environment time is similar or large than
