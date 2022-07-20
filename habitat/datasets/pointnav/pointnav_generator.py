@@ -54,11 +54,13 @@ def is_compatible_episode(
     near_dist: float,
     far_dist: float,
     geodesic_to_euclid_ratio: float,
-    multi_floor: bool = False
+    multi_floor: bool = False,
 ) -> Union[Tuple[bool, float], Tuple[bool, int]]:
     euclid_dist = np.power(np.power(np.array(s) - np.array(t), 2).sum(0), 0.5)
 
-    if not multi_floor and np.abs(s[1] - t[1]) > 0.5:  # check height difference to assure s and t are from same floor
+    if (
+        not multi_floor and np.abs(s[1] - t[1]) > 0.5
+    ):  # check height difference to assure s and t are from same floor
         return False, 0
     elif multi_floor and np.abs(s[1] - t[1]) < 0.5:
         return False, 0
@@ -113,7 +115,8 @@ def generate_pointnav_episode(
     geodesic_to_euclid_min_ratio: float = 1.1,
     number_retries_per_target: int = 10,
     robot: str = "Spot",
-    multi_floor: bool = False
+    multi_floor: bool = False,
+    episode_start_idx: int = 0,
 ) -> Generator[NavigationEpisode, None, None]:
     r"""Generator function that generates PointGoal navigation episodes.
 
@@ -165,9 +168,7 @@ def generate_pointnav_episode(
         ]
         z_offset = 0.28
     elif robot == "AlienGo":
-        robot_file = (
-            "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf"
-        )
+        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf"
         init_joint_positions = [
             0.1,
             0.60,
@@ -228,7 +229,9 @@ def generate_pointnav_episode(
         z_offset = 0.525
 
     ao_mgr = sim.get_articulated_object_manager()
-    robot_id = ao_mgr.add_articulated_object_from_urdf(robot_file, fixed_base=False)
+    robot_id = ao_mgr.add_articulated_object_from_urdf(
+        robot_file, fixed_base=False
+    )
 
     if robot != "Locobot":
         # Set Spot's joints to default walking position
@@ -247,7 +250,9 @@ def generate_pointnav_episode(
     episode_count = 0
     num_trials = num_episodes * 100
     ctr = -1
-    while episode_count < num_episodes or num_episodes < 0:
+    while (
+        episode_count + episode_start_idx < num_episodes + episode_start_idx
+    ) or num_episodes < 0:
         if ctr > num_trials:
             print("EPISODE COUNT: ", episode_count)
             break
@@ -272,7 +277,7 @@ def generate_pointnav_episode(
                 near_dist=closest_dist_limit,
                 far_dist=furthest_dist_limit,
                 geodesic_to_euclid_ratio=geodesic_to_euclid_min_ratio,
-                multi_floor=multi_floor
+                multi_floor=multi_floor,
             )
             if is_compatible:
                 break
@@ -283,7 +288,9 @@ def generate_pointnav_episode(
                 phi = np.arctan2(y, x)
                 return rho, phi
 
-            def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
+            def quaternion_rotate_vector(
+                quat: np.quaternion, v: np.array
+            ) -> np.array:
                 r"""Rotates a vector by a quaternion
                 Args:
                     quaternion: The quaternion to rotate by
@@ -299,7 +306,9 @@ def generate_pointnav_episode(
                 heading_vector = quaternion_rotate_vector(
                     rotation.inverse(), np.array([0, 0, -1])
                 )
-                phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+                phi = cartesian_to_polar(
+                    -heading_vector[2], heading_vector[0]
+                )[1]
                 return phi
 
             angle = np.random.uniform(0, 2 * np.pi)
@@ -316,7 +325,9 @@ def generate_pointnav_episode(
                 .__matmul__(yaw_offset)
                 .__matmul__(roll_offset)
             )
-            robot_rigid_state.translation = np.array(source_position) + np.array(
+            robot_rigid_state.translation = np.array(
+                source_position
+            ) + np.array(
                 [
                     0.0,
                     z_offset,
@@ -348,7 +359,7 @@ def generate_pointnav_episode(
                     continue
 
             episode = _create_episode(
-                episode_id=episode_count,
+                episode_id=episode_count + episode_start_idx,
                 scene_id=sim.habitat_config.SCENE,
                 start_position=source_position,
                 start_rotation=source_rotation,
@@ -359,5 +370,14 @@ def generate_pointnav_episode(
             )
 
             episode_count += 1
-            print("episode count: ", episode_count, 'min: ', closest_dist_limit, 'max: ', furthest_dist_limit, 'actual: ', dist)
+            print(
+                "episode count: ",
+                episode_count,
+                "min: ",
+                closest_dist_limit,
+                "max: ",
+                furthest_dist_limit,
+                "actual: ",
+                dist,
+            )
             yield episode
