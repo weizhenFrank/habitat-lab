@@ -445,6 +445,7 @@ def colorize_draw_agent_and_fit_to_height(
 
     return top_down_map
 
+
 def colorize_draw_agent_and_people_and_fit_to_height(
     topdown_map_info: Dict[str, Any], output_height: int
 ):
@@ -471,7 +472,7 @@ def colorize_draw_agent_and_people_and_fit_to_height(
             agent_center_coord=pos,
             agent_rotation=0,
             agent_radius_px=min(top_down_map.shape[0:2]) // 32,
-            sprite=HUMAN_SPRITE
+            sprite=HUMAN_SPRITE,
         )
 
     if top_down_map.shape[0] > top_down_map.shape[1]:
@@ -490,6 +491,7 @@ def colorize_draw_agent_and_people_and_fit_to_height(
 
     return top_down_map
 
+
 def colorize_draw_local_map_and_fit_to_height(
     local_map: [], topdown_map_info: Dict[str, Any], output_height: int
 ):
@@ -499,10 +501,12 @@ def colorize_draw_local_map_and_fit_to_height(
     :param topdown_map_info: The output of the TopDownMap measure
     :param output_height: The desired output height
     """
-    top_down_map = colorize_topdown_map(
-        local_map.astype(np.uint8)
-    )
+    if local_map.ndim < 2:
+        local_map = topdown_map_info["map"]
+    elif local_map.ndim == 3:
+        local_map = local_map[:, :, 0]
 
+    top_down_map = colorize_topdown_map(local_map.astype(np.uint8))
     top_down_map = draw_agent(
         image=top_down_map,
         agent_center_coord=topdown_map_info["agent_map_coord"],
@@ -511,7 +515,7 @@ def colorize_draw_local_map_and_fit_to_height(
     )
 
     # scale top down map to align with rgb view
-    old_h, old_w, _ = top_down_map.shape
+    old_h, old_w = top_down_map.shape[:2]
     top_down_height = output_height
     top_down_width = int(float(top_down_height) / old_h * old_w)
     # cv2 resize (dsize is width first)

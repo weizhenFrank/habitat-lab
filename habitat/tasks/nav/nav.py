@@ -22,21 +22,35 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (EmbodiedTask, Measure,
-                                        SimulatorTaskAction)
+from habitat.core.embodied_task import (
+    EmbodiedTask,
+    Measure,
+    SimulatorTaskAction,
+)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
-                                    ShortestPathPoint, Simulator)
+from habitat.core.simulator import (
+    AgentState,
+    RGBSensor,
+    Sensor,
+    SensorTypes,
+    ShortestPathPoint,
+    Simulator,
+)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor, HabitatSimRGBSensor)
+    HabitatSimDepthSensor,
+    HabitatSimRGBSensor,
+)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
-                                          quaternion_from_coeff,
-                                          quaternion_rotate_vector)
+from habitat.utils.geometry_utils import (
+    Cutout,
+    euler_from_quaternion,
+    quaternion_from_coeff,
+    quaternion_rotate_vector,
+)
 from habitat.utils.visualizations import fog_of_war, maps
 
 try:
@@ -49,8 +63,10 @@ except ImportError:
 
 import time
 
-from .robot_utils.raibert_controller import (Raibert_controller_turn,
-                                             Raibert_controller_turn_stable)
+from .robot_utils.raibert_controller import (
+    Raibert_controller_turn,
+    Raibert_controller_turn_stable,
+)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -578,7 +594,6 @@ class ContextSensor(Sensor):
         self._sim = sim
         self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
         self._rotate_map = getattr(config, "ROTATE_MAP", False)
-        self.map_shape = (self._map_resolution, self._map_resolution)
         self.meters_per_pixel = getattr(
             config, "METERS_PER_PIXEL", 0.5
         )  # cm per pixel; decreasing this makes map bigger, need more pixels to get 25m radius around robot
@@ -594,13 +609,22 @@ class ContextSensor(Sensor):
         )  # max number of pixels for cutout
 
         self.context_type = getattr(config, "CONTEXT_TYPE", "MAP")
+        self.save_map_debug = getattr(config, "SAVE_MAP", False)
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+        self.pad_noise = getattr(config, "PAD_NOISE", False)
+        self.separate_channel = getattr(config, "SEPARATE_CHANNEL", False)
 
+        n_dim = 2 if self.separate_channel else 1
+        self.map_shape = (self._map_resolution, self._map_resolution, n_dim)
         self._current_episode_id = None
         self._top_down_map = None
+        # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
+        if self.pad_noise:
+            self._pad_noise_map = np.ones((1000, 1000), dtype=np.uint8)
 
         self.ep_id = 0
         self.ctr = 0
+        # 0 (white) if occupied, 1 (gray) if unoccupied
         self.occupied_cutout = Cutout(
             max_height=self.max_cutout,
             max_width=self.max_cutout,
@@ -608,6 +632,7 @@ class ContextSensor(Sensor):
             min_width=self.min_cutout,
             fill_value_mode=0,
             p=self.p,
+            # p=0.7,
         )
         self.unoccupied_cutout = Cutout(
             max_height=self.max_cutout,
@@ -616,6 +641,7 @@ class ContextSensor(Sensor):
             min_width=self.min_cutout,
             fill_value_mode=1,
             p=self.p,
+            # p=0.25,
         )
         self.debug = getattr(config, "DEBUG", "")
         super().__init__(config=config)
@@ -627,7 +653,7 @@ class ContextSensor(Sensor):
         return SensorTypes.MEASUREMENT
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        # 0 if occupied, 1 if unoccupied
+        # 0 (white) if occupied, 1 (gray) if unoccupied
         # return spaces.Box(low=0, high=1, shape=self.map_shape, dtype=np.uint8)
         if self.context_type == "WAYPOINT":
             return spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
@@ -637,36 +663,39 @@ class ContextSensor(Sensor):
             )
 
     def save_map(self, top_down_map, name, agent_coord=None):
-        h, w = top_down_map.shape
-        color_map = maps.colorize_topdown_map(top_down_map)
-        rs = color_map
+        if self.save_map_debug:
+            h, w = top_down_map.shape[:2]
+            if top_down_map.ndim > 2:
+                top_down_map = top_down_map[:, :, 0]
+            color_map = maps.colorize_topdown_map(top_down_map)
+            rs = color_map
 
-        # rs = cv2.resize(
-        #     color_map, (int(w * 10), int(h * 10)), interpolation=cv2.INTER_AREA
-        #     (int(w), int(h)),
-        #     interpolation=cv2.INTER_AREA,
-        # )
-        if agent_coord is not None:
-            rs = maps.draw_agent(
-                image=rs,
-                # agent_center_coord=(
-                #     int(agent_coord[0] * 10),
-                #     int(agent_coord[1] * 10),
-                # ),
-                agent_center_coord=(
-                    int(agent_coord[0]),
-                    int(agent_coord[1]),
-                ),
-                agent_rotation=self.get_polar_angle(),
-                agent_radius_px=min(rs.shape[0:2]) // 32,
+            # rs = cv2.resize(
+            #     color_map, (int(w * 10), int(h * 10)), interpolation=cv2.INTER_AREA
+            #     (int(w), int(h)),
+            #     interpolation=cv2.INTER_AREA,
+            # )
+            if agent_coord is not None:
+                rs = maps.draw_agent(
+                    image=rs,
+                    # agent_center_coord=(
+                    #     int(agent_coord[0] * 10),
+                    #     int(agent_coord[1] * 10),
+                    # ),
+                    agent_center_coord=(
+                        int(agent_coord[0]),
+                        int(agent_coord[1]),
+                    ),
+                    agent_rotation=self.get_polar_angle(),
+                    agent_radius_px=min(rs.shape[0:2]) // 32,
+                )
+
+            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            cv2.imwrite(
+                f"{save_name}",
+                rs,
             )
-
-        save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_{self.ep_id}_{self.ctr}.png"
-        cv2.imwrite(
-            f"{save_name}",
-            rs,
-        )
-        print(f"saved: {save_name}")
+            print(f"saved: {save_name}")
 
     def _compute_pointgoal(
         self, agent_position, rotation_world_agent, goal_position
@@ -709,7 +738,7 @@ class ContextSensor(Sensor):
                 else:
                     next_shortest_path_point = next_pt
             else:
-                next_shortest_path_point = goal
+                next_shortest_path_point = goal.position
             # grid_coords = maps.to_grid(
             #     next_shortest_path_point[2],
             #     next_shortest_path_point[0],
@@ -748,7 +777,11 @@ class ContextSensor(Sensor):
         bottom = min(a_x + size // 2, h)
         left = max(a_y - size // 2, 0)
         right = min(a_y + size // 2, w)
-        return img[top:bottom, left:right]
+
+        if img.ndim == 3:
+            return img[top:bottom, left:right, :]
+        else:
+            return img[top:bottom, left:right]
 
     def get_rotated_point(self, img, im_rot, xy, agent_rotation):
         yx = xy[::-1]
@@ -766,14 +799,17 @@ class ContextSensor(Sensor):
         return int(rotated_pt[1]), int(rotated_pt[0])
 
     def get_observation(
-        self, observations, episode, *args: Any, **kwargs: Any
+        self, observations, episode, task, *args: Any, **kwargs: Any
     ):
-        print("episode: ", episode)
+        print("TASK: ", task)
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
 
         if self.context_type == "WAYPOINT":
             waypoint_vector = self.get_next_shortest_path_point(episode)
+            if np.isnan(waypoint_vector).any():
+                waypoint_vector = np.zeros_like(waypoint_vector)
+                task.is_stop_called = True
             # visualize on map
             # curr_top_down_map[
             #     waypoint_grid[0]
@@ -802,23 +838,27 @@ class ContextSensor(Sensor):
             )
             # self.save_map(self._top_down_map, "topdown_map")
             self._current_episode_id = episode_uniq_id
+            # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
+            # self._fake_map = self.occupied_cutout(self._fake_map)
+            # self._fake_map = self.unoccupied_cutout(self._fake_map)
+            if self.pad_noise:
+                self._pad_noise_map = np.ones((1000, 1000), dtype=np.uint8)
+                self._pad_noise_map = self.occupied_cutout(self._pad_noise_map)
+                self._pad_noise_map = self.unoccupied_cutout(
+                    self._pad_noise_map
+                )
 
         curr_top_down_map = self._top_down_map.copy()
+        h, w = curr_top_down_map.shape
         agent_rotation = self.get_polar_angle()
         current_position = self._sim.get_agent_state().position
         ### a_x is along height, a_y is along width
         a_x, a_y = maps.to_grid(
             current_position[2],
             current_position[0],
-            curr_top_down_map.shape[0:2],
+            curr_top_down_map.shape[:2],
             sim=self._sim,
         )
-        point_padding = 1
-        # visualize agent
-        curr_top_down_map[
-            a_x - point_padding : a_x + point_padding + 1,
-            a_y - point_padding : a_y + point_padding + 1,
-        ] = 2
 
         if self._rotate_map:
             rot_angle = -(agent_rotation - np.pi)
@@ -837,11 +877,26 @@ class ContextSensor(Sensor):
             curr_top_down_map = top_down_map_rot
 
         point_padding = 0
-        curr_top_down_map[
-            a_x - point_padding : a_x + point_padding + 1,
-            a_y - point_padding : a_y + point_padding + 1,
-        ] = 2
+        curr_top_down_map = np.expand_dims(curr_top_down_map, axis=2)
+        # visualize agent
+        if self.separate_channel:
+            # add a separate channel for agents
+            curr_top_down_map_agent = np.zeros_like(curr_top_down_map)
+            curr_top_down_map_agent[
+                a_x - point_padding : a_x + point_padding + 1,
+                a_y - point_padding : a_y + point_padding + 1,
+                1,
+            ] = 1  # mark agent position as gray
 
+            curr_top_down_map = np.concatenate(
+                [curr_top_down_map, curr_top_down_map_agent], axis=2
+            )
+        else:
+            curr_top_down_map[
+                a_x - point_padding : a_x + point_padding + 1,
+                a_y - point_padding : a_y + point_padding + 1,
+                0,
+            ] = 2
         pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
         pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
 
@@ -850,24 +905,52 @@ class ContextSensor(Sensor):
             (a_x, a_y),
             self._map_resolution,
         )
-        lh, lw = local_top_down_map.shape
+        lh, lw = local_top_down_map.shape[:2]
+        # if self.save_map_debug:
+        #     pad_top2 = max(1000 // 2 - a_x - 1, 0)
+        #     pad_left2 = max(1000 // 2 - a_y - 1, 0)
+        #     self._pad_noise_map[
+        #         pad_top2 : pad_top2 + h, pad_left2 : pad_left2 + w
+        #     ] = curr_top_down_map
+        #     self.save_map(self._pad_noise_map, "tmp_map")
+        #     print(
+        #         "indexing: ",
+        #         500 - self._map_resolution // 2,
+        #         500 + self._map_resolution // 2,
+        #     )
+        #     asdfasd = self._pad_noise_map[
+        #         500
+        #         - self._map_resolution // 2 : 500
+        #         + self._map_resolution // 2
+        #         + 1,
+        #         500
+        #         - self._map_resolution // 2 : 500
+        #         + self._map_resolution // 2
+        #         + 1,
+        #     ]
+        #     self.save_map(asdfasd, "cropped_tmp_map")
 
         if self.p > 0:
             local_top_down_map_corroded = self.unoccupied_cutout(
-                local_top_down_map
+                local_top_down_map[:, :, 0]
             )
             local_top_down_map_corroded = self.occupied_cutout(
                 local_top_down_map_corroded
             )
-            local_top_down_map = local_top_down_map_corroded
+            local_top_down_map[:, :, 0] = local_top_down_map_corroded
+
         # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
-
         local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
-        local_top_down_map_filled[
-            pad_top : pad_top + lh, pad_left : pad_left + lw
-        ] = local_top_down_map
-        self.save_map(local_top_down_map_filled, "local_top_down_map_filled")
 
+        local_top_down_map_filled[
+            pad_top : pad_top + lh, pad_left : pad_left + lw, :
+        ] = local_top_down_map
+        # if self.save_map_debug:
+        #     local_top_down_map_filled = self._fake_map
+
+        self.save_map(
+            local_top_down_map_filled[:, :, 0], "local_top_down_map_filled"
+        )
         # 0 (white) if occupied, 1 (gray) if unoccupied
         if self.debug == "WHITE":
             return np.zeros_like(local_top_down_map_filled, dtype=np.float32)
@@ -1780,6 +1863,15 @@ class VelocityAction(SimulatorTaskAction):
         except:
             pass
 
+    def check_nans_in_obs(self, task, agent_observations, key):
+        if key in agent_observations:
+            if np.isnan(agent_observations[key]).any():
+                agent_observations[key] = np.zeros_like(
+                    agent_observations[key]
+                )
+                task.is_stop_called = True
+        return agent_observations
+
     def step(
         self,
         *args: Any,
@@ -1836,10 +1928,17 @@ class VelocityAction(SimulatorTaskAction):
             < task._config.SUCCESS_DISTANCE
         ):
             task.is_stop_called = True  # type: ignore
-            return self._sim.get_observations_at(
+            agent_observations = self._sim.get_observations_at(
                 position=None,
                 rotation=None,
             )
+            agent_observations = self.check_nans_in_obs(
+                task, agent_observations, "spot_right_depth"
+            )
+            agent_observations = self.check_nans_in_obs(
+                task, agent_observations, "spot_left_depth"
+            )
+            return agent_observations
         if not self.has_hor_vel:
             hor_vel = 0.0
         self.vel_control.linear_velocity = np.array([-hor_vel, 0.0, -lin_vel])
@@ -1969,6 +2068,12 @@ class VelocityAction(SimulatorTaskAction):
             self.prev_ang_vel = 0.0
             self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
             self.prev_rs = goal_rigid_state.translation
+            agent_observations = self.check_nans_in_obs(
+                task, agent_observations, "spot_right_depth"
+            )
+            agent_observations = self.check_nans_in_obs(
+                task, agent_observations, "spot_left_depth"
+            )
             return agent_observations
 
         """Rotate robot to match the orientation of the agent"""
@@ -2012,6 +2117,12 @@ class VelocityAction(SimulatorTaskAction):
                     task, agent_observations, lin_vel, hor_vel, ang_vel
                 )
                 self.prev_rs = goal_rigid_state.translation
+                agent_observations = self.check_nans_in_obs(
+                    task, agent_observations, "spot_right_depth"
+                )
+                agent_observations = self.check_nans_in_obs(
+                    task, agent_observations, "spot_left_depth"
+                )
                 return agent_observations
 
         final_rotation = [
@@ -2040,6 +2151,12 @@ class VelocityAction(SimulatorTaskAction):
         self.prev_ang_vel = ang_vel
         self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
         self.prev_rs = goal_rigid_state.translation
+        agent_observations = self.check_nans_in_obs(
+            task, agent_observations, "spot_right_depth"
+        )
+        agent_observations = self.check_nans_in_obs(
+            task, agent_observations, "spot_left_depth"
+        )
         return agent_observations
 
 

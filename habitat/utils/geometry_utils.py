@@ -89,8 +89,12 @@ def agent_state_target2ref(
         and need to be transformed to the local coordinate system defined by ref_agent_state.
     """
 
-    assert len(ref_agent_state[1]) == 3, "Only support Cartesian format currently."
-    assert len(target_agent_state[1]) == 3, "Only support Cartesian format currently."
+    assert (
+        len(ref_agent_state[1]) == 3
+    ), "Only support Cartesian format currently."
+    assert (
+        len(target_agent_state[1]) == 3
+    ), "Only support Cartesian format currently."
 
     ref_rotation, ref_position = ref_agent_state
     target_rotation, target_position = target_agent_state
@@ -139,7 +143,9 @@ def heading_to_quaternion(heading):
 
 def quat_to_rad(rotation):
     r"""Returns the yaw represented by the rotation np quaternion"""
-    heading_vector = quaternion_rotate_vector(rotation.inverse(), np.array([0, 0, -1]))
+    heading_vector = quaternion_rotate_vector(
+        rotation.inverse(), np.array([0, 0, -1])
+    )
     phi = np.arctan2(heading_vector[0], -heading_vector[2])
 
     return phi
@@ -170,9 +176,17 @@ def euler_from_quaternion(x, y, z, w):
 def wrap_heading(heading):
     return (heading + np.pi) % (2 * np.pi) - np.pi
 
+
 class Cutout(object):
-    def __init__(self, max_height, max_width, min_height=None, min_width=None,
-                 fill_value_mode=0, p=0.5):
+    def __init__(
+        self,
+        max_height,
+        max_width,
+        min_height=None,
+        min_width=None,
+        fill_value_mode=0,
+        p=0.5,
+    ):
         self.max_height = max_height
         self.max_width = max_width
         self.min_width = min_width if min_width is not None else max_width
@@ -184,17 +198,16 @@ class Cutout(object):
         assert self.fill_value_mode in [0, 1]
 
     def __call__(self, img):
-        h = img.shape[0]
-        w = img.shape[1]
-
-        n_holes = int(h*self.p)
+        h, w = img.shape[:2]
+        n_holes = int(h * self.p)
 
         if self.fill_value_mode == 0:
-            f = np.zeros((h,w))
+            f = np.zeros_like(img)
         elif self.fill_value_mode == 1:
-            f = np.ones((h,w))
+            f = np.ones_like(img)
 
-        mask = np.ones((h, w), dtype=np.int32)
+        mask = np.ones_like(img, dtype=np.int32)
+
         for n in range(n_holes):
             y = np.random.randint(h)
             x = np.random.randint(w)
@@ -207,8 +220,10 @@ class Cutout(object):
             x1 = np.clip(x - w_l // 2, 0, w)
             x2 = np.clip(x + w_l // 2, 0, w)
 
-            mask[y1:y2, x1:x2] = 0
+            if mask.ndim == 3:
+                mask[y1:y2, x1:x2, :] = 0
+            else:
+                mask[y1:y2, x1:x2] = 0
 
         img = np.where(mask, img, f)
         return np.uint8(img)
-        
