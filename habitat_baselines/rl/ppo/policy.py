@@ -13,6 +13,11 @@ from habitat.tasks.nav.nav import (
     IntegratedPointGoalGPSAndCompassSensor,
 )
 from habitat_baselines.common.baseline_registry import baseline_registry
+
+# from habitat_baselines.rl.ddppo.policy import resnet
+# from habitat_baselines.rl.ddppo.policy.resnet_policy import (
+#     ResNetEncoderContext,
+# )
 from habitat_baselines.rl.models.rnn_state_encoder import (
     build_rnn_state_encoder,
 )
@@ -22,25 +27,31 @@ from torch import nn as nn
 
 
 class Policy(nn.Module, metaclass=abc.ABCMeta):
-    def __init__(
-        self, net, dim_actions, action_distribution_type="categorical"
-    ):
+    def __init__(self, net, dim_actions, policy_config=None):
         super().__init__()
         self.net = net
         self.dim_actions = dim_actions
-        self.action_distribution_type = action_distribution_type
+        print("POLICY CONFIG: ", policy_config)
+        if policy_config is None:
+            self.action_distribution_type = "categorical"
+        else:
+            self.action_distribution_type = (
+                policy_config.action_distribution_type
+            )
 
-        if action_distribution_type == "categorical":
+        if self.action_distribution_type == "categorical":
             self.action_distribution = CategoricalNet(
                 self.net.output_size, self.dim_actions
             )
-        elif action_distribution_type == "gaussian":
+        elif self.action_distribution_type == "gaussian":
             self.action_distribution = GaussianNet(
-                self.net.output_size, self.dim_actions
+                self.net.output_size,
+                self.dim_actions,
+                policy_config.ACTION_DIST,
             )
         else:
             ValueError(
-                f"Action distribution {action_distribution_type} not supported."
+                f"Action distribution {self.action_distribution_type} not supported."
             )
 
         self.critic = CriticHead(self.net.output_size)
@@ -118,7 +129,7 @@ class PointNavBaselinePolicy(Policy):
         observation_space: spaces.Dict,
         action_space,
         hidden_size: int = 512,
-        action_distribution_type: str = "gaussian",
+        policy_config: None = None,
         **kwargs,
     ):
         super().__init__(
@@ -128,7 +139,7 @@ class PointNavBaselinePolicy(Policy):
                 **kwargs,
             ),
             action_space.n,
-            action_distribution_type=action_distribution_type,
+            policy_config,
         )
 
     @classmethod
@@ -139,6 +150,7 @@ class PointNavBaselinePolicy(Policy):
             observation_space=observation_space,
             action_space=action_space,
             hidden_size=config.RL.PPO.hidden_size,
+            policy_config=config.RL.POLICY,
         )
 
 
@@ -149,19 +161,25 @@ class PointNavContextPolicy(Policy):
         observation_space: spaces.Dict,
         action_space,
         hidden_size: int = 512,
+        tgt_hidden_size: int = 512,
+        tgt_encoding: str = "linear_2",
         context_hidden_size: int = 512,
-        action_distribution_type: str = "gaussian",
+        use_prev_action: bool = False,
+        policy_config: None = None,
         **kwargs,
     ):
         super().__init__(
             PointNavContextNet(  # type: ignore
                 observation_space=observation_space,
                 hidden_size=hidden_size,
+                tgt_hidden_size=tgt_hidden_size,
+                tgt_encoding=tgt_encoding,
                 context_hidden_size=context_hidden_size,
+                use_prev_action=use_prev_action,
                 **kwargs,
             ),
             action_space.n,
-            action_distribution_type=action_distribution_type,
+            policy_config,
         )
 
     @classmethod
@@ -172,7 +190,11 @@ class PointNavContextPolicy(Policy):
             observation_space=observation_space,
             action_space=action_space,
             hidden_size=config.RL.PPO.hidden_size,
+            tgt_hidden_size=config.RL.PPO.tgt_hidden_size,
+            tgt_encoding=config.RL.PPO.tgt_encoding,
             context_hidden_size=config.RL.PPO.context_hidden_size,
+            use_prev_action=config.RL.PPO.use_prev_action,
+            policy_config=config.RL.POLICY,
         )
 
 
@@ -274,12 +296,37 @@ class PointNavContextNet(PointNavBaselineNet):
         self,
         observation_space: spaces.Dict,
         hidden_size: int,
+        tgt_hidden_size: int,
+        tgt_encoding: str,
         context_hidden_size: int,
+        use_prev_action: bool,
     ):
         super().__init__(
             observation_space=observation_space,
             hidden_size=hidden_size,
         )
+        self.use_prev_action = use_prev_action
+        if self.use_prev_action:
+            self.prev_action_embedding = nn.Linear(2, 32)
+        self.tgt_embeding_size = tgt_hidden_size
+        self.tgt_encoding = tgt_encoding
+        if self.tgt_encoding == "sin_cos":
+            self.tgt_encoder = nn.Linear(
+                self._n_input_goal + 1, self.tgt_embeding_size
+            )
+        elif self.tgt_encoding == "linear_1":
+            self.tgt_encoder = nn.Sequential(
+                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                nn.ReLU(),
+            )
+        elif self.tgt_encoding == "linear_2":
+            self.tgt_encoder = nn.Sequential(
+                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                nn.ReLU(),
+                nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
+                nn.ReLU(),
+            )
+
         if observation_space["context"].shape == (2,):
             self.context_type = "waypoint"
         else:
@@ -316,11 +363,27 @@ class PointNavContextNet(PointNavBaselineNet):
             goal_observations = observations[
                 IntegratedPointGoalGPSAndCompassSensor.cls_uuid
             ]
+            if (
+                self.tgt_encoding == "sin_cos"
+                and goal_observations.shape[1] == 2
+            ):
+                goal_observations = torch.stack(
+                    [
+                        goal_observations[:, 0],
+                        torch.cos(-goal_observations[:, 1]),
+                        torch.sin(-goal_observations[:, 1]),
+                    ],
+                    -1,
+                )
             te = self.tgt_encoder(goal_observations)
             x.append(te)
         if ContextSensor.cls_uuid in observations:
             ce = self.context_encoder(observations[ContextSensor.cls_uuid])
             x.append(ce)
+        if self.use_prev_action:
+            prev_actions = self.prev_action_embedding(prev_actions.float())
+            x.append(prev_actions)
+
         x_out = torch.cat(x, dim=1)
         x_out, rnn_hidden_states = self.state_encoder(
             x_out, rnn_hidden_states, masks

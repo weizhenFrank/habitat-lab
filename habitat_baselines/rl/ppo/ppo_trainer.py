@@ -421,7 +421,10 @@ class PPOTrainer(BaseRLTrainer):
                     **obs_space.spaces,
                 }
             )
-        if self.config.RL.POLICY.name == "PointNavContextPolicy":
+        if (
+            self.config.RL.POLICY.name == "PointNavContextPolicy"
+            or self.config.RL.POLICY.name == "PointNavResNetContextPolicy"
+        ):
             if (
                 str(self.config.TASK_CONFIG.TASK.CONTEXT_SENSOR.CONTEXT_TYPE)
                 == "WAYPOINT"
@@ -1175,6 +1178,7 @@ class PPOTrainer(BaseRLTrainer):
                 )
                 logger.warn(f"Evaluating with {total_num_eps} instead.")
                 number_of_eval_episodes = total_num_eps
+        print("NUMBER OF EVAL EPISODES: ", number_of_eval_episodes)
         pbar = tqdm.tqdm(total=number_of_eval_episodes)
         self.actor_critic.eval()
         all_episode_stats = {}
@@ -1306,7 +1310,7 @@ class PPOTrainer(BaseRLTrainer):
                             episode_stats["num_steps"],
                         )  # number of steps taken
                         lines = episode_steps_data.split("\n")
-                        if len(lines) >= 1074:
+                        if len(lines) >= number_of_eval_episodes:
                             episode_steps_data = (
                                 lines[0]
                                 + "\n".join(
