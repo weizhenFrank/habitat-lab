@@ -113,8 +113,11 @@ class PointNavResNetContextPolicy(Policy):
         normalize_visual_inputs: bool = False,
         force_blind_policy: bool = False,
         policy_config: None = None,
+        tgt_hidden_size: int = 32,
+        tgt_encoding: str = "linear_2",
         context_hidden_size: int = 512,
-        context_encoding: str = "resnet",
+        use_prev_action: bool = True,
+        cnn_type: str = "resnet",
         **kwargs,
     ):
         if policy_config is None:
@@ -137,8 +140,11 @@ class PointNavResNetContextPolicy(Policy):
                 normalize_visual_inputs=normalize_visual_inputs,
                 force_blind_policy=force_blind_policy,
                 discrete_actions=discrete_actions,
+                tgt_hidden_size=tgt_hidden_size,
+                tgt_encoding=tgt_encoding,
                 context_hidden_size=context_hidden_size,
-                context_encoding=context_encoding,
+                use_prev_action=use_prev_action,
+                cnn_type=cnn_type,
             ),
             dim_actions=action_space.n,  # for action distribution
             policy_config=policy_config,
@@ -158,8 +164,11 @@ class PointNavResNetContextPolicy(Policy):
             normalize_visual_inputs="rgb" in observation_space.spaces,
             force_blind_policy=config.FORCE_BLIND_POLICY,
             policy_config=config.RL.POLICY,
+            tgt_hidden_size=config.RL.PPO.tgt_hidden_size,
+            tgt_encoding=config.RL.PPO.tgt_encoding,
             context_hidden_size=config.RL.PPO.context_hidden_size,
-            context_encoding=config.RL.PPO.context_encoding,
+            use_prev_action=config.RL.PPO.use_prev_action,
+            cnn_type=config.RL.PPO.cnn_type,
         )
 
 
@@ -347,7 +356,6 @@ class ResNetEncoderContext(ResNetEncoder):
             make_backbone=make_backbone,
             normalize_visual_inputs=normalize_visual_inputs,
         )
-
         if normalize_visual_inputs:
             self.running_mean_and_var: nn.Module = RunningMeanAndVar(
                 self._n_input_depth + self._n_input_rgb
@@ -393,8 +401,8 @@ class ResNetEncoderContext(ResNetEncoder):
         )
 
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:  # type: ignore
-        context_observations = torch.unsqueeze(observations, axis=1)
-        x = F.avg_pool2d(context_observations, 2)
+        observations = observations.permute(0, 3, 1, 2)
+        x = F.avg_pool2d(observations, 2)
         x = self.running_mean_and_var(x)
         x = self.backbone(x)
         x = self.compression(x)
@@ -436,13 +444,13 @@ class PointNavResNetNet(Net):
             IntegratedPointGoalGPSAndCompassSensor.cls_uuid
             in observation_space.spaces
         ):
-            n_input_goal = (
-                observation_space.spaces[
-                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-                ].shape[0]
-                + 1
+            self._n_input_goal = observation_space.spaces[
+                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+            ].shape[0]
+            tgt_embeding_size = 32
+            self.tgt_encoder = nn.Linear(
+                self._n_input_goal + 1, tgt_embeding_size
             )
-            self.tgt_embeding = nn.Linear(n_input_goal, 32)
             rnn_input_size += 32
 
         if ObjectGoalSensor.cls_uuid in observation_space.spaces:
@@ -644,7 +652,7 @@ class PointNavResNetNet(Net):
                     ],
                     -1,
                 )
-            x.append(self.tgt_embeding(goal_observations))
+            x.append(self.tgt_encoder(goal_observations))
 
         if PointGoalSensor.cls_uuid in observations:
             goal_observations = observations[PointGoalSensor.cls_uuid]
@@ -726,8 +734,11 @@ class PointNavResNetContextNet(PointNavResNetNet):
         normalize_visual_inputs: bool,
         force_blind_policy: bool = False,
         discrete_actions: bool = True,
+        tgt_hidden_size: int = 32,
+        tgt_encoding: str = "linear_2",
         context_hidden_size: int = 512,
-        context_encoding: str = "cnn",
+        use_prev_action: bool = True,
+        cnn_type: str = "resnet",
     ):
         super().__init__(
             observation_space=observation_space,
@@ -741,19 +752,49 @@ class PointNavResNetContextNet(PointNavResNetNet):
             force_blind_policy=force_blind_policy,
             discrete_actions=discrete_actions,
         )
-        self.context_encoding = context_encoding
+        self.cnn_type = cnn_type
+        self.use_prev_action = use_prev_action
+        prev_action_embedding = 32 if self.use_prev_action else 0
+        self.tgt_encoding = tgt_encoding
+        self.tgt_embeding_size = tgt_hidden_size
+
+        if self.tgt_encoding == "sin_cos":
+            self.tgt_encoder = nn.Linear(
+                self._n_input_goal + 1, self.tgt_embeding_size
+            )
+        elif self.tgt_encoding == "linear_1":
+            self.tgt_encoder = nn.Sequential(
+                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                nn.ReLU(),
+            )
+        elif self.tgt_encoding == "linear_2":
+            self.tgt_encoder = nn.Sequential(
+                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                nn.ReLU(),
+                nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
+                nn.ReLU(),
+            )
+
         if observation_space["context"].shape == (2,):
             self.context_type = "waypoint"
         else:
             self.context_type = "map"
         self.context_hidden_size = context_hidden_size
-        self.tgt_embeding_size = 32
+        print("RESNET CNN TYPE: ", self.cnn_type)
         if self.context_type == "map":
-            if self.context_encoding == "cnn":
+            if self.cnn_type == "cnn_ans":
                 self.context_encoder = SimpleCNNContext(
-                    observation_space, self.context_hidden_size
+                    observation_space,
+                    self.context_hidden_size,
+                    cnn_type="cnn_ans",
                 )
-            elif self.context_encoding == "resnet":
+            elif self.cnn_type == "cnn_2d":
+                self.context_encoder = SimpleCNNContext(
+                    observation_space,
+                    self.context_hidden_size,
+                    cnn_type="cnn_2d",
+                )
+            elif self.cnn_type == "resnet":
                 self.context_encoder = ResNetEncoderContext(
                     observation_space,
                     baseplanes=resnet_baseplanes,
@@ -764,22 +805,20 @@ class PointNavResNetContextNet(PointNavResNetNet):
                 dim = np.prod(self.context_encoder.output_shape)
                 self.context_fc = nn.Sequential(
                     nn.Flatten(),
-                    nn.Linear(dim, context_hidden_size),
+                    nn.Linear(dim, self.context_hidden_size),
                     nn.ReLU(True),
                 )
-
         else:
-            n_input_goal = (
-                observation_space.spaces[
-                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-                ].shape[0]
-                + 1
+            self.context_encoder = nn.Sequential(
+                nn.Linear(2, self.context_hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.context_hidden_size, self.context_hidden_size),
+                nn.ReLU(),
             )
-            self.tgt_embeding = nn.Linear(n_input_goal, self.tgt_embeding_size)
 
         self.state_encoder = build_rnn_state_encoder(
             self._hidden_size
-            + 32
+            + prev_action_embedding
             + self.tgt_embeding_size
             + self.context_hidden_size,
             self._hidden_size,
@@ -818,18 +857,19 @@ class PointNavResNetContextNet(PointNavResNetNet):
                     ],
                     -1,
                 )
-            goal_feats = self.tgt_embeding(goal_observations)
+            goal_feats = self.tgt_encoder(goal_observations)
             x.append(goal_feats)
         if ContextSensor.cls_uuid in observations:
             context_feats = self.context_encoder(
                 observations[ContextSensor.cls_uuid]
             )
-            if self.context_encoding == "resnet":
+            if self.cnn_type == "resnet":
                 context_feats = self.context_fc(context_feats)
             x.append(context_feats)
 
-        prev_actions = self.prev_action_embedding(prev_actions.float())
-        x.append(prev_actions)
+        if self.use_prev_action:
+            prev_actions = self.prev_action_embedding(prev_actions.float())
+            x.append(prev_actions)
 
         out = torch.cat(x, dim=1)
         out, rnn_hidden_states = self.state_encoder(

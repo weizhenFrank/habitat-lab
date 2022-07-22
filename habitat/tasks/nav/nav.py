@@ -22,35 +22,21 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (
-    EmbodiedTask,
-    Measure,
-    SimulatorTaskAction,
-)
+from habitat.core.embodied_task import (EmbodiedTask, Measure,
+                                        SimulatorTaskAction)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (
-    AgentState,
-    RGBSensor,
-    Sensor,
-    SensorTypes,
-    ShortestPathPoint,
-    Simulator,
-)
+from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
+                                    ShortestPathPoint, Simulator)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor,
-    HabitatSimRGBSensor,
-)
+    HabitatSimDepthSensor, HabitatSimRGBSensor)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (
-    Cutout,
-    euler_from_quaternion,
-    quaternion_from_coeff,
-    quaternion_rotate_vector,
-)
+from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
+                                          quaternion_from_coeff,
+                                          quaternion_rotate_vector)
 from habitat.utils.visualizations import fog_of_war, maps
 
 try:
@@ -63,10 +49,8 @@ except ImportError:
 
 import time
 
-from .robot_utils.raibert_controller import (
-    Raibert_controller_turn,
-    Raibert_controller_turn_stable,
-)
+from .robot_utils.raibert_controller import (Raibert_controller_turn,
+                                             Raibert_controller_turn_stable)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -408,6 +392,51 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
         )
 
 
+@registry.register_sensor(name="PointGoalWithNoisyGPSCompassSensor")
+class IntegratedPointGoalNoisyGPSAndCompassSensor(
+    IntegratedPointGoalGPSAndCompassSensor
+):
+    r"""Sensor that integrates PointGoals observations (which are used PointGoal Navigation) and GPS+Compass.
+
+    For the agent in simulator the forward direction is along negative-z.
+    In polar coordinate format the angle returned is azimuth to the goal.
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the PointGoal sensor. Can contain field for
+            GOAL_FORMAT which can be used to specify the format in which
+            the pointgoal is specified. Current options for goal format are
+            cartesian and polar.
+
+            Also contains a DIMENSIONALITY field which specifes the number
+            of dimensions ued to specify the goal, must be in [2, 3]
+
+    Attributes:
+        _goal_format: format for specifying the goal which can be done
+            in cartesian or polar coordinates.
+        _dimensionality: number of dimensions used to specify the goal
+    """
+    cls_uuid: str = "pointgoal_with_noisy_gps_compass"
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
+        agent_state = self._sim.get_agent_state()
+        agent_position = agent_state.position
+        rotation_world_agent = agent_state.rotation
+        goal_position = np.array(episode.goals[0].position, dtype=np.float32)
+        goal_vector = self._compute_pointgoal(
+            agent_position, rotation_world_agent, goal_position
+        )
+        noisy_goal_vector = goal_vector + np.array(
+            [100.0, 0], dtype=np.float32
+        )
+        return noisy_goal_vector
+
+
 @registry.register_sensor
 class HeadingSensor(Sensor):
     r"""Sensor for observing the agent's heading in the global coordinate
@@ -613,6 +642,7 @@ class ContextSensor(Sensor):
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self.pad_noise = getattr(config, "PAD_NOISE", False)
         self.separate_channel = getattr(config, "SEPARATE_CHANNEL", False)
+        self.map_type = getattr(config, "MAP_TYPE", "GRID")
 
         n_dim = 2 if self.separate_channel else 1
         self.map_shape = (self._map_resolution, self._map_resolution, n_dim)
@@ -801,7 +831,6 @@ class ContextSensor(Sensor):
     def get_observation(
         self, observations, episode, task, *args: Any, **kwargs: Any
     ):
-        print("TASK: ", task)
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
 

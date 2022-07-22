@@ -273,7 +273,7 @@ class SimpleCNNContext(SimpleCNN):
         output_size: The size of the embedding vector
     """
 
-    def __init__(self, observation_space, output_size, cnn_dim="2d"):
+    def __init__(self, observation_space, output_size, cnn_type="cnn_2d"):
         super().__init__(
             observation_space=observation_space, output_size=output_size
         )
@@ -297,34 +297,29 @@ class SimpleCNNContext(SimpleCNN):
                 kernel_size=np.array(kernel_size, dtype=np.float32),
                 stride=np.array(stride, dtype=np.float32),
             )
-        if cnn_dim == "1d":
+        if cnn_type == "cnn_ans":
+            input_shape = observation_space.spaces["context"].shape
+            cnn_out_dim = int((input_shape[0] // 16) * (input_shape[1] // 16))
             self.cnn = nn.Sequential(
-                nn.Conv1d(
-                    in_channels=in_channels,
-                    out_channels=32,
-                    kernel_size=self._cnn_layers_kernel_size[0],
-                    stride=self._cnn_layers_stride[0],
-                ),
-                nn.ReLU(True),
-                nn.Conv1d(
-                    in_channels=32,
-                    out_channels=64,
-                    kernel_size=self._cnn_layers_kernel_size[1],
-                    stride=self._cnn_layers_stride[1],
-                ),
-                nn.ReLU(True),
-                nn.Conv1d(
-                    in_channels=64,
-                    out_channels=32,
-                    kernel_size=self._cnn_layers_kernel_size[2],
-                    stride=self._cnn_layers_stride[2],
-                ),
-                #  nn.ReLU(True),
+                nn.MaxPool2d(2),
+                nn.Conv2d(in_channels, 32, 3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.MaxPool2d(2),
+                nn.Conv2d(32, 64, 3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.MaxPool2d(2),
+                nn.Conv2d(64, 128, 3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.MaxPool2d(2),
+                nn.Conv2d(128, 64, 3, stride=1, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(64, 32, 3, stride=1, padding=1),
+                nn.ReLU(),
                 nn.Flatten(),
-                nn.Linear(32 * cnn_dims[0] * cnn_dims[1], output_size),
+                nn.Linear(32 * cnn_out_dim, output_size),
                 nn.ReLU(True),
             )
-        else:
+        elif cnn_type == "cnn_2d":
             self.cnn = nn.Sequential(
                 nn.Conv2d(
                     in_channels=in_channels,

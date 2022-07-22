@@ -11,6 +11,7 @@ from habitat.config import Config
 from habitat.tasks.nav.nav import (
     ContextSensor,
     IntegratedPointGoalGPSAndCompassSensor,
+    IntegratedPointGoalNoisyGPSAndCompassSensor,
 )
 from habitat_baselines.common.baseline_registry import baseline_registry
 
@@ -166,6 +167,7 @@ class PointNavContextPolicy(Policy):
         context_hidden_size: int = 512,
         use_prev_action: bool = False,
         policy_config: None = None,
+        cnn_type: str = "2d",
         **kwargs,
     ):
         super().__init__(
@@ -176,6 +178,7 @@ class PointNavContextPolicy(Policy):
                 tgt_encoding=tgt_encoding,
                 context_hidden_size=context_hidden_size,
                 use_prev_action=use_prev_action,
+                cnn_type=cnn_type,
                 **kwargs,
             ),
             action_space.n,
@@ -194,6 +197,7 @@ class PointNavContextPolicy(Policy):
             tgt_encoding=config.RL.PPO.tgt_encoding,
             context_hidden_size=config.RL.PPO.context_hidden_size,
             use_prev_action=config.RL.PPO.use_prev_action,
+            cnn_type=config.RL.PPO.cnn_type,
             policy_config=config.RL.POLICY,
         )
 
@@ -238,6 +242,13 @@ class PointNavBaselineNet(Net):
             self._n_input_goal = observation_space.spaces[
                 IntegratedPointGoalGPSAndCompassSensor.cls_uuid
             ].shape[0]
+        elif (
+            IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+            in observation_space.spaces
+        ):
+            self._n_input_goal = observation_space.spaces[
+                IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+            ].shape[0]
 
         self._hidden_size = hidden_size
 
@@ -279,6 +290,15 @@ class PointNavBaselineNet(Net):
             ]
             tgt_enc = self.tgt_encoder(goal_observations)
             x.append(tgt_enc)
+        elif (
+            IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+            in observations
+        ):
+            goal_observations = observations[
+                IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+            ]
+            tgt_enc = self.tgt_encoder(goal_observations)
+            x.append(tgt_enc)
 
         x_out = torch.cat(x, dim=1)
         x_out, rnn_hidden_states = self.state_encoder(
@@ -300,11 +320,13 @@ class PointNavContextNet(PointNavBaselineNet):
         tgt_encoding: str,
         context_hidden_size: int,
         use_prev_action: bool,
+        cnn_type: str,
     ):
         super().__init__(
             observation_space=observation_space,
             hidden_size=hidden_size,
         )
+        self.cnn_type = cnn_type
         self.use_prev_action = use_prev_action
         if self.use_prev_action:
             self.prev_action_embedding = nn.Linear(2, 32)
@@ -334,7 +356,7 @@ class PointNavContextNet(PointNavBaselineNet):
         self.context_hidden_size = context_hidden_size
         if self.context_type == "map":
             self.context_encoder = SimpleCNNContext(
-                observation_space, self.context_hidden_size
+                observation_space, self.context_hidden_size, self.cnn_type
             )
         else:
             self.context_encoder = nn.Sequential(
@@ -359,10 +381,22 @@ class PointNavContextNet(PointNavBaselineNet):
         if not self.is_blind:
             ve = self.visual_encoder(observations)
             x.append(ve)
-        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-            goal_observations = observations[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ]
+        if (
+            IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations
+            or IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+            in observations
+        ):
+            if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
+                goal_observations = observations[
+                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+                ]
+            elif (
+                IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+                in observations
+            ):
+                goal_observations = observations[
+                    IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+                ]
             if (
                 self.tgt_encoding == "sin_cos"
                 and goal_observations.shape[1] == 2
