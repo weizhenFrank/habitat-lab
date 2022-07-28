@@ -181,7 +181,6 @@ class PointGoalSensor(Sensor):
         assert self._dimensionality in [2, 3]
 
         self._project_goal = getattr(config, "PROJECT_GOAL", -1)
-        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
 
         super().__init__(config=config)
 
@@ -200,6 +199,29 @@ class PointGoalSensor(Sensor):
             shape=sensor_shape,
             dtype=np.float32,
         )
+
+    def discretize(self, dist):
+        dist_limits = [0.25, 3, 10]
+        dist_bin_size = [0.05, 0.25, 1.0]
+        if dist < dist_limits[0]:
+            ddist = int(dist / dist_bin_size[0])
+        elif dist < dist_limits[1]:
+            ddist = int((dist - dist_limits[0]) / dist_bin_size[1]) + int(
+                dist_limits[0] / dist_bin_size[0]
+            )
+        elif dist < dist_limits[2]:
+            ddist = (
+                int((dist - dist_limits[1]) / dist_bin_size[2])
+                + int(dist_limits[0] / dist_bin_size[0])
+                + int((dist_limits[1] - dist_limits[0]) / dist_bin_size[1])
+            )
+        else:
+            ddist = (
+                int(dist_limits[0] / dist_bin_size[0])
+                + int((dist_limits[1] - dist_limits[0]) / dist_bin_size[1])
+                + int((dist_limits[2] - dist_limits[1]) / dist_bin_size[2])
+            )
+        return ddist
 
     def _compute_pointgoal(
         self, source_position, source_rotation, goal_position
@@ -238,6 +260,10 @@ class PointGoalSensor(Sensor):
                 )
                 if self.log_pointgoal:
                     return np.array([np.log(rho), -phi], dtype=np.float32)
+                if self.bin_pointgoal:
+                    ddist = self.discretize(rho)
+                    dangle = int((-np.rad2deg(phi) % 360.0) / 5.0)
+                    return np.array([ddist, np.deg2rad(dangle)], dtype=np.int)
                 return np.array([rho, -phi], dtype=np.float32)
             else:
                 _, phi = cartesian_to_polar(
@@ -376,6 +402,14 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
     """
     cls_uuid: str = "pointgoal_with_gps_compass"
 
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+        self.bin_pointgoal = getattr(config, "BIN_POINTGOAL", False)
+
+        super().__init__(sim=sim, config=config)
+
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
 
@@ -386,10 +420,10 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
         agent_position = agent_state.position
         rotation_world_agent = agent_state.rotation
         goal_position = np.array(episode.goals[0].position, dtype=np.float32)
-
-        return self._compute_pointgoal(
+        pg = self._compute_pointgoal(
             agent_position, rotation_world_agent, goal_position
         )
+        return pg
 
 
 @registry.register_sensor(name="PointGoalWithNoisyGPSCompassSensor")
@@ -421,6 +455,13 @@ class IntegratedPointGoalNoisyGPSAndCompassSensor(
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
 
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        self.noise_amt = getattr(config, "NOISE_AMT", 100)
+
+        super().__init__(sim=sim, config=config)
+
     def get_observation(
         self, observations, episode, *args: Any, **kwargs: Any
     ):
@@ -431,8 +472,13 @@ class IntegratedPointGoalNoisyGPSAndCompassSensor(
         goal_vector = self._compute_pointgoal(
             agent_position, rotation_world_agent, goal_position
         )
-        noisy_goal_vector = goal_vector + np.array(
-            [100.0, 0], dtype=np.float32
+        noisy_r = (
+            np.log(np.exp(goal_vector[0]) + self.noise_amt)
+            if self.log_pointgoal
+            else goal_vector[0] + self.noise_amt
+        )
+        noisy_goal_vector = np.array(
+            [noisy_r, goal_vector[1]], dtype=np.float32
         )
         return noisy_goal_vector
 
@@ -607,125 +653,32 @@ class ProximitySensor(Sensor):
 
 
 @registry.register_sensor
-class ContextSensor(Sensor):
-    r"""Sensor for observing the agent's heading in the global coordinate
-    frame.
+class ContextWaypointSensor(Sensor):
+    r"""Sensor for passing in additional context (map, waypoint, etc.)
 
     Args:
         sim: reference to the simulator for calculating task observations.
         config: config for the sensor.
     """
-    cls_uuid: str = "context"
+    cls_uuid: str = "context_waypoint"
 
     def __init__(
         self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
     ):
         self._sim = sim
-        self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
-        self._rotate_map = getattr(config, "ROTATE_MAP", False)
-        self.meters_per_pixel = getattr(
-            config, "METERS_PER_PIXEL", 0.5
-        )  # cm per pixel; decreasing this makes map bigger, need more pixels to get 25m radius around robot
-        # self.meters_per_pixel = 0.05
-        self.p = getattr(
-            config.CUTOUT, "NOISE_PERCENT", 0.0
-        )  # percentage of image for cutout
-        self.min_cutout = getattr(
-            config.CUTOUT, "MIN_CUTOUT", 2.0
-        )  # min number of pixels for cutout
-        self.max_cutout = getattr(
-            config.CUTOUT, "MAX_CUTOUT", 10.0
-        )  # max number of pixels for cutout
-
-        self.context_type = getattr(config, "CONTEXT_TYPE", "MAP")
-        self.save_map_debug = getattr(config, "SAVE_MAP", False)
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
-        self.pad_noise = getattr(config, "PAD_NOISE", False)
-        self.separate_channel = getattr(config, "SEPARATE_CHANNEL", False)
-        self.map_type = getattr(config, "MAP_TYPE", "GRID")
 
-        n_dim = 2 if self.separate_channel else 1
-        self.map_shape = (self._map_resolution, self._map_resolution, n_dim)
-        self._current_episode_id = None
-        self._top_down_map = None
-        # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
-        if self.pad_noise:
-            self._pad_noise_map = np.ones((1000, 1000), dtype=np.uint8)
-
-        self.ep_id = 0
-        self.ctr = 0
-        # 0 (white) if occupied, 1 (gray) if unoccupied
-        self.occupied_cutout = Cutout(
-            max_height=self.max_cutout,
-            max_width=self.max_cutout,
-            min_height=self.min_cutout,
-            min_width=self.min_cutout,
-            fill_value_mode=0,
-            p=self.p,
-            # p=0.7,
-        )
-        self.unoccupied_cutout = Cutout(
-            max_height=self.max_cutout,
-            max_width=self.max_cutout,
-            min_height=self.min_cutout,
-            min_width=self.min_cutout,
-            fill_value_mode=1,
-            p=self.p,
-            # p=0.25,
-        )
-        self.debug = getattr(config, "DEBUG", "")
-        super().__init__(config=config)
+        super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
 
     def _get_sensor_type(self, *args: Any, **kwargs: Any):
-        return SensorTypes.MEASUREMENT
+        return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         # 0 (white) if occupied, 1 (gray) if unoccupied
-        # return spaces.Box(low=0, high=1, shape=self.map_shape, dtype=np.uint8)
-        if self.context_type == "WAYPOINT":
-            return spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
-        else:
-            return spaces.Box(
-                low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32
-            )
-
-    def save_map(self, top_down_map, name, agent_coord=None):
-        if self.save_map_debug:
-            h, w = top_down_map.shape[:2]
-            if top_down_map.ndim > 2:
-                top_down_map = top_down_map[:, :, 0]
-            color_map = maps.colorize_topdown_map(top_down_map)
-            rs = color_map
-
-            # rs = cv2.resize(
-            #     color_map, (int(w * 10), int(h * 10)), interpolation=cv2.INTER_AREA
-            #     (int(w), int(h)),
-            #     interpolation=cv2.INTER_AREA,
-            # )
-            if agent_coord is not None:
-                rs = maps.draw_agent(
-                    image=rs,
-                    # agent_center_coord=(
-                    #     int(agent_coord[0] * 10),
-                    #     int(agent_coord[1] * 10),
-                    # ),
-                    agent_center_coord=(
-                        int(agent_coord[0]),
-                        int(agent_coord[1]),
-                    ),
-                    agent_rotation=self.get_polar_angle(),
-                    agent_radius_px=min(rs.shape[0:2]) // 32,
-                )
-
-            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
-            cv2.imwrite(
-                f"{save_name}",
-                rs,
-            )
-            print(f"saved: {save_name}")
+        return spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
 
     def _compute_pointgoal(
         self, agent_position, rotation_world_agent, goal_position
@@ -787,6 +740,147 @@ class ContextSensor(Sensor):
         # return goal_vector, grid_coords
         return goal_vector
 
+    def get_observation(
+        self, observations, episode, task, *args: Any, **kwargs: Any
+    ):
+        waypoint_vector = self.get_next_shortest_path_point(episode)
+        if np.isnan(waypoint_vector).any():
+            waypoint_vector = np.zeros_like(waypoint_vector)
+            task.is_stop_called = True
+        # visualize on map
+        # curr_top_down_map[
+        #     waypoint_grid[0]
+        #     - point_padding : waypoint_grid[0]
+        #     + point_padding
+        #     + 1,
+        #     waypoint_grid[1]
+        #     - point_padding : waypoint_grid[1]
+        #     + point_padding
+        #     + 1,
+        # ] = 2
+        return waypoint_vector
+        # print("shortest pts: ", gxy[0], gxy[1])
+        # self.save_map(curr_top_down_map, "context_topdown_map")
+        # compute goal vector using meters_per_pixel conversion
+
+
+@registry.register_sensor
+class ContextMapSensor(PointGoalSensor):
+    r"""Sensor for passing in additional context (map, waypoint, etc.)
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the sensor.
+    """
+    cls_uuid: str = "context_map"
+
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        self._sim = sim
+        self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
+        self._rotate_map = getattr(config, "ROTATE_MAP", False)
+        self.meters_per_pixel = getattr(
+            config, "METERS_PER_PIXEL", 0.5
+        )  # cm per pixel; decreasing this makes map bigger, need more pixels to get 25m radius around robot
+        # self.meters_per_pixel = 0.05
+        self.p = getattr(
+            config.CUTOUT, "NOISE_PERCENT", 0.0
+        )  # percentage of image for cutout
+        self.min_cutout = getattr(
+            config.CUTOUT, "MIN_CUTOUT", 2.0
+        )  # min number of pixels for cutout
+        self.max_cutout = getattr(
+            config.CUTOUT, "MAX_CUTOUT", 10.0
+        )  # max number of pixels for cutout
+
+        self.save_map_debug = getattr(config, "SAVE_MAP", False)
+        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+        self.pad_noise = getattr(config, "PAD_NOISE", False)
+        self.separate_channel = getattr(config, "SECOND_CHANNEL", False)
+        self.multi_channel = getattr(config, "MULTI_CHANNEL", False)
+        self.map_type = getattr(config, "MAP_TYPE", "GRID")
+
+        n_dim = 2 if self.separate_channel else 1
+        n_dim = 3 if self.multi_channel else n_dim
+        self.map_shape = (self._map_resolution, self._map_resolution, n_dim)
+        self._current_episode_id = None
+        self._top_down_map = None
+        # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
+        if self.pad_noise:
+            self._pad_noise_map = np.ones((1000, 1000), dtype=np.uint8)
+
+        self.ep_id = 0
+        self.ctr = 0
+        # 0 (white) if occupied, 1 (gray) if unoccupied
+        self.occupied_cutout = Cutout(
+            max_height=self.max_cutout,
+            max_width=self.max_cutout,
+            min_height=self.min_cutout,
+            min_width=self.min_cutout,
+            fill_value_mode=0,
+            p=self.p,
+            # p=0.7,
+        )
+        self.unoccupied_cutout = Cutout(
+            max_height=self.max_cutout,
+            max_width=self.max_cutout,
+            min_height=self.min_cutout,
+            min_width=self.min_cutout,
+            fill_value_mode=1,
+            p=self.p,
+            # p=0.25,
+        )
+        self.debug = getattr(config, "DEBUG", "")
+        super().__init__(sim=sim, config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.MEASUREMENT
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        # 0 (white) if occupied, 1 (gray) if unoccupied
+        return spaces.Box(
+            low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32
+        )
+
+    def save_map(self, top_down_map, name, agent_coord=None):
+        if self.save_map_debug:
+            h, w = top_down_map.shape[:2]
+            if top_down_map.ndim > 2:
+                top_down_map = top_down_map[:, :, 0]
+            color_map = maps.colorize_topdown_map(top_down_map)
+            rs = color_map
+
+            # rs = cv2.resize(
+            #     color_map, (int(w * 10), int(h * 10)), interpolation=cv2.INTER_AREA
+            #     (int(w), int(h)),
+            #     interpolation=cv2.INTER_AREA,
+            # )
+            if agent_coord is not None:
+                rs = maps.draw_agent(
+                    image=rs,
+                    # agent_center_coord=(
+                    #     int(agent_coord[0] * 10),
+                    #     int(agent_coord[1] * 10),
+                    # ),
+                    agent_center_coord=(
+                        int(agent_coord[0]),
+                        int(agent_coord[1]),
+                    ),
+                    agent_rotation=self.get_polar_angle(),
+                    agent_radius_px=min(rs.shape[0:2]) // 32,
+                )
+
+            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            cv2.imwrite(
+                f"{save_name}",
+                rs,
+            )
+            print(f"saved: {save_name}")
+
     def get_polar_angle(self):
         agent_state = self._sim.get_agent_state()
         # quaternion is in x, y, z, w format
@@ -833,27 +927,6 @@ class ContextSensor(Sensor):
     ):
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
-
-        if self.context_type == "WAYPOINT":
-            waypoint_vector = self.get_next_shortest_path_point(episode)
-            if np.isnan(waypoint_vector).any():
-                waypoint_vector = np.zeros_like(waypoint_vector)
-                task.is_stop_called = True
-            # visualize on map
-            # curr_top_down_map[
-            #     waypoint_grid[0]
-            #     - point_padding : waypoint_grid[0]
-            #     + point_padding
-            #     + 1,
-            #     waypoint_grid[1]
-            #     - point_padding : waypoint_grid[1]
-            #     + point_padding
-            #     + 1,
-            # ] = 2
-            return waypoint_vector
-            # print("shortest pts: ", gxy[0], gxy[1])
-            # self.save_map(curr_top_down_map, "context_topdown_map")
-            # compute goal vector using meters_per_pixel conversion
 
         # get local map from gt_top_down_map
         # start = time.time()
@@ -908,8 +981,11 @@ class ContextSensor(Sensor):
         point_padding = 0
         curr_top_down_map = np.expand_dims(curr_top_down_map, axis=2)
         # visualize agent
-        if self.separate_channel:
-            # add a separate channel for agents
+        if self.multi_channel:
+            freespace_top_down_map = np.zeros_like(curr_top_down_map)
+            obstacle_top_down_map = np.zeros_like(curr_top_down_map)
+            obstacle_top_down_map[curr_top_down_map == 0] = 1
+            freespace_top_down_map[curr_top_down_map == 1] = 1
             curr_top_down_map_agent = np.zeros_like(curr_top_down_map)
             curr_top_down_map_agent[
                 a_x - point_padding : a_x + point_padding + 1,
@@ -918,14 +994,32 @@ class ContextSensor(Sensor):
             ] = 1  # mark agent position as gray
 
             curr_top_down_map = np.concatenate(
-                [curr_top_down_map, curr_top_down_map_agent], axis=2
+                [
+                    obstacle_top_down_map,
+                    freespace_top_down_map,
+                    curr_top_down_map_agent,
+                ],
+                axis=2,
             )
         else:
-            curr_top_down_map[
-                a_x - point_padding : a_x + point_padding + 1,
-                a_y - point_padding : a_y + point_padding + 1,
-                0,
-            ] = 2
+            if self.separate_channel:
+                # add a separate channel for agents
+                curr_top_down_map_agent = np.zeros_like(curr_top_down_map)
+                curr_top_down_map_agent[
+                    a_x - point_padding : a_x + point_padding + 1,
+                    a_y - point_padding : a_y + point_padding + 1,
+                    1,
+                ] = 1  # mark agent position as gray
+
+                curr_top_down_map = np.concatenate(
+                    [curr_top_down_map, curr_top_down_map_agent], axis=2
+                )
+            else:
+                curr_top_down_map[
+                    a_x - point_padding : a_x + point_padding + 1,
+                    a_y - point_padding : a_y + point_padding + 1,
+                    0,
+                ] = 2
         pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
         pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
 
@@ -986,7 +1080,11 @@ class ContextSensor(Sensor):
         elif self.debug == "GRAY":
             return np.ones_like(local_top_down_map_filled, dtype=np.float32)
         else:
-            return local_top_down_map_filled.astype(np.float32)
+            map = local_top_down_map_filled.astype(np.float32)
+            if np.isnan(map).any():
+                map = np.zeros_like(map)
+                task.is_stop_called = True
+            return map
 
 
 @registry.register_measure
@@ -1892,9 +1990,10 @@ class VelocityAction(SimulatorTaskAction):
         except:
             pass
 
-    def check_nans_in_obs(self, task, agent_observations, key):
-        if key in agent_observations:
+    def check_nans_in_obs(self, task, agent_observations):
+        for key in agent_observations.keys():
             if np.isnan(agent_observations[key]).any():
+                print(key, " IS NAN!")
                 agent_observations[key] = np.zeros_like(
                     agent_observations[key]
                 )
@@ -1962,10 +2061,7 @@ class VelocityAction(SimulatorTaskAction):
                 rotation=None,
             )
             agent_observations = self.check_nans_in_obs(
-                task, agent_observations, "spot_right_depth"
-            )
-            agent_observations = self.check_nans_in_obs(
-                task, agent_observations, "spot_left_depth"
+                task, agent_observations
             )
             return agent_observations
         if not self.has_hor_vel:
@@ -2098,10 +2194,7 @@ class VelocityAction(SimulatorTaskAction):
             self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
             self.prev_rs = goal_rigid_state.translation
             agent_observations = self.check_nans_in_obs(
-                task, agent_observations, "spot_right_depth"
-            )
-            agent_observations = self.check_nans_in_obs(
-                task, agent_observations, "spot_left_depth"
+                task, agent_observations
             )
             return agent_observations
 
@@ -2147,10 +2240,7 @@ class VelocityAction(SimulatorTaskAction):
                 )
                 self.prev_rs = goal_rigid_state.translation
                 agent_observations = self.check_nans_in_obs(
-                    task, agent_observations, "spot_right_depth"
-                )
-                agent_observations = self.check_nans_in_obs(
-                    task, agent_observations, "spot_left_depth"
+                    task, agent_observations
                 )
                 return agent_observations
 
@@ -2180,12 +2270,7 @@ class VelocityAction(SimulatorTaskAction):
         self.prev_ang_vel = ang_vel
         self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
         self.prev_rs = goal_rigid_state.translation
-        agent_observations = self.check_nans_in_obs(
-            task, agent_observations, "spot_right_depth"
-        )
-        agent_observations = self.check_nans_in_obs(
-            task, agent_observations, "spot_left_depth"
-        )
+        agent_observations = self.check_nans_in_obs(task, agent_observations)
         return agent_observations
 
 

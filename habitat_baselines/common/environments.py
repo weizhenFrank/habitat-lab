@@ -47,19 +47,51 @@ class NavRLEnv(habitat.RLEnv):
     def reset(self):
         self._previous_action = None
         observations = super().reset()
-        self._previous_measure = self._env.get_metrics()[self._reward_measure_name]
+        self._previous_measure = self._env.get_metrics()[
+            self._reward_measure_name
+        ]
         return observations
 
     def step(self, *args, **kwargs):
         self._previous_action = kwargs["action"]
         obs, reward, done, info = super().step(*args, **kwargs)
-
-        # img = np.copy(obs["rgb"])
-        # font = cv2.FONT_HERSHEY_PLAIN
-        # r, theta = obs["pointgoal_with_gps_compass"]
-        # goal_vector = "r: {:.2f}, theta: {:.2f}".format(r, np.rad2deg(theta))
-        # cv2.putText(img, goal_vector, (10, 20), font, 1, (0, 0, 0), 1)
-        # obs["rgb"] = img
+        for key in obs.keys():
+            if np.isnan(obs[key]).any():
+                obs[key] = np.zeros_like(obs[key])
+                done = True
+                print("FOUND NAN: ", key)
+        # if "rgb" in obs:
+        #     if "pointgoal_with_gps_compass" in obs:
+        #         r, theta = obs["pointgoal_with_gps_compass"]
+        #     elif "pointgoal_with_noisy_gps_compass" in obs:
+        #         r, theta = obs["pointgoal_with_noisy_gps_compass"]
+        #     img = np.copy(obs["rgb"])
+        #     font = cv2.FONT_HERSHEY_SIMPLEX
+        #     if (
+        #         self._core_env_config.TASK.POINTGOAL_WITH_GPS_COMPASS_SENSOR.LOG_POINTGOAL
+        #     ):
+        #         try:
+        #             r = np.exp(r)
+        #         except:
+        #             pass
+        #     goal_vector = "r: {:.2f}, t: {:.2f}".format(r, np.rad2deg(theta))
+        #     # cv2.putText(img, goal_vector, (10, 20), font, 1, (0, 0, 0), 1)
+        #     #
+        #     for font_thickness, color in [
+        #         (4, (0, 0, 0)),
+        #         (1, (255, 255, 255)),
+        #     ]:
+        #         cv2.putText(
+        #             img,
+        #             goal_vector,
+        #             (10, 250),
+        #             font,
+        #             0.5,
+        #             color,
+        #             font_thickness,
+        #             lineType=cv2.LINE_AA,
+        #         )
+        #     obs["rgb"] = img
         return obs, reward, done, info
 
     def get_reward_range(self):
@@ -81,7 +113,11 @@ class NavRLEnv(habitat.RLEnv):
         else:
             reward += (self._previous_measure - current_measure) * max(
                 0,
-                (1 - observations["num_steps"] / self._rl_config.FULL_GEODESIC_DECAY),
+                (
+                    1
+                    - observations["num_steps"]
+                    / self._rl_config.FULL_GEODESIC_DECAY
+                ),
             )
 
         sim = self._env._sim

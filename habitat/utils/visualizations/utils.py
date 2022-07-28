@@ -59,10 +59,14 @@ def paste_overlapping_image(
 
     background_patch = background[
         (location[0] - foreground_size[0] // 2 + min_pad[0]) : (
-            location[0] + (foreground_size[0] - foreground_size[0] // 2) - max_pad[0]
+            location[0]
+            + (foreground_size[0] - foreground_size[0] // 2)
+            - max_pad[0]
         ),
         (location[1] - foreground_size[1] // 2 + min_pad[1]) : (
-            location[1] + (foreground_size[1] - foreground_size[1] // 2) - max_pad[1]
+            location[1]
+            + (foreground_size[1] - foreground_size[1] // 2)
+            - max_pad[1]
         ),
     ]
     foreground = foreground[
@@ -245,7 +249,9 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
 
         egocentric_view_l.append(rgb)
 
-    assert len(egocentric_view_l) > 0, "Expected at least one visual sensor enabled."
+    assert (
+        len(egocentric_view_l) > 0
+    ), "Expected at least one visual sensor enabled."
     egocentric_view = np.concatenate(egocentric_view_l, axis=1)
 
     # draw collision
@@ -257,9 +263,11 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
         egocentric_view = draw_human_collision(egocentric_view)
 
     # draw human collision
-    if "context" in observation:
+    if "context_map" in observation:
         color_map = maps.colorize_draw_local_map_and_fit_to_height(
-            observation["context"].cpu().numpy(), info["top_down_map"], egocentric_view.shape[0]
+            observation["context_map"].cpu().numpy(),
+            info["top_down_map"],
+            egocentric_view.shape[0],
         )
         egocentric_view = np.concatenate((egocentric_view, color_map), axis=1)
 

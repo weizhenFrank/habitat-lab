@@ -132,11 +132,24 @@ _C.TASK.POINTGOAL_SENSOR = CN()
 _C.TASK.POINTGOAL_SENSOR.TYPE = "PointGoalSensor"
 _C.TASK.POINTGOAL_SENSOR.GOAL_FORMAT = "POLAR"
 _C.TASK.POINTGOAL_SENSOR.DIMENSIONALITY = 2
+_C.TASK.POINTGOAL_SENSOR.LOG_POINTGOAL = False
 # -----------------------------------------------------------------------------
 # POINTGOAL WITH GPS+COMPASS SENSOR
 # -----------------------------------------------------------------------------
 _C.TASK.POINTGOAL_WITH_GPS_COMPASS_SENSOR = _C.TASK.POINTGOAL_SENSOR.clone()
-_C.TASK.POINTGOAL_WITH_GPS_COMPASS_SENSOR.TYPE = "PointGoalWithGPSCompassSensor"
+_C.TASK.POINTGOAL_WITH_GPS_COMPASS_SENSOR.TYPE = (
+    "PointGoalWithGPSCompassSensor"
+)
+# -----------------------------------------------------------------------------
+# POINTGOAL WITH NOISY GPS+COMPASS SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.POINTGOAL_WITH_NOISY_GPS_COMPASS_SENSOR = (
+    _C.TASK.POINTGOAL_SENSOR.clone()
+)
+_C.TASK.POINTGOAL_WITH_NOISY_GPS_COMPASS_SENSOR.TYPE = (
+    "PointGoalWithNoisyGPSCompassSensor"
+)
+_C.TASK.POINTGOAL_WITH_NOISY_GPS_COMPASS_SENSOR.NOISE = 100
 # -----------------------------------------------------------------------------
 # OBJECTGOAL SENSOR
 # -----------------------------------------------------------------------------
@@ -172,16 +185,21 @@ _C.TASK.PROXIMITY_SENSOR = CN()
 _C.TASK.PROXIMITY_SENSOR.TYPE = "ProximitySensor"
 _C.TASK.PROXIMITY_SENSOR.MAX_DETECTION_RADIUS = 2.0
 # -----------------------------------------------------------------------------
-# CONTEXT SENSOR
+# CONTEXT WAYPOINT SENSOR
 # -----------------------------------------------------------------------------
-_C.TASK.CONTEXT_SENSOR = CN()
-_C.TASK.CONTEXT_SENSOR.TYPE = "ContextSensor"
-_C.TASK.CONTEXT_SENSOR.MAP_RESOLUTION = 100
-_C.TASK.CONTEXT_SENSOR.METERS_PER_PIXEL = 0.5
-_C.TASK.CONTEXT_SENSOR.CUTOUT = CN()
-_C.TASK.CONTEXT_SENSOR.CUTOUT.NOISE_PERCENT = 0.0
-_C.TASK.CONTEXT_SENSOR.CUTOUT.MIN_CUTOUT = 2.0
-_C.TASK.CONTEXT_SENSOR.CUTOUT.MAX_CUTOUT = 10.0
+_C.TASK.CONTEXT_WAYPOINT_SENSOR = CN()
+_C.TASK.CONTEXT_WAYPOINT_SENSOR.TYPE = "ContextWaypointSensor"
+# -----------------------------------------------------------------------------
+# CONTEXT MAP SENSOR
+# -----------------------------------------------------------------------------
+_C.TASK.CONTEXT_MAP_SENSOR = CN()
+_C.TASK.CONTEXT_MAP_SENSOR.TYPE = "ContextMapSensor"
+_C.TASK.CONTEXT_MAP_SENSOR.MAP_RESOLUTION = 100
+_C.TASK.CONTEXT_MAP_SENSOR.METERS_PER_PIXEL = 0.5
+_C.TASK.CONTEXT_MAP_SENSOR.CUTOUT = CN()
+_C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.NOISE_PERCENT = 0.0
+_C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.MIN_CUTOUT = 2.0
+_C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.MAX_CUTOUT = 10.0
 # -----------------------------------------------------------------------------
 # SUCCESS MEASUREMENT
 # -----------------------------------------------------------------------------
@@ -223,7 +241,9 @@ _C.TASK.TOP_DOWN_MAP.DRAW_GOAL_AABBS = True
 # -----------------------------------------------------------------------------
 _C.TASK.SOCIAL_TOP_DOWN_MAP = CN()
 _C.TASK.SOCIAL_TOP_DOWN_MAP.TYPE = "SocialTopDownMap"
-_C.TASK.SOCIAL_TOP_DOWN_MAP.MAX_EPISODE_STEPS = _C.ENVIRONMENT.MAX_EPISODE_STEPS
+_C.TASK.SOCIAL_TOP_DOWN_MAP.MAX_EPISODE_STEPS = (
+    _C.ENVIRONMENT.MAX_EPISODE_STEPS
+)
 _C.TASK.SOCIAL_TOP_DOWN_MAP.MAP_PADDING = 3
 _C.TASK.SOCIAL_TOP_DOWN_MAP.MAP_RESOLUTION = 1024
 _C.TASK.SOCIAL_TOP_DOWN_MAP.DRAW_SOURCE = True
@@ -296,7 +316,9 @@ _C.SIMULATOR = CN()
 _C.SIMULATOR.TYPE = "Sim-v0"
 _C.SIMULATOR.ACTION_SPACE_CONFIG = "v0"
 _C.SIMULATOR.FORWARD_STEP_SIZE = 0.25  # in metres
-_C.SIMULATOR.SCENE = "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
+_C.SIMULATOR.SCENE = (
+    "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
+)
 _C.SIMULATOR.SEED = _C.SEED
 _C.SIMULATOR.TURN_ANGLE = 10  # angle to rotate left or right in degrees
 _C.SIMULATOR.TILT_ANGLE = 15  # angle to tilt the camera up or down in degrees
@@ -360,7 +382,9 @@ _C.SIMULATOR.HABITAT_SIM_V0.GPU_GPU = False
 # Whether or not the agent slides on collisions
 _C.SIMULATOR.HABITAT_SIM_V0.ALLOW_SLIDING = True
 _C.SIMULATOR.HABITAT_SIM_V0.ENABLE_PHYSICS = False
-_C.SIMULATOR.HABITAT_SIM_V0.PHYSICS_CONFIG_FILE = "./data/default.physics_config.json"
+_C.SIMULATOR.HABITAT_SIM_V0.PHYSICS_CONFIG_FILE = (
+    "./data/default.physics_config.json"
+)
 _C.SIMULATOR.NUM_PEOPLE = 1
 # -----------------------------------------------------------------------------
 # PYROBOT

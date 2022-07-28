@@ -425,27 +425,37 @@ class PPOTrainer(BaseRLTrainer):
             self.config.RL.POLICY.name == "PointNavContextPolicy"
             or self.config.RL.POLICY.name == "PointNavResNetContextPolicy"
         ):
-            if (
-                str(self.config.TASK_CONFIG.TASK.CONTEXT_SENSOR.CONTEXT_TYPE)
-                == "WAYPOINT"
+            if "CONTEXT_WAYPOINT_SENSOR" in str(
+                self.config.TASK_CONFIG.TASK.SENSORS
             ):
                 context_shape = (2,)
+                obs_space = spaces.Dict(
+                    {
+                        "context_waypoint": spaces.Box(
+                            low=np.finfo(np.float32).min,
+                            high=np.finfo(np.float32).max,
+                            shape=context_shape,
+                            dtype=np.float32,
+                        ),
+                        **obs_space.spaces,
+                    }
+                )
             else:
                 map_res = (
-                    self.config.TASK_CONFIG.TASK.CONTEXT_SENSOR.MAP_RESOLUTION
+                    self.config.TASK_CONFIG.TASK.CONTEXT_MAP_SENSOR.MAP_RESOLUTION
                 )
                 context_shape = (map_res, map_res)
-            obs_space = spaces.Dict(
-                {
-                    "context": spaces.Box(
-                        low=np.finfo(np.float32).min,
-                        high=np.finfo(np.float32).max,
-                        shape=context_shape,
-                        dtype=np.float32,
-                    ),
-                    **obs_space.spaces,
-                }
-            )
+                obs_space = spaces.Dict(
+                    {
+                        "context_map": spaces.Box(
+                            low=np.finfo(np.float32).min,
+                            high=np.finfo(np.float32).max,
+                            shape=context_shape,
+                            dtype=np.float32,
+                        ),
+                        **obs_space.spaces,
+                    }
+                )
 
         self._nbuffers = 2 if ppo_cfg.use_double_buffered_sampler else 1
         self.rollouts = RolloutStorage(
@@ -1199,7 +1209,7 @@ class PPOTrainer(BaseRLTrainer):
                     test_recurrent_hidden_states,
                     prev_actions,
                     not_done_masks,
-                    deterministic=False,
+                    deterministic=config.EVAL_DETERMINISTIC,
                     # deterministic=True,
                 )
 
@@ -1309,18 +1319,18 @@ class PPOTrainer(BaseRLTrainer):
                             episode_stats["spl"],
                             episode_stats["num_steps"],
                         )  # number of steps taken
-                        lines = episode_steps_data.split("\n")
-                        if len(lines) >= number_of_eval_episodes:
-                            episode_steps_data = (
-                                lines[0]
-                                + "\n".join(
-                                    sorted(
-                                        lines[1:-1],
-                                        key=lambda x: int(x.split(",")[0]),
-                                    )
-                                )
-                                + "\n"
-                            )
+                        # lines = episode_steps_data.split("\n")
+                        # if len(lines) >= number_of_eval_episodes:
+                        #     episode_steps_data = (
+                        #         lines[0]
+                        #         + "\n".join(
+                        #             sorted(
+                        #                 lines[1:-1],
+                        #                 key=lambda x: int(x.split(",")[0]),
+                        #             )
+                        #         )
+                        #         + "\n"
+                        #     )
                         with open(episode_steps_filename, "w") as f:
                             f.write(episode_steps_data)
 
@@ -1366,14 +1376,6 @@ class PPOTrainer(BaseRLTrainer):
                 prev_actions,
                 batch,
                 rgb_frames,
-            )
-            print(
-                "len stats episodes :",
-                len(stats_episodes),
-                "num eval eps: ",
-                number_of_eval_episodes,
-                "num envs: ",
-                self.envs.num_envs,
             )
 
         num_episodes = len(stats_episodes)

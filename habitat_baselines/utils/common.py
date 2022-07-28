@@ -11,8 +11,16 @@ import shutil
 import tarfile
 from collections import defaultdict
 from io import BytesIO
-from typing import (Any, DefaultDict, Dict, Iterable, List, Optional, Tuple,
-                    Union)
+from typing import (
+    Any,
+    DefaultDict,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import attr
 import numpy as np
@@ -258,26 +266,26 @@ def poll_checkpoint_folder(
     assert os.path.isdir(checkpoint_folder), (
         f"invalid checkpoint folder " f"path {checkpoint_folder}"
     )
-    # models_paths = list(
-    #     filter(os.path.isfile, glob.glob(checkpoint_folder + "/*"))
-    # )
-    # models_paths.sort(key=os.path.getmtime)
-    # ind = previous_ckpt_ind + 1
-    # if ind < len(models_paths):
-    #     return models_paths[ind]
-    # return None
     models_paths = list(
-        filter(
-            lambda x: not os.path.isfile(x + ".done"),
-            glob.glob(os.path.join(checkpoint_folder, "*.pth")),
-        )
+        filter(os.path.isfile, glob.glob(checkpoint_folder + "/*"))
     )
-    models_paths = sorted(models_paths, key=lambda x: int(x.split(".")[-2]))
-    if len(models_paths) > 0:
-        with open(models_paths[0] + ".done", "w") as f:
-            pass
-        return models_paths[0]
+    models_paths.sort(key=os.path.getmtime)
+    ind = previous_ckpt_ind + 1
+    if ind < len(models_paths):
+        return models_paths[ind]
     return None
+    # models_paths = list(
+    #     filter(
+    #         lambda x: not os.path.isfile(x + ".done"),
+    #         glob.glob(os.path.join(checkpoint_folder, "*.pth")),
+    #     )
+    # )
+    # models_paths = sorted(models_paths, key=lambda x: int(x.split(".")[-2]))
+    # if len(models_paths) > 0:
+    #     with open(models_paths[0] + ".done", "w") as f:
+    #         pass
+    #     return models_paths[0]
+    # return None
 
 
 def generate_video(

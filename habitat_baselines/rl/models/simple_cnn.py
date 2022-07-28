@@ -284,21 +284,12 @@ class SimpleCNNContext(SimpleCNN):
         self._cnn_layers_stride = [(4, 4), (2, 2), (1, 1)]
 
         cnn_dims = np.array(
-            observation_space.spaces["context"].shape[:2], dtype=np.float32
+            observation_space.spaces["context_map"].shape[:2], dtype=np.float32
         )
-        in_channels = observation_space.spaces["context"].shape[-1]
-        for kernel_size, stride in zip(
-            self._cnn_layers_kernel_size, self._cnn_layers_stride
-        ):
-            cnn_dims = self._conv_output_dim(
-                dimension=cnn_dims,
-                padding=np.array([0, 0], dtype=np.float32),
-                dilation=np.array([1, 1], dtype=np.float32),
-                kernel_size=np.array(kernel_size, dtype=np.float32),
-                stride=np.array(stride, dtype=np.float32),
-            )
+        in_channels = observation_space.spaces["context_map"].shape[-1]
+        self.cnn_type = cnn_type
         if cnn_type == "cnn_ans":
-            input_shape = observation_space.spaces["context"].shape
+            input_shape = observation_space.spaces["context_map"].shape
             cnn_out_dim = int((input_shape[0] // 16) * (input_shape[1] // 16))
             self.cnn = nn.Sequential(
                 nn.MaxPool2d(2),
@@ -320,6 +311,16 @@ class SimpleCNNContext(SimpleCNN):
                 nn.ReLU(True),
             )
         elif cnn_type == "cnn_2d":
+            for kernel_size, stride in zip(
+                self._cnn_layers_kernel_size, self._cnn_layers_stride
+            ):
+                cnn_dims = self._conv_output_dim(
+                    dimension=cnn_dims,
+                    padding=np.array([0, 0], dtype=np.float32),
+                    dilation=np.array([1, 1], dtype=np.float32),
+                    kernel_size=np.array(kernel_size, dtype=np.float32),
+                    stride=np.array(stride, dtype=np.float32),
+                )
             self.cnn = nn.Sequential(
                 nn.Conv2d(
                     in_channels=in_channels,
@@ -346,6 +347,52 @@ class SimpleCNNContext(SimpleCNN):
                 nn.Linear(32 * cnn_dims[0] * cnn_dims[1], output_size),
                 nn.ReLU(True),
             )
+        elif cnn_type == "cnn_2d_1_layer":
+            # kernel size for different CNN layers
+            self._cnn_layers_kernel_size = [(3, 3)]
+
+            # strides for different CNN layers
+            self._cnn_layers_stride = [(1, 1)]
+
+            for kernel_size, stride in zip(
+                self._cnn_layers_kernel_size, self._cnn_layers_stride
+            ):
+                cnn_dims = self._conv_output_dim(
+                    dimension=cnn_dims,
+                    padding=np.array([0, 0], dtype=np.float32),
+                    dilation=np.array([1, 1], dtype=np.float32),
+                    kernel_size=np.array(kernel_size, dtype=np.float32),
+                    stride=np.array(stride, dtype=np.float32),
+                )
+
+            self.cnn = nn.Sequential(
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=32,
+                    kernel_size=self._cnn_layers_kernel_size[0],
+                    stride=self._cnn_layers_stride[0],
+                ),
+                nn.ReLU(True),
+                nn.Flatten(),
+                nn.Linear(32 * cnn_dims[0] * cnn_dims[1], output_size),
+                nn.ReLU(True),
+            )
+        elif cnn_type == "fcn_test":
+            self.cnn = nn.Sequential(
+                nn.Linear(100 * 100, 512),
+                nn.ReLU(),
+                nn.Linear(512, 512),
+                nn.ReLU(),
+            )
+        elif cnn_type == "fcn_3":
+            self.cnn = nn.Sequential(
+                nn.Linear(100 * 100, 256),
+                nn.ReLU(),
+                nn.Linear(256, 128),
+                nn.ReLU(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+            )
         self.layer_init()
         self.count = 0
         self.debug_prefix = f"{time.time() * 1e7:.0f}"[-5:]
@@ -357,4 +404,6 @@ class SimpleCNNContext(SimpleCNN):
     def forward(self, observations: torch.Tensor):
         # [BATCH x CHANNEL x HEIGHT X WIDTH]
         observations = observations.permute(0, 3, 1, 2)
+        if self.cnn_type == "fcn_test":
+            observations = observations.flatten(1)
         return self.cnn(observations)

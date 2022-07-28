@@ -13,7 +13,8 @@ import torch
 from gym import spaces
 from habitat.config import Config
 from habitat.tasks.nav.nav import (
-    ContextSensor,
+    ContextMapSensor,
+    ContextWaypointSensor,
     EpisodicCompassSensor,
     EpisodicGPSSensor,
     HeadingSensor,
@@ -113,6 +114,7 @@ class PointNavResNetContextPolicy(Policy):
         normalize_visual_inputs: bool = False,
         force_blind_policy: bool = False,
         policy_config: None = None,
+        num_cnns: int = 1,
         tgt_hidden_size: int = 32,
         tgt_encoding: str = "linear_2",
         context_hidden_size: int = 512,
@@ -140,6 +142,7 @@ class PointNavResNetContextPolicy(Policy):
                 normalize_visual_inputs=normalize_visual_inputs,
                 force_blind_policy=force_blind_policy,
                 discrete_actions=discrete_actions,
+                num_cnns=num_cnns,
                 tgt_hidden_size=tgt_hidden_size,
                 tgt_encoding=tgt_encoding,
                 context_hidden_size=context_hidden_size,
@@ -164,6 +167,7 @@ class PointNavResNetContextPolicy(Policy):
             normalize_visual_inputs="rgb" in observation_space.spaces,
             force_blind_policy=config.FORCE_BLIND_POLICY,
             policy_config=config.RL.POLICY,
+            num_cnns=config.RL.POLICY.num_cnns,
             tgt_hidden_size=config.RL.PPO.tgt_hidden_size,
             tgt_encoding=config.RL.PPO.tgt_encoding,
             context_hidden_size=config.RL.PPO.context_hidden_size,
@@ -363,8 +367,8 @@ class ResNetEncoderContext(ResNetEncoder):
         else:
             self.running_mean_and_var = nn.Sequential()
 
-        spatial_size_h = observation_space.spaces["context"].shape[0] // 2
-        spatial_size_w = observation_space.spaces["context"].shape[1] // 2
+        spatial_size_h = observation_space.spaces["context_map"].shape[0] // 2
+        spatial_size_w = observation_space.spaces["context_map"].shape[1] // 2
 
         input_channels = 1
         self.backbone = make_backbone(input_channels, baseplanes, ngroups)
@@ -528,6 +532,7 @@ class PointNavResNetNet(Net):
 
         self._hidden_size = hidden_size
 
+        print("NUM CNNS: ", self.num_cnns)
         if self.num_cnns == 1:
             self.visual_encoder = ResNetEncoder(
                 observation_space
@@ -565,15 +570,20 @@ class PointNavResNetNet(Net):
                 make_backbone=getattr(resnet, backbone),
                 normalize_visual_inputs=normalize_visual_inputs,
             )
-        dim = np.prod(self.visual_encoder.output_shape)
-        if not self.visual_encoder.is_blind:
-            if self.num_cnns == 2:
-                dim *= 2
-            self.visual_fc = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(dim, hidden_size),
-                nn.ReLU(True),
-            )
+        elif self.num_cnns == 0:
+            print("VISUAL ENCODER IS SIMPLE CNN")
+            self.visual_encoder = SimpleCNN(observation_space, hidden_size)
+
+        if self.num_cnns != 0:
+            dim = np.prod(self.visual_encoder.output_shape)
+            if not self.visual_encoder.is_blind:
+                if self.num_cnns == 2:
+                    dim *= 2
+                self.visual_fc = nn.Sequential(
+                    nn.Flatten(),
+                    nn.Linear(dim, hidden_size),
+                    nn.ReLU(True),
+                )
 
         self.state_encoder = build_rnn_state_encoder(
             (0 if self.is_blind else self._hidden_size) + rnn_input_size,
@@ -734,6 +744,7 @@ class PointNavResNetContextNet(PointNavResNetNet):
         normalize_visual_inputs: bool,
         force_blind_policy: bool = False,
         discrete_actions: bool = True,
+        num_cnns: int = 1,
         tgt_hidden_size: int = 32,
         tgt_encoding: str = "linear_2",
         context_hidden_size: int = 512,
@@ -751,10 +762,11 @@ class PointNavResNetContextNet(PointNavResNetNet):
             normalize_visual_inputs=normalize_visual_inputs,
             force_blind_policy=force_blind_policy,
             discrete_actions=discrete_actions,
+            num_cnns=num_cnns,
         )
         self.cnn_type = cnn_type
         self.use_prev_action = use_prev_action
-        prev_action_embedding = 32 if self.use_prev_action else 0
+        prev_action_embedding_size = 32 if self.use_prev_action else 0
         self.tgt_encoding = tgt_encoding
         self.tgt_embeding_size = tgt_hidden_size
 
@@ -775,12 +787,11 @@ class PointNavResNetContextNet(PointNavResNetNet):
                 nn.ReLU(),
             )
 
-        if observation_space["context"].shape == (2,):
+        if observation_space["context_map"].shape == (2,):
             self.context_type = "waypoint"
         else:
             self.context_type = "map"
         self.context_hidden_size = context_hidden_size
-        print("RESNET CNN TYPE: ", self.cnn_type)
         if self.context_type == "map":
             if self.cnn_type == "cnn_ans":
                 self.context_encoder = SimpleCNNContext(
@@ -818,7 +829,7 @@ class PointNavResNetContextNet(PointNavResNetNet):
 
         self.state_encoder = build_rnn_state_encoder(
             self._hidden_size
-            + prev_action_embedding
+            + prev_action_embedding_size
             + self.tgt_embeding_size
             + self.context_hidden_size,
             self._hidden_size,
@@ -839,16 +850,22 @@ class PointNavResNetContextNet(PointNavResNetNet):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x = []
         if not self.is_blind:
-            visual_feats = self.visual_fc(self.visual_encoder(observations))
+            if self.num_cnns == 0:
+                visual_feats = self.visual_encoder(observations)
+            else:
+                visual_feats = self.visual_fc(
+                    self.visual_encoder(observations)
+                )
             x.append(visual_feats)
 
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
             goal_observations = observations[
                 IntegratedPointGoalGPSAndCompassSensor.cls_uuid
             ]
-            if goal_observations.shape[1] == 2:
-                # Polar Dimensionality 2
-                # 2D polar transform
+            if (
+                self.tgt_encoding == "sin_cos"
+                and goal_observations.shape[1] == 2
+            ):
                 goal_observations = torch.stack(
                     [
                         goal_observations[:, 0],
@@ -859,10 +876,18 @@ class PointNavResNetContextNet(PointNavResNetNet):
                 )
             goal_feats = self.tgt_encoder(goal_observations)
             x.append(goal_feats)
-        if ContextSensor.cls_uuid in observations:
-            context_feats = self.context_encoder(
-                observations[ContextSensor.cls_uuid]
-            )
+        if (
+            ContextWaypointSensor.cls_uuid in observations
+            or ContextMapSensor.cls_uuid in observations
+        ):
+            if self.context_type == "waypoint":
+                context_feats = self.context_encoder(
+                    observations[ContextWaypointSensor.cls_uuid]
+                )
+            elif self.context_type == "map":
+                context_feats = self.context_encoder(
+                    observations[ContextMapSensor.cls_uuid]
+                )
             if self.cnn_type == "resnet":
                 context_feats = self.context_fc(context_feats)
             x.append(context_feats)
