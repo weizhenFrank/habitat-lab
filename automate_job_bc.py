@@ -22,7 +22,7 @@ parser.add_argument("experiment_name")
 # Training
 parser.add_argument("-sd", "--seed", type=int, default=1)
 parser.add_argument("-ds", "--dataset", default="ny")
-parser.add_argument("-ne", "--num_environments", type=int, default=32)
+parser.add_argument("-ne", "--num_environments", type=int, default=72)
 parser.add_argument(
     "-tf", "--teacher-force", default=False, action="store_true"
 )
@@ -32,6 +32,12 @@ parser.add_argument("-sf", "--save-freq", type=int, default=100)
 parser.add_argument(
     "-cw", "--context-waypoint", default=False, action="store_true"
 )
+parser.add_argument(
+    "-dwpt", "--debug-waypoint", default=False, action="store_true"
+)
+parser.add_argument(
+    "-rma", "--waypoint-rma", default=False, action="store_true"
+)
 parser.add_argument("-cm", "--context-map", default=False, action="store_true")
 parser.add_argument(
     "-crw", "--context-resnet-waypoint", default=False, action="store_true"
@@ -39,10 +45,17 @@ parser.add_argument(
 parser.add_argument(
     "-crm", "--context-resnet-map", default=False, action="store_true"
 )
+parser.add_argument("-mr", "--map-resolution", type=int, default=100)
+parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.5)
+parser.add_argument(
+    "-nrotm", "--no-rotate-map", default=False, action="store_true"
+)
 parser.add_argument("-csn", "--context-sensor-noise", type=float, default=0.0)
 parser.add_argument("-lr", "--learning_rate", type=float, default=2.5e-4)
+parser.add_argument("-wd", "--weight_decay", type=float, default=0.0)
 parser.add_argument("-chs", "--context-hidden-size", type=int, default=512)
 parser.add_argument("-ths", "--tgt-hidden-size", type=int, default=512)
+parser.add_argument("-ncnn", "--num-cnns", type=int, default=0)
 parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
 parser.add_argument("-tgte", "--target_encoding", default="linear_2")
 parser.add_argument(
@@ -52,13 +65,21 @@ parser.add_argument(
     "-sc", "--second-channel", default=False, action="store_true"
 )
 parser.add_argument(
+    "-mc", "--multi-channel", default=False, action="store_true"
+)
+parser.add_argument(
     "-npg", "--noisy-pointgoal", default=False, action="store_true"
 )
+parser.add_argument("-cd", "--context-debug", default="")
 parser.add_argument("-ft", "--finetune", default=False, action="store_true")
 parser.add_argument(
     "-wpts", "--use-waypoint-student", default=False, action="store_true"
 )
-
+parser.add_argument(
+    "-bs", "--use-baseline-student", default=False, action="store_true"
+)
+parser.add_argument("-cmse", "--clip-mse", default=False, action="store_true")
+parser.add_argument("-l", "--loss", default="mse")
 # Evaluation
 parser.add_argument("-e", "--eval", default=False, action="store_true")
 parser.add_argument("-cpt", "--ckpt", default="")
@@ -91,7 +112,8 @@ new_exp_yaml_path = os.path.join(dst_dir, os.path.basename(exp_yaml_path))
 exp_name = f"_kinematic"
 
 if args.eval:
-    exp_name += "_eval"
+    exp_name += f"_eval_{args.dataset}"
+    eval_dst_dir += f"_{args.dataset}"
 if args.ckpt != "":
     exp_name += f"_ckpt_{args.ckpt}"
     eval_dst_dir += f"_ckpt_{args.ckpt}"
@@ -157,19 +179,34 @@ if not args.eval:
         elif i.startswith("    BIN_POINTGOAL:"):
             if args.target_encoding == "ans_bin":
                 task_yaml_data[idx] = f"    BIN_POINTGOAL: True"
+        elif i.startswith("    MAP_RESOLUTION:"):
+            task_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
+        elif i.startswith("    METERS_PER_PIXEL:"):
+            task_yaml_data[
+                idx
+            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
+        elif i.startswith("    ROTATE_MAP:"):
+            if args.no_rotate_map:
+                task_yaml_data[idx] = f"    ROTATE_MAP: False"
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 task_yaml_data[idx] = f"    SECOND_CHANNEL: True"
+        elif i.startswith("    MULTI_CHANNEL:"):
+            if args.multi_channel:
+                task_yaml_data[idx] = f"    MULTI_CHANNEL: True"
+        elif i.startswith("    DEBUG:"):
+            task_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("SEED:"):
             task_yaml_data[idx] = f"SEED: {args.seed}"
         elif i.startswith("  DATA_PATH:"):
-            print("dataset: ", args.dataset)
             if args.dataset == "ny":
                 data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
             elif args.dataset == "ny_1":
                 data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/train/content/wQN24R38a9N.json.gz"
             elif args.dataset == "coda_lobby":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_lobby/coda_lobby.json.gz"
+            elif args.dataset == "google_1157":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_1157/content/mtv1157-1_lab.json.gz"
             elif args.dataset == "hm3d_mf":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor/{split}/{split}.json.gz"
             task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
@@ -217,6 +254,8 @@ if not args.eval:
                 exp_yaml_data[idx] = "  TEACHER_FORCE: True"
         elif i.startswith("SL_LR:"):
             exp_yaml_data[idx] = f"SL_LR: {args.learning_rate}"
+        elif i.startswith("SL_WD:"):
+            exp_yaml_data[idx] = f"SL_WD: {args.weight_decay}"
         elif i.startswith("BATCH_LENGTH:"):
             exp_yaml_data[idx] = f"BATCH_LENGTH: {args.batch_length}"
         elif i.startswith("BATCHES_PER_CHECKPOINT:"):
@@ -224,6 +263,22 @@ if not args.eval:
         elif i.startswith("USE_WAYPOINT_STUDENT:"):
             if args.use_waypoint_student:
                 exp_yaml_data[idx] = f"USE_WAYPOINT_STUDENT: True"
+        elif i.startswith("USE_BASELINE_STUDENT:"):
+            if args.use_baseline_student:
+                exp_yaml_data[idx] = f"USE_BASELINE_STUDENT: True"
+        elif i.startswith("DEBUG_WAYPOINT:"):
+            if args.debug_waypoint:
+                exp_yaml_data[idx] = f"DEBUG_WAYPOINT: True"
+        elif i.startswith("CLIP_MSE:"):
+            if args.clip_mse:
+                exp_yaml_data[idx] = f"CLIP_MSE: True"
+        elif i.startswith("LOSS:"):
+            exp_yaml_data[idx] = f"LOSS: {args.loss}"
+        elif i.startswith("WAYPOINT_RMA:"):
+            if args.waypoint_rma:
+                exp_yaml_data[idx] = f"WAYPOINT_RMA: True"
+        elif i.startswith("    num_cnns:"):
+            exp_yaml_data[idx] = f"    num_cnns: {args.num_cnns}"
         elif i.startswith("    tgt_encoding:"):
             exp_yaml_data[idx] = f"    tgt_encoding: '{args.target_encoding}'"
         elif i.startswith("    context_hidden_size:"):
@@ -242,6 +297,8 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if args.context_resnet_waypoint or args.context_resnet_map:
                 exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
+            if args.use_baseline_student:
+                exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
                 exp_yaml_data[
@@ -333,11 +390,11 @@ else:
                 eval_yaml_data[
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR', 'CONTEXT_MAP_SENSOR']"
-            elif args.context_waypoint:
+            elif args.context_waypoint or args.context_resnet_waypoint:
                 eval_yaml_data[
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map:
+            elif args.context_map or args.context_resnet_map:
                 eval_yaml_data[
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
@@ -348,9 +405,23 @@ else:
         elif i.startswith("    BIN_POINTGOAL:"):
             if args.target_encoding == "ans_bin":
                 eval_yaml_data[idx] = f"    BIN_POINTGOAL: True"
+        elif i.startswith("    MAP_RESOLUTION:"):
+            eval_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
+        elif i.startswith("    METERS_PER_PIXEL:"):
+            eval_yaml_data[
+                idx
+            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
+        elif i.startswith("    ROTATE_MAP:"):
+            if args.no_rotate_map:
+                eval_yaml_data[idx] = f"    ROTATE_MAP: True"
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 eval_yaml_data[idx] = f"    SECOND_CHANNEL: True"
+        elif i.startswith("    MULTI_CHANNEL:"):
+            if args.multi_channel:
+                eval_yaml_data[idx] = f"    MULTI_CHANNEL: True"
+        elif i.startswith("    DEBUG:"):
+            eval_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("      MIN_RAND_PITCH:"):
             eval_yaml_data[idx] = f"      MIN_RAND_PITCH: 0.0"
         elif i.startswith("      MAX_RAND_PITCH:"):
@@ -408,6 +479,8 @@ else:
                 eval_exp_yaml_data[
                     idx
                 ] = "    name: PointNavResNetContextPolicy"
+            if args.use_baseline_student:
+                eval_exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
         elif i.startswith("CHECKPOINT_FOLDER:"):
             eval_exp_yaml_data[
                 idx
@@ -420,7 +493,7 @@ else:
             else:
                 eval_exp_yaml_data[
                     idx
-                ] = f"EVAL_CKPT_PATH_DIR: '{os.path.join(dst_dir, 'checkpoints')}/{args.ckpt}.ckpt'"
+                ] = f"EVAL_CKPT_PATH_DIR: '{os.path.join(dst_dir, 'checkpoints')}/{args.ckpt}.pth'"
         elif i.startswith("TXT_DIR:"):
             txt_dir = f"txts_eval_kinematic"
             if args.ckpt != "":
@@ -457,6 +530,8 @@ else:
             eval_exp_yaml_data[
                 idx
             ] = f"VIDEO_DIR:          '{os.path.join(eval_dst_dir, 'videos', video_dir)}'"
+        elif i.startswith("    num_cnns:"):
+            eval_exp_yaml_data[idx] = f"    num_cnns: {args.num_cnns}"
         elif i.startswith("    tgt_encoding:"):
             eval_exp_yaml_data[
                 idx

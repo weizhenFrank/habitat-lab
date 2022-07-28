@@ -20,9 +20,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("experiment_name")
 
 # Training
-parser.add_argument("-sd", "--seed", type=int, default=100)
+parser.add_argument("-sd", "--seed", type=int, default=1)
 parser.add_argument("-ns", "--max_num_steps", type=int, default=500)
 parser.add_argument("-r", "--robot", default="Spot")
+parser.add_argument("-rr", "--robot-radius", type=float, default=-1.0)
 parser.add_argument("-c", "--control-type", default="kinematic")
 parser.add_argument("-p", "--partition", default="long")
 parser.add_argument("-s", "--sliding", default=False, action="store_true")
@@ -41,21 +42,42 @@ parser.add_argument("-ts", "--time-step", type=float, default=1.0)
 parser.add_argument(
     "-odn", "--outdoor-nav", default=False, action="store_true"
 )
+parser.add_argument("-cm", "--context-map", default=False, action="store_true")
 parser.add_argument(
-    "-cs", "--context-sensor", default=False, action="store_true"
+    "-cw", "--context-waypoint", default=False, action="store_true"
+)
+parser.add_argument(
+    "-crm", "--context-resnet-map", default=False, action="store_true"
+)
+parser.add_argument(
+    "-crw", "--context-resnet-waypoint", default=False, action="store_true"
+)
+parser.add_argument(
+    "-sc", "--second-channel", default=False, action="store_true"
 )
 parser.add_argument("-csn", "--context-sensor-noise", type=float, default=0.0)
 parser.add_argument("-chs", "--context-hidden-size", type=int, default=512)
+parser.add_argument("-ths", "--tgt-hidden-size", type=int, default=512)
 parser.add_argument("-cd", "--context-debug", default="")
-parser.add_argument("-mr", "--map-resolution", type=int, default=500)
-parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.1)
+parser.add_argument("-ct", "--context-type", default="MAP")
+parser.add_argument("-mr", "--map-resolution", type=int, default=100)
+parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.5)
 parser.add_argument(
     "-rotm", "--rotate-map", default=False, action="store_true"
 )
 parser.add_argument(
     "-lpg", "--log-pointgoal", default=False, action="store_true"
 )
+parser.add_argument("-lstd", "--log-std", default=False, action="store_true")
+parser.add_argument(
+    "-pa", "--use-prev-action", default=False, action="store_true"
+)
+parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
+parser.add_argument("-tgte", "--target_encoding", default="linear_2")
 parser.add_argument("-ft", "--finetune", default=False, action="store_true")
+parser.add_argument(
+    "-npg", "--noisy-pointgoal", default=False, action="store_true"
+)
 parser.add_argument("--constraint", default="x")
 
 ## options for dataset are hm3d_gibson, hm3d, gibson
@@ -233,21 +255,35 @@ if not args.eval:
         elif i.startswith("  MAX_EPISODE_STEPS:"):
             task_yaml_data[idx] = f"  MAX_EPISODE_STEPS: {args.max_num_steps}"
         elif i.startswith("    RADIUS:"):
-            task_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+            if args.robot_radius == -1.0:
+                task_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+            else:
+                task_yaml_data[idx] = f"    RADIUS: {args.robot_radius}"
         elif i.startswith("  ROBOT:"):
             task_yaml_data[idx] = f"  ROBOT: '{robot}'"
         elif i.startswith("  SENSORS:"):
-            if args.context_sensor:
+            pg = (
+                "POINTGOAL_WITH_NOISY_GPS_COMPASS_SENSOR"
+                if args.noisy_pointgoal
+                else "POINTGOAL_WITH_GPS_COMPASS_SENSOR"
+            )
+            task_yaml_data[idx] = f"  SENSORS: ['{pg}']"
+            if args.context_map or args.context_resnet_map:
                 task_yaml_data[
                     idx
-                ] = f"  SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR', 'CONTEXT_SENSOR']"
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
+            elif args.context_waypoint or args.context_resnet_waypoint:
+                task_yaml_data[
+                    idx
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             task_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    LOG_POINTGOAL:"):
             if args.log_pointgoal:
                 task_yaml_data[idx] = f"    LOG_POINTGOAL: True"
-            else:
-                task_yaml_data[idx] = f"    LOG_POINTGOAL: False"
+        elif i.startswith("    BIN_POINTGOAL:"):
+            if args.target_encoding == "ans_bin":
+                task_yaml_data[idx] = f"    BIN_POINTGOAL: True"
         elif i.startswith("      ROBOT_URDF:"):
             task_yaml_data[idx] = f"      ROBOT_URDF: {robot_urdf}"
         elif i.startswith("    MAP_RESOLUTION:"):
@@ -259,12 +295,17 @@ if not args.eval:
         elif i.startswith("    ROTATE_MAP:"):
             if args.rotate_map:
                 task_yaml_data[idx] = f"    ROTATE_MAP: True"
+        elif i.startswith("    SECOND_CHANNEL:"):
+            if args.second_channel:
+                task_yaml_data[idx] = f"    SECOND_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
             task_yaml_data[
                 idx
             ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
         elif i.startswith("    DEBUG:"):
             task_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
+        elif i.startswith("    CONTEXT_TYPE:"):
+            task_yaml_data[idx] = f'    CONTEXT_TYPE: "{args.context_type}"'
         elif i.startswith("  POSSIBLE_ACTIONS:"):
             if args.control_type == "dynamic":
                 control_type = "DYNAMIC_VELOCITY_CONTROL"
@@ -432,6 +473,22 @@ if not args.eval:
             exp_yaml_data[
                 idx
             ] = f"TXT_DIR:            '{os.path.join(dst_dir, 'txts')}'"
+        elif i.startswith("      use_log_std:"):
+            if args.log_std:
+                exp_yaml_data[idx] = "      use_log_std: True"
+        elif i.startswith("    tgt_encoding:"):
+            exp_yaml_data[idx] = f"    tgt_encoding: '{args.target_encoding}'"
+        elif i.startswith("    context_hidden_size:"):
+            exp_yaml_data[
+                idx
+            ] = f"    context_hidden_size: {args.context_hidden_size}"
+        elif i.startswith("    tgt_hidden_size:"):
+            exp_yaml_data[idx] = f"    tgt_hidden_size: {args.tgt_hidden_size}"
+        elif i.startswith("    use_prev_action:"):
+            if args.use_prev_action:
+                exp_yaml_data[idx] = f"    use_prev_action: True"
+        elif i.startswith("    cnn_type:"):
+            exp_yaml_data[idx] = f"    cnn_type: '{args.cnn_type}'"
         elif i.startswith("    num_cnns:"):
             if args.two_cnns:
                 exp_yaml_data[idx] = "    num_cnns: 2"
@@ -440,8 +497,10 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
             if args.outdoor_nav:
                 exp_yaml_data[idx] = "    name: OutdoorPolicy"
-            if args.context_sensor:
+            if args.context_map or args.context_waypoint:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"
+            if args.context_resnet_map or args.context_resnet_waypoint:
+                exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
                 exp_yaml_data[
@@ -457,10 +516,6 @@ if not args.eval:
             exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
         elif i.startswith("        KERNEL_SIZE:"):
             exp_yaml_data[idx] = f"        KERNEL_SIZE: {args.kernel_size}"
-        elif i.startswith("    context_hidden_size:"):
-            exp_yaml_data[
-                idx
-            ] = f"    context_hidden_size: {args.context_hidden_size}"
         elif i.startswith("    decoder_output:"):
             if args.splitnet and args.surface_normal:
                 exp_yaml_data[
@@ -494,7 +549,9 @@ if not args.eval:
                 exp_yaml_data[idx] = f"  USE_OUTDOOR: True"
         elif i.startswith("    pretrained_weights: "):
             if args.finetune:
-                ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_bp_0.03_sd_1/checkpoints/ckpt.84.pth"
+                # ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_bp_0.03_sd_1/checkpoints/ckpt.84.pth"
+                # ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_hm3d_mf_rand_pitch_-1.0_1.0_bp_0.03_log_sd_1/checkpoints/ckpt.95.pth"
+                ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_-1.0_1.0_bp_0.03_sd_1_16env_context_no_noise_log_agent_rot/checkpoints/ckpt.94.pth"
                 exp_yaml_data[idx] = f"    pretrained_weights: {ft_weights}"
         elif i.startswith("    pretrained: "):
             if args.finetune:
@@ -568,7 +625,10 @@ else:
         elif i.startswith("  MAX_EPISODE_STEPS:"):
             eval_yaml_data[idx] = f"  MAX_EPISODE_STEPS: {args.max_num_steps}"
         elif i.startswith("    RADIUS:"):
-            eval_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+            if args.robot_radius == -1.0:
+                eval_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+            else:
+                eval_yaml_data[idx] = f"    RADIUS: {args.robot_radius}"
         elif i.startswith("    ALLOW_SLIDING:"):
             if args.sliding:
                 eval_yaml_data[idx] = f"    ALLOW_SLIDING: True"
@@ -588,22 +648,40 @@ else:
         elif i.startswith("    ROTATE_MAP:"):
             if args.rotate_map:
                 eval_yaml_data[idx] = f"    ROTATE_MAP: True"
+        elif i.startswith("    SECOND_CHANNEL:"):
+            if args.second_channel:
+                eval_yaml_data[idx] = f"    SECOND_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
             eval_yaml_data[
                 idx
             ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+        elif i.startswith("    DEBUG:"):
+            eval_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
+        elif i.startswith("    CONTEXT_TYPE:"):
+            eval_yaml_data[idx] = f'    CONTEXT_TYPE: "{args.context_type}"'
         elif i.startswith("  SENSORS:"):
-            if args.context_sensor:
+            pg = (
+                "POINTGOAL_WITH_NOISY_GPS_COMPASS_SENSOR"
+                if args.noisy_pointgoal
+                else "POINTGOAL_WITH_GPS_COMPASS_SENSOR"
+            )
+            eval_yaml_data[idx] = f"  SENSORS: ['{pg}']"
+            if args.context_map or args.context_resnet_map:
                 eval_yaml_data[
                     idx
-                ] = f"  SENSORS: ['POINTGOAL_WITH_GPS_COMPASS_SENSOR', 'CONTEXT_SENSOR']"
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
+            elif args.context_waypoint or args.context_resnet_waypoint:
+                eval_yaml_data[
+                    idx
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             eval_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    LOG_POINTGOAL:"):
             if args.log_pointgoal:
                 eval_yaml_data[idx] = f"    LOG_POINTGOAL: True"
-            else:
-                eval_yaml_data[idx] = f"    LOG_POINTGOAL: False"
+        elif i.startswith("    BIN_POINTGOAL:"):
+            if args.target_encoding == "ans_bin":
+                eval_yaml_data[idx] = f"    BIN_POINTGOAL: True"
         elif i.startswith("  POSSIBLE_ACTIONS:"):
             if args.control_type == "dynamic":
                 control_type = "DYNAMIC_VELOCITY_CONTROL"
@@ -666,6 +744,10 @@ else:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/coda/coda_lobby_hard/coda_lobby_hard.json.gz"
             elif args.dataset == "google":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val/content/boulder4772-2_v2.json.gz"
+            elif args.dataset == "google_v3":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/google/val/content/boulder4772-2_v3.json.gz"
+            elif args.dataset == "google_val":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_all/val.json.gz"
             elif args.dataset == "ny":
                 data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
             elif args.dataset == "ny_train":
@@ -686,6 +768,10 @@ else:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor_only/{split}/{split}.json.gz"
             elif args.dataset == "hm3d_straight":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.4_single_floor_long/val/content/HY1NcmCgn3n.json.gz"
+            elif args.dataset == "ny_google":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_spot_ny_google/val/val.json.gz"
+            elif args.dataset == "google_1157":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_1157/content/mtv1157-1_lab.json.gz"
             eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
         elif i.startswith("      noise_multiplier:"):
             eval_yaml_data[
@@ -720,8 +806,12 @@ else:
                 eval_exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
             if args.outdoor_nav:
                 eval_exp_yaml_data[idx] = "    name: OutdoorPolicy"
-            if args.context_sensor:
+            if args.context_map or args.context_waypoint:
                 eval_exp_yaml_data[idx] = "    name: PointNavContextPolicy"
+            if args.context_resnet_map or args.context_resnet_waypoint:
+                eval_exp_yaml_data[
+                    idx
+                ] = "    name: PointNavResNetContextPolicy"
         elif i.startswith("  COLLISION_PENALTY:"):
             eval_exp_yaml_data[
                 idx
@@ -758,7 +848,7 @@ else:
             if (
                 "ferst" in args.dataset
                 or "coda" in args.dataset
-                or "google" in args.dataset
+                or args.dataset == "google"
             ):
                 eval_exp_yaml_data[idx] = "NUM_ENVIRONMENTS: 1"
         elif i.startswith("SENSORS:"):
@@ -796,6 +886,13 @@ else:
                 eval_exp_yaml_data[idx] = "    SPLIT: val"
             elif args.dataset == "ferst_20m":
                 eval_exp_yaml_data[idx] = "    SPLIT: val_20m"
+        elif i.startswith("      use_log_std:"):
+            if args.log_std:
+                eval_exp_yaml_data[idx] = "      use_log_std: True"
+        elif i.startswith("    tgt_encoding:"):
+            eval_exp_yaml_data[
+                idx
+            ] = f"    tgt_encoding: '{args.target_encoding}'"
         elif i.startswith("    num_cnns:"):
             if args.two_cnns:
                 eval_exp_yaml_data[idx] = "    num_cnns: 2"
@@ -820,6 +917,19 @@ else:
             eval_exp_yaml_data[
                 idx
             ] = f"        KERNEL_SIZE: {args.kernel_size}"
+        elif i.startswith("    context_hidden_size:"):
+            eval_exp_yaml_data[
+                idx
+            ] = f"    context_hidden_size: {args.context_hidden_size}"
+        elif i.startswith("    tgt_hidden_size:"):
+            eval_exp_yaml_data[
+                idx
+            ] = f"    tgt_hidden_size: {args.tgt_hidden_size}"
+        elif i.startswith("    use_prev_action:"):
+            if args.use_prev_action:
+                eval_exp_yaml_data[idx] = f"    use_prev_action: True"
+        elif i.startswith("    cnn_type:"):
+            eval_exp_yaml_data[idx] = f"    cnn_type: '{args.cnn_type}'"
         elif i.startswith("    decoder_output:"):
             if args.splitnet and args.surface_normal:
                 eval_exp_yaml_data[
