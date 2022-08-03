@@ -38,6 +38,7 @@ from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
                                           quaternion_from_coeff,
                                           quaternion_rotate_vector)
 from habitat.utils.visualizations import fog_of_war, maps
+from skimage.draw import disk
 
 try:
     import habitat_sim
@@ -667,6 +668,7 @@ class ContextWaypointSensor(Sensor):
     ):
         self._sim = sim
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+        self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
 
         super().__init__(sim=sim, config=config)
 
@@ -722,12 +724,12 @@ class ContextWaypointSensor(Sensor):
                     next_shortest_path_point = next_pt
             else:
                 next_shortest_path_point = goal.position
-            # grid_coords = maps.to_grid(
-            #     next_shortest_path_point[2],
-            #     next_shortest_path_point[0],
-            #     self._top_down_map.shape[0:2],
-            #     sim=self._sim,
-            # )
+            grid_coords = maps.to_grid(
+                next_shortest_path_point[2],
+                next_shortest_path_point[0],
+                (self._map_resolution, self._map_resolution),
+                sim=self._sim,
+            )
 
             agent_state = self._sim.get_agent_state()
             agent_position = agent_state.position
@@ -737,15 +739,17 @@ class ContextWaypointSensor(Sensor):
             goal_vector = self._compute_pointgoal(
                 agent_position, rotation_world_agent, goal_position
             )
-        # return goal_vector, grid_coords
-        return goal_vector
+        return goal_vector, grid_coords
+        # return goal_vector
 
     def get_observation(
         self, observations, episode, task, *args: Any, **kwargs: Any
     ):
-        waypoint_vector = self.get_next_shortest_path_point(episode)
+        waypoint_vector, waypoint_coord = self.get_next_shortest_path_point(
+            episode
+        )
         if np.isnan(waypoint_vector).any():
-            waypoint_vector = np.zeros_like(waypoint_vector)
+            waypoint_vector, waypoint_coord = np.zeros_like(waypoint_vector)
             task.is_stop_called = True
         # visualize on map
         # curr_top_down_map[
@@ -832,6 +836,7 @@ class ContextMapSensor(PointGoalSensor):
             # p=0.25,
         )
         self.debug = getattr(config, "DEBUG", "")
+        self.disk_radius = 5
         super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -880,6 +885,32 @@ class ContextMapSensor(PointGoalSensor):
                 rs,
             )
             print(f"saved: {save_name}")
+
+    def _get_goal_vector(self, episode):
+        agent_state = self._sim.get_agent_state().position
+        goal = episode.goals[0]
+        goal_position = goal.position
+
+        agent_state = self._sim.get_agent_state()
+        agent_position = agent_state.position
+        rotation_world_agent = agent_state.rotation
+
+        return self._compute_pointgoal(
+            agent_position, rotation_world_agent, goal_position
+        )
+
+    def _compute_pointgoal(
+        self, source_position, source_rotation, goal_position
+    ):
+        direction_vector = goal_position - source_position
+        direction_vector_agent = quaternion_rotate_vector(
+            source_rotation.inverse(), direction_vector
+        )
+
+        rho, phi = cartesian_to_polar(
+            -direction_vector_agent[2], direction_vector_agent[0]
+        )
+        return np.array([rho, -phi], dtype=np.float32)
 
     def get_polar_angle(self):
         agent_state = self._sim.get_agent_state()
@@ -967,7 +998,7 @@ class ContextMapSensor(PointGoalSensor):
             top_down_map_rot = scipy.ndimage.interpolation.rotate(
                 curr_top_down_map, np.rad2deg(rot_angle), reshape=True
             )
-            # self.save_map(self._top_down_map, 'context_topdown_map')
+            # self.save_map(self._top_down_map, "context_topdown_map")
 
             ## rotate top down map to match agent's heading
             a_x, a_y = self.get_rotated_point(
@@ -978,24 +1009,40 @@ class ContextMapSensor(PointGoalSensor):
             )
             curr_top_down_map = top_down_map_rot
 
-        point_padding = 0
         curr_top_down_map = np.expand_dims(curr_top_down_map, axis=2)
         # visualize agent
         if self.multi_channel:
+            # 0(white) if occupied, 1(gray) if unoccupied
             freespace_top_down_map = np.zeros_like(curr_top_down_map)
+            # dist2goal_top_down_map = np.zeros_like(curr_top_down_map)
+            #
+            # agent_state = self._sim.get_agent_state()
+            # agent_position = agent_state.position
+            # rotation_world_agent = agent_state.rotation
+            # goal_position = np.array(
+            #     episode.goals[0].position, dtype=np.float32
+            # )
+            #
+            # goal_vector = self._compute_pointgoal(
+            #     agent_position, rotation_world_agent, goal_position
+            # )
+            #
+            # self._compute_pointgoal(
+            #     source_position, source_rotation, goal_position
+            # )
+
             obstacle_top_down_map = np.zeros_like(curr_top_down_map)
             obstacle_top_down_map[curr_top_down_map == 0] = 1
             freespace_top_down_map[curr_top_down_map == 1] = 1
+
             curr_top_down_map_agent = np.zeros_like(curr_top_down_map)
-            curr_top_down_map_agent[
-                a_x - point_padding : a_x + point_padding + 1,
-                a_y - point_padding : a_y + point_padding + 1,
-                1,
-            ] = 1  # mark agent position as gray
+            rr, cc = disk((a_x, a_y), self.disk_radius)
+            curr_top_down_map_agent[rr, cc, 0] = 1.0
 
             curr_top_down_map = np.concatenate(
                 [
                     obstacle_top_down_map,
+                    # dist2goal_top_down_map,
                     freespace_top_down_map,
                     curr_top_down_map_agent,
                 ],
@@ -1005,21 +1052,29 @@ class ContextMapSensor(PointGoalSensor):
             if self.separate_channel:
                 # add a separate channel for agents
                 curr_top_down_map_agent = np.zeros_like(curr_top_down_map)
-                curr_top_down_map_agent[
-                    a_x - point_padding : a_x + point_padding + 1,
-                    a_y - point_padding : a_y + point_padding + 1,
-                    1,
-                ] = 1  # mark agent position as gray
+                rr, cc = disk((a_x, a_y), self.disk_radius)
+                curr_top_down_map_agent[rr, cc, 0] = 1.0
+
+                r, theta = self._get_goal_vector(episode)
+
+                x = (np.exp(r) / self.meters_per_pixel) * np.cos(theta)
+                y = (np.exp(r) / self.meters_per_pixel) * np.sin(theta)
+                mid = self._map_resolution // 2
+                row, col = np.clip(int(mid - x), 5, 250), np.clip(
+                    int(mid - y),
+                    0 + self.disk_radius,
+                    self._map_resolution - self.disk_radius,
+                )
+
+                rr, cc = disk((row, col), self.disk_radius)
+                curr_top_down_map_agent[rr, cc, 0] = 1.0
 
                 curr_top_down_map = np.concatenate(
                     [curr_top_down_map, curr_top_down_map_agent], axis=2
                 )
             else:
-                curr_top_down_map[
-                    a_x - point_padding : a_x + point_padding + 1,
-                    a_y - point_padding : a_y + point_padding + 1,
-                    0,
-                ] = 2
+                rr, cc = disk((a_x, a_y), self.disk_radius)
+                curr_top_down_map[rr, cc, 0] = 2.0
         pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
         pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
 
@@ -1064,6 +1119,10 @@ class ContextMapSensor(PointGoalSensor):
 
         # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
         local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
+        if self.multi_channel:
+            local_top_down_map_filled[:, :, 0] = np.ones_like(
+                local_top_down_map_filled[:, :, 0], dtype=np.uint8
+            )
 
         local_top_down_map_filled[
             pad_top : pad_top + lh, pad_left : pad_left + lw, :
@@ -1071,9 +1130,6 @@ class ContextMapSensor(PointGoalSensor):
         # if self.save_map_debug:
         #     local_top_down_map_filled = self._fake_map
 
-        self.save_map(
-            local_top_down_map_filled[:, :, 0], "local_top_down_map_filled"
-        )
         # 0 (white) if occupied, 1 (gray) if unoccupied
         if self.debug == "WHITE":
             return np.zeros_like(local_top_down_map_filled, dtype=np.float32)
