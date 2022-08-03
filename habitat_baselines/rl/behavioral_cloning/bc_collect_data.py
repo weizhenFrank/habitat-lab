@@ -23,6 +23,7 @@ from habitat_baselines.rl.behavioral_cloning.agents import (BaselineStudent,
 from habitat_baselines.utils.common import (action_to_velocity_control,
                                             batch_obs)
 from habitat_baselines.utils.env_utils import construct_envs
+from skimage.draw import disk
 from torch.utils.tensorboard import SummaryWriter
 
 CHECKPOINT_PATH = ""
@@ -139,7 +140,13 @@ class BehavioralCloning(BaseRLTrainer):
             writer = SummaryWriter(self.tb_dir)
         else:
             writer = None
-        for iteration in range(1, 1000000):
+        context_maps = []
+        context_waypoints = []
+        context_goals = []
+        context_waypoint_maps = []
+        saved_train = False
+        # for iteration in range(1, 1500000):
+        for iteration in range(1, 1000):
             in_hidden = student_hidden_states.detach().clone()
             in_prev_actions = student_prev_actions.detach().clone()
             in_not_done = not_done_masks.clone()
@@ -183,29 +190,20 @@ class BehavioralCloning(BaseRLTrainer):
                 )
             elif self.regress == "waypoint_rma_2":
                 ## make student map encoder output same as waypoint
-
-                teacher_label = torch.stack(
-                    [
-                        batch["context_waypoint"][:, 0],
-                        torch.cos(-batch["context_waypoint"][:, 1]),
-                        torch.sin(-batch["context_waypoint"][:, 1]),
-                    ],
-                    -1,
-                )
-                # print(
-                #     "self.student.actor_critic.net.map_ce.shape: ",
-                #     self.student.actor_critic.net.map_ce.shape,
-                # )
-                # print("teacher_label.shape: ", teacher_label.shape)
-                assert (
-                    self.student.actor_critic.net.map_ce.shape
-                    == teacher_label.shape
-                )
-
-                loss = F.mse_loss(
-                    self.student.actor_critic.net.map_ce,
-                    teacher_label,
-                )
+                if self.loss == "mse":
+                    assert (
+                        self.student.actor_critic.net.map_ce.shape
+                        == batch["context_waypoint"].shape
+                    )
+                    loss = F.mse_loss(
+                        self.student.actor_critic.net.map_ce,
+                        batch["context_waypoint"],
+                    )
+                elif self.loss == "log_prob":
+                    loss = -self.student.actor_critic.net.map_ce.log_prob(
+                        batch["context_waypoint"]
+                    ).mean()
+                loss += 0.0
             elif self.regress == "actions":
                 if self.loss == "mse":
                     if self.clip_mse:
@@ -235,7 +233,9 @@ class BehavioralCloning(BaseRLTrainer):
                         teacher_actions
                     ).mean()
                 )
+                # print("is_loss: ", is_loss)
                 loss += is_loss
+                # print("total loss: ", loss)
                 del is_loss
             action_loss += loss
             del loss
@@ -300,12 +300,51 @@ class BehavioralCloning(BaseRLTrainer):
                 action_to_velocity_control(a, "VELOCITY_CONTROL")
                 for a in execute_actions.to(device="cpu")
             ]
+            print("step_actions: ", step_actions)
 
             outputs = self.envs.step(step_actions)
 
             observations, rewards, dones, infos = [
                 list(x) for x in zip(*outputs)
             ]
+            for o in observations:
+                print(np.exp(o["pointgoal_with_gps_compass"][0]))
+                # if np.exp(o["pointgoal_with_gps_compass"][0]) > 2:
+                for k, v in o.items():
+                    if k == "context_map":
+                        context_maps.append(v[:, :, 1])
+                    elif k == "context_waypoint":
+                        mid = 128
+                        mpp = 0.1
+                        waypoint_map = np.zeros((256, 256))
+                        r, theta = v
+                        x = (np.exp(r) / mpp) * np.cos(theta)
+                        y = (np.exp(r) / mpp) * np.sin(theta)
+
+                        row, col = np.clip(int(mid - x), 5, 250), np.clip(
+                            int(mid - y), 5, 250
+                        )
+                        rr, cc = disk((row, col), 5)
+                        waypoint_map[rr, cc] = 1.0
+                        context_waypoints.append(np.array([r, theta]))
+                        context_waypoint_maps.append(waypoint_map)
+                    elif k == "pointgoal_with_gps_compass":
+                        mid = 128
+                        mpp = 0.1
+                        goal_map = np.zeros((256, 256))
+                        rr, cc = disk((128, 128), 5)
+                        goal_map[rr, cc] = 1.0
+                        r, theta = v
+                        x = (np.exp(r) / mpp) * np.cos(theta)
+                        y = (np.exp(r) / mpp) * np.sin(theta)
+
+                        row, col = np.clip(int(mid - x), 5, 250), np.clip(
+                            int(mid - y), 5, 250
+                        )
+
+                        rr, cc = disk((row, col), 5)
+                        goal_map[rr, cc] = 1.0
+                        context_goals.append(goal_map)
 
             for idx, done in enumerate(dones):
                 if done:
@@ -323,6 +362,46 @@ class BehavioralCloning(BaseRLTrainer):
                 dtype=torch.bool,
                 device=self.device,
             )
+            # if iteration > 15000 and not saved_train:
+        print("# maps: ", np.array(context_maps).shape)
+        np.save(
+            "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/1157_data/context_maps.npy",
+            np.array(context_maps),
+        )
+        np.save(
+            "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/1157_data/context_waypoint_maps.npy",
+            np.array(context_waypoint_maps),
+        )
+        np.save(
+            "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/1157_data/context_waypoints.npy",
+            np.array(context_waypoints),
+        )
+        np.save(
+            "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/1157_data/context_goals.npy",
+            np.array(context_goals),
+        )
+        context_maps = []
+        context_waypoint_maps = []
+        context_waypoints = []
+        context_goals = []
+        # saved_train = True
+        # print("# maps: ", np.array(context_maps).shape)
+        # np.save(
+        #     "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/eval_context_maps.npy",
+        #     np.array(context_maps),
+        # )
+        # np.save(
+        #     "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/eval_context_waypoint_maps.npy",
+        #     np.array(context_waypoint_maps),
+        # )
+        # np.save(
+        #     "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/eval_context_waypoints.npy",
+        #     np.array(context_waypoints),
+        # )
+        # np.save(
+        #     "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/eval_context_goals.npy",
+        #     np.array(context_goals),
+        # )
         self.envs.close()
 
 
