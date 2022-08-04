@@ -7,13 +7,17 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import torchvision.models as models
+from habitat_baselines.rl.ddppo.policy import resnet
 from skimage.draw import disk
 from torch import nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 BASE_PTH = "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl"
-MODEL_DIR = os.path.join(BASE_PTH, "sl_weights/planning/100k_student_1157")
+MODEL_DIR = os.path.join(
+    BASE_PTH, "sl_weights/planning/100k_student_1157_16x_resnet"
+)
 os.makedirs(MODEL_DIR, exist_ok=True)
 TB_DIR = os.path.join(BASE_PTH, f"sl_tbs/sl_tb_{time.time()}")
 IMG_DIR = os.path.join(BASE_PTH, "sl_planning_1157_imgs")
@@ -51,32 +55,83 @@ class Encoder(nn.Module):
         self.hidden_size = hidden_size
         in_channels = 2
         cnn_out_dim = int((input_shape[0] // 16) * (input_shape[1] // 16))
-
-        self.encoder = nn.Sequential(
-            nn.MaxPool2d(2),
-            nn.Conv2d(in_channels, 32, 3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(128, 64, 3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 32, 3, stride=1, padding=1),
-            nn.ReLU(),
+        # resnet = models.resnet18(pretrained=True)
+        self.encoder = getattr(resnet, "resnet18")(2, 32, 32)
+        self.visual_fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(32 * cnn_out_dim, 512),
+            nn.Linear(16384, 512),
         )
+
+        # self.encoder = nn.Sequential(*list(resnet.children())[0:8])
+        # self.encoder = nn.Sequential(
+        #     nn.MaxPool2d(2),
+        #     nn.Conv2d(in_channels, 32, 3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(2),
+        #     nn.Conv2d(32, 64, 3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(2),
+        #     nn.Conv2d(64, 128, 3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(2),
+        #     nn.Conv2d(128, 64, 3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(64, 32, 3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear(32 * cnn_out_dim, 512),
+        # )
+        # self.localization = nn.Sequential(
+        #     nn.Conv2d(2, 8, kernel_size=7),
+        #     nn.MaxPool2d(2, stride=2),
+        #     nn.ReLU(True),
+        #     nn.Conv2d(8, 10, kernel_size=5),
+        #     nn.MaxPool2d(2, stride=2),
+        #     nn.ReLU(True),
+        # )
+        #
+        # # Regressor for the 3 * 2 affine matrix
+        # self.fc_loc = nn.Sequential(
+        #     nn.Linear(10 * 3 * 3, 32), nn.ReLU(True), nn.Linear(32, 3 * 2)
+        # )
+
         self.mlp = nn.Sequential(
             nn.ReLU(), nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 3)
         )
+        # self.attn = nn.Linear(self.hidden_size * 2, self.max_length)
+        # self.attn_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
+
+    # def stn(self, x):
+    #     xs = self.localization(x)
+    #     print("xs shape: ", xs.shape)
+    #     xs = xs.reshape(-1, 10 * 3 * 3)
+    #     print("xs shape 2: ", xs.shape)
+    #     theta = self.fc_loc(xs)
+    #     print("theta shape 1: ", xs.shape)
+    #     theta = theta.reshape(-1, 2, 3)
+    #     print("theta shape 2: ", theta.shape, x.size())
+    #     grid = F.affine_grid(theta, x.size())
+    #     x = F.grid_sample(x, grid)
+    #
+    #     return x
 
     def forward(self, x):
         x = x.permute(0, 3, 1, 2)
+
+        # attn_weights = F.softmax(
+        #     self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1
+        # )
+        # attn_applied = torch.bmm(
+        #     attn_weights.unsqueeze(0), encoder_outputs.unsqueeze(0)
+        # )
+        #
+        # output = torch.cat((embedded[0], attn_applied[0]), 1)
+        # output = self.attn_combine(output).unsqueeze(0)
+
+        # x = self.stn(x)
+
         pred_out = self.encoder(x)
+        pred_out = self.visual_fc(pred_out)
         pred_out = self.mlp(pred_out)
         return pred_out
 
@@ -97,7 +152,7 @@ class Planner:
             list(self.model.parameters()),
             lr=LR,
         )
-        self.batch_length = 8
+        self.batch_length = 32
 
         self.tb_dir = TB_DIR
         os.makedirs(self.tb_dir, exist_ok=True)
@@ -110,11 +165,10 @@ class Planner:
                 MAP_PTH,
                 GOAL_PTH,
                 WPT_PTH,
-                batch_size=self.batch_length
                 # EVAL_MAP_PTH,
                 # EVAL_GOAL_PTH,
                 # EVAL_WPT_PTH,
-                # batch_size=self.batch_length,
+                batch_size=self.batch_length,
             )
             print("loading val")
             self.val_dataloader = self.load_data(
@@ -192,7 +246,13 @@ class Planner:
         for e in range(self.n_epochs):
             for input_map, label_wpt_vec in self.train_dataloader:
                 pred_out = self.model(input_map.to(self.device))
-                loss = F.mse_loss(pred_out, label_wpt_vec.to(self.device))
+                loss_r = F.mse_loss(
+                    pred_out[:, 0], label_wpt_vec[:, 0].to(self.device)
+                )
+                loss_theta = F.mse_loss(
+                    pred_out[:, 1:], label_wpt_vec[:, 1:].to(self.device)
+                )
+                loss = loss_r + 16 * loss_theta
                 self.optimizer.zero_grad()
                 loss /= float(self.batch_length)
                 loss.backward()
