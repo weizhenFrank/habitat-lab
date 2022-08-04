@@ -13,15 +13,22 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
-    get_active_obs_transforms)
+    apply_obs_transforms_batch,
+    apply_obs_transforms_obs_space,
+    get_active_obs_transforms,
+)
 from habitat_baselines.config.default import get_config
-from habitat_baselines.rl.behavioral_cloning.agents import (BaselineStudent,
-                                                            MapStudent,
-                                                            WaypointStudent,
-                                                            WaypointTeacher)
-from habitat_baselines.utils.common import (action_to_velocity_control,
-                                            batch_obs)
+from habitat_baselines.rl.behavioral_cloning.agents import (
+    BaselineStudent,
+    MapPretrainedStudent,
+    MapStudent,
+    WaypointStudent,
+    WaypointTeacher,
+)
+from habitat_baselines.utils.common import (
+    action_to_velocity_control,
+    batch_obs,
+)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch.utils.tensorboard import SummaryWriter
 
@@ -48,15 +55,8 @@ class BehavioralCloning(BaseRLTrainer):
 
         self.device = torch.device("cuda", int(os.environ["SLURM_LOCALID"]))
         self.teacher = WaypointTeacher(self.config.RL)
-        use_baseline_student = config.get("USE_BASELINE_STUDENT", False)
+        self.student = MapPretrainedStudent(self.config)
 
-        if use_baseline_student:
-            self.student = BaselineStudent(self.config.RL)
-        else:
-            if self.config.USE_WAYPOINT_STUDENT:
-                self.student = WaypointStudent(self.config.RL)
-            else:
-                self.student = MapStudent(self.config)
         self.obs_transforms = get_active_obs_transforms(self.config)
         self.batch_length = self.config.BATCH_LENGTH
         self.batch_save_length = self.config.BATCHES_PER_CHECKPOINT
@@ -171,16 +171,7 @@ class BehavioralCloning(BaseRLTrainer):
                 in_not_done,
                 deterministic=False,
             )
-            if self.regress == "waypoint_rma":
-                ## make student map encoder feats same as waypoint encoder feats
-                assert (
-                    self.student.actor_critic.net.map_ce.shape
-                    == self.teacher.actor_critic.net.waypoint_ce.shape
-                )
-                loss = F.mse_loss(
-                    self.student.actor_critic.net.map_ce,
-                )
-            elif self.regress == "waypoint_rma_2":
+            if self.regress == "waypoint_rma_2":
                 ## make student map encoder output same as waypoint
 
                 teacher_label = torch.stack(
@@ -202,35 +193,13 @@ class BehavioralCloning(BaseRLTrainer):
                 )
             elif self.regress == "actions":
                 if self.loss == "mse":
-                    if self.clip_mse:
-                        loss = F.mse_loss(
-                            torch.clip(student_actions, min=-1, max=1),
-                            torch.clip(teacher_actions, min=-1, max=1),
-                        )
-                    else:
-                        loss = F.mse_loss(student_actions, teacher_actions)
+                    assert student_actions.shape == teacher_actions.shape
+
+                    loss = F.mse_loss(student_actions, teacher_actions)
                 elif self.loss == "log_prob":
                     loss = -self.student.actor_critic.distribution.log_prob(
                         teacher_actions
                     ).mean()
-            elif self.regress == "waypoint_rma_2_actions":
-                assert (
-                    self.student.actor_critic.net.map_ce.shape
-                    == batch["context_waypoint"].shape
-                )
-                loss = self.mse_weight * F.mse_loss(
-                    self.student.actor_critic.net.map_ce,
-                    batch["context_waypoint"],
-                )
-                # print("mse loss: ", loss)
-                is_loss = (
-                    self.is_weight
-                    * -self.student.actor_critic.distribution.log_prob(
-                        teacher_actions
-                    ).mean()
-                )
-                loss += is_loss
-                del is_loss
             action_loss += loss
             del loss
 
