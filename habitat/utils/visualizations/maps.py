@@ -12,6 +12,7 @@ import numpy as np
 import scipy.ndimage
 from habitat.core.utils import try_cv2_import
 from habitat.utils.visualizations import utils
+from skimage.draw import disk
 
 try:
     from habitat.sims.habitat_simulator.habitat_simulator import HabitatSim
@@ -504,15 +505,35 @@ def colorize_draw_local_map_and_fit_to_height(
     if local_map.ndim < 2:
         local_map = topdown_map_info["map"]
     elif local_map.ndim == 3:
-        local_map = local_map[:, :, 0]
+        _, _, c = local_map.shape
+        if c == 3:
+            tmp_map = local_map[:, :, 1]
+            tmp_map[local_map[:, :, 2] == 1] = 4
+            local_map = tmp_map
+        elif c == 2:
+            tmp_map = local_map[:, :, 0]
+            tmp_map[local_map[:, :, 1] == 1] = 4
+            local_map = tmp_map
+        else:
+            local_map = local_map[:, :, 0]
+
+    if "pred_wpt" in topdown_map_info:
+        wpt_map = local_map
+        x = topdown_map_info["pred_wpt"]["x"]
+        y = topdown_map_info["pred_wpt"]["y"]
+        rr, cc = disk((x, y), 5)
+        wpt_map[rr, cc] = 6
+        local_map = wpt_map
+
+    if "gt_wpt" in topdown_map_info:
+        wpt_map = local_map
+        x = topdown_map_info["gt_wpt"]["x"]
+        y = topdown_map_info["gt_wpt"]["y"]
+        rr, cc = disk((x, y), 5)
+        wpt_map[rr, cc] = 7
+        local_map = wpt_map
 
     top_down_map = colorize_topdown_map(local_map.astype(np.uint8))
-    top_down_map = draw_agent(
-        image=top_down_map,
-        agent_center_coord=topdown_map_info["agent_map_coord"],
-        agent_rotation=topdown_map_info["agent_angle"],
-        agent_radius_px=min(top_down_map.shape[0:2]) // 32,
-    )
 
     # scale top down map to align with rgb view
     old_h, old_w = top_down_map.shape[:2]
