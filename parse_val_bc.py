@@ -127,28 +127,35 @@ class Stats(object):
         stats["dist_stats"] = self.mean_confidence_interval(
             df_split.distance_to_goal
         )
+
         stats["success_stats"] = self.mean_confidence_interval(
             np.array(df_split.success)
         )
+
         stats["episode_distance_stats"] = self.mean_confidence_interval(
             np.array(df_split.episode_distance)
         )
+
         stats[
             "success_episode_distance_stats"
         ] = self.mean_confidence_interval(
             np.array(df_split[df_split.success == 1.0].episode_distance)
         )
+
         stats["fail_episode_distance_stats"] = self.mean_confidence_interval(
             np.array(df_split[df_split.success == 0.0].episode_distance)
         )
+
         try:
             stats["num_actions_stats"] = self.mean_confidence_interval(
                 np.array(df_split.steps)
             )
+
         except:
             stats["num_actions_stats"] = self.mean_confidence_interval(
                 np.array(df_split.steps0)
             )
+
         return stats
 
     """
@@ -162,11 +169,11 @@ class Stats(object):
         ckpt_num = checkpoint_limit
         agent_name = os.path.basename(agent_dir)
         csvs = []
-        ckpt_to_idx = lambda x: int(x.split("_")[-1][:-4])
+        ckpt_to_idx = lambda x: int(x.split("/")[-1].split("_")[0])
         for csv in sorted(
             glob.glob(os.path.join(agent_dir, "*csv")), key=ckpt_to_idx
         ):
-            ckpt_ind = int(os.path.basename(csv).split(".")[0][len("ckpt_") :])
+            ckpt_ind = int(os.path.basename(csv).split("_")[0])
             if ckpt != -1:
                 if ckpt_ind == ckpt:
                     csvs.append(csv)
@@ -201,7 +208,7 @@ class Stats(object):
         csv_nums = []
         invalid_csv_nums = []
         for csv in tqdm.tqdm(csvs):
-            ckpt_ind = int(os.path.basename(csv).split(".")[0][len("ckpt_") :])
+            ckpt_ind = int(os.path.basename(csv).split("_")[0])
             try:
                 stats = self.calculate_stats(csv, split=split)
                 print(
@@ -247,7 +254,7 @@ class Stats(object):
 
     def print_stats(self, csv, ty):
         all_stats = self.calculate_stats(csv, split="all")
-        best_ckpt_idx = csv.split("/")[-1].split("_")[-1][:-4]
+        best_ckpt_idx = csv.split("/")[-1].split("_")[0]
         ckpt_pth = os.path.abspath(
             csv.split("eval/")[0] + f"checkpoints/ckpt.{best_ckpt_idx}.pth"
         )
