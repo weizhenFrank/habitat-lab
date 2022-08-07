@@ -11,16 +11,21 @@ import numpy as np
 import torch
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (ContextMapSensor, ContextWaypointSensor,
-                                   IntegratedPointGoalGPSAndCompassSensor,
-                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
+from habitat.tasks.nav.nav import (
+    ContextMapSensor,
+    ContextWaypointSensor,
+    IntegratedPointGoalGPSAndCompassSensor,
+    IntegratedPointGoalNoisyGPSAndCompassSensor,
+)
 from habitat_baselines.common.baseline_registry import baseline_registry
+
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import \
-    build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import (
+    build_rnn_state_encoder,
+)
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from skimage.draw import disk
@@ -228,7 +233,7 @@ class PointNavContextPolicy(Policy):
 
 
 @baseline_registry.register_policy
-class PointNavContextVarPolicy(Policy):
+class PointNavContextGoalPolicy(Policy):
     def __init__(
         self,
         observation_space: spaces.Dict,
@@ -246,7 +251,7 @@ class PointNavContextVarPolicy(Policy):
         **kwargs,
     ):
         super().__init__(
-            PointNavContextVarNet(  # type: ignore
+            PointNavContextGoalNet(  # type: ignore
                 observation_space=observation_space,
                 hidden_size=hidden_size,
                 num_recurrent_layers=num_recurrent_layers,
@@ -521,6 +526,21 @@ class PointNavContextNet(PointNavBaselineNet):
                     nn.ReLU(),
                     nn.Linear(256, self.context_hidden_size),
                 )
+            elif "resnet" in self.cnn_type:
+                from habitat_baselines.rl.ddppo.policy import resnet
+
+                fc_out = 65536 if self.cnn_type == "resnet50" else 16384
+                self.map_cnn = getattr(resnet, self.cnn_type)(2, 32, 32)
+                self.visual_fc = nn.Sequential(
+                    nn.Flatten(),
+                    nn.Linear(fc_out, 512),
+                )
+                self.context_encoder = nn.Sequential(
+                    nn.ReLU(),
+                    nn.Linear(512, 256),
+                    nn.ReLU(),
+                    nn.Linear(256, self.context_hidden_size),
+                )
             elif self.cnn_type == "cnn_ans":
                 self.map_cnn = SimpleCNNContext(
                     observation_space, self.context_hidden_size, self.cnn_type
@@ -572,8 +592,6 @@ class PointNavContextNet(PointNavBaselineNet):
         x = []
         if not self.is_blind:
             ve = self.visual_encoder(observations)
-            if torch.isnan(ve).any():
-                print("VE ENCODER IS NAN")
             x.append(ve)
         if (
             IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations
@@ -604,21 +622,13 @@ class PointNavContextNet(PointNavBaselineNet):
                     -1,
                 )
             te = self.tgt_encoder(goal_observations)
-            if torch.isnan(te).any():
-                print("TGT ENCODER IS NAN")
             x.append(te)
         if (
             ContextWaypointSensor.cls_uuid in observations
             or ContextMapSensor.cls_uuid in observations
         ):
             if ContextWaypointSensor.cls_uuid in observations:
-                if torch.isnan(
-                    observations[ContextWaypointSensor.cls_uuid]
-                ).any():
-                    print("CONTEXT WAYPOINT IS NAN")
-            if ContextMapSensor.cls_uuid in observations:
-                if torch.isnan(observations[ContextMapSensor.cls_uuid]).any():
-                    print("CONTEXT MAP IS NAN")
+                self.gt_wpt = observations[ContextWaypointSensor.cls_uuid]
 
             if self.context_type == "waypoint":
                 self.waypoint_ce = ce = self.context_encoder(
@@ -642,11 +652,15 @@ class PointNavContextNet(PointNavBaselineNet):
                     map_ve = self.map_cnn(
                         observations[ContextMapSensor.cls_uuid]
                     )
-                    if torch.isnan(map_ve).any():
-                        print("MAP VE IS NAN")
                     self.map_ce = ce = self.context_encoder(map_ve)
-                    if torch.isnan(ce).any():
-                        print("context_encoder IS NAN")
+                elif "resnet" in self.cnn_type:
+                    map_ve = self.map_cnn(
+                        observations[ContextMapSensor.cls_uuid].permute(
+                            0, 3, 1, 2
+                        )
+                    )
+                    out = self.visual_fc(map_ve)
+                    self.map_ce = ce = self.context_encoder(out)
                 elif self.cnn_type == "cnn_ans":
                     map_ve = self.map_cnn(
                         observations[ContextMapSensor.cls_uuid]
@@ -662,11 +676,8 @@ class PointNavContextNet(PointNavBaselineNet):
                     # map_overlay = map_obs[0, :, :, 0].cpu().numpy()
                     # map_overlay[map_obs[0, :, :, 1].cpu().numpy() == 1.0] = 0.3
                     # pred_r = ce[:, 0]
-                    # pred_theta = torch.atan2(
-                    #     torch.sin(ce[:, 1]), torch.cos(ce[:, 1])
-                    # )
-                    # xx = (pred_r / 0.1) * torch.cos(pred_theta)
-                    # yy = (pred_r / 0.1) * torch.sin(pred_theta)
+                    # xx = (pred_r / 0.1) * ce[:, 2]
+                    # yy = (pred_r / 0.1) * ce[:, 1]
                     # print("xx: ", xx)
                     # row, col = np.clip(
                     #     int(128 - xx.cpu().numpy()), 5, 250
@@ -676,7 +687,7 @@ class PointNavContextNet(PointNavBaselineNet):
                     #
                     # gt_overlay = map_obs[0, :, :, 0].cpu().numpy()
                     # gt_overlay[map_obs[0, :, :, 1].cpu().numpy() == 1.0] = 0.3
-                    # if ContextMapSensor.cls_uuid in observations:
+                    # if ContextWaypointSensor.cls_uuid in observations:
                     #     r, theta = observations[
                     #         ContextWaypointSensor.cls_uuid
                     #     ][0]
@@ -713,43 +724,26 @@ class PointNavContextNet(PointNavBaselineNet):
                     #     "log ce: ",
                     #     torch.log(ce[:, 0]),
                     #     "sin ce: ",
-                    #     torch.sin(ce[:, 1]),
+                    #     ce[:, 1],
                     #     "cos ce: ",
-                    #     torch.cos(ce[:, 1]),
+                    #     ce[:, 2],
                     #     torch.atan2(torch.sin(ce[:, 1]), torch.cos(ce[:, 1])),
                     # )
                     # print(
                     #     "gt waypoint: ",
                     #     observations[ContextWaypointSensor.cls_uuid],
                     # )
-                    if torch.isnan(ce[:, 0]).any():
-                        print("CE[:, 0] IS NAN")
-                    if torch.isnan(torch.log(ce[:, 0])).any():
-                        print("LOG CE[:, 0] IS NAN")
-                    if torch.isnan(ce[:, 1]).any():
-                        print("CE[:, 1] IS NAN")
-                    if torch.isnan(torch.sin(ce[:, 1])).any():
-                        print("SIN CE[:, 1] IS NAN")
-                    if torch.isnan(torch.cos(ce[:, 1])).any():
-                        print("COS CE[:, 1] IS NAN")
-                    if torch.isnan(
-                        torch.atan2(torch.sin(ce[:, 1]), torch.cos(ce[:, 1]))
-                    ).any():
-                        print("ATAN CE[:, 1] IS NAN")
+                    self.pred_wpt = ce
                     wpt_ce = torch.stack(
                         [
                             torch.log(torch.clamp(ce[:, 0], min=1e-5)),
-                            torch.atan2(
-                                torch.sin(ce[:, 1]), torch.cos(ce[:, 1])
-                            ),
+                            torch.atan2(ce[:, 1], ce[:, 2]),
                         ],
                         -1,
                     )
-                    if torch.isnan(wpt_ce).any():
-                        print("WPT CE IS NAN")
                     ce = self.waypoint_encoder(wpt_ce)
-            if torch.isnan(ce).any():
-                print("CONTEXT IS NAN")
+                else:
+                    self.pred_wpt = map_ve
             x.append(ce)
         if self.use_prev_action:
             prev_actions = self.prev_action_embedding(prev_actions.float())
@@ -763,7 +757,7 @@ class PointNavContextNet(PointNavBaselineNet):
         return x_out, rnn_hidden_states
 
 
-class PointNavContextVarNet(PointNavBaselineNet):
+class PointNavContextGoalNet(PointNavBaselineNet):
     r"""Network which passes the input image through CNN and concatenates
     goal vector with CNN's output and passes that through RNN. + Map
     """
@@ -803,11 +797,6 @@ class PointNavContextVarNet(PointNavBaselineNet):
             self.tgt_encoder = nn.Linear(
                 self._n_input_goal + 1, self.tgt_embeding_size
             )
-        elif self.tgt_encoding == "linear_1":
-            self.tgt_encoder = nn.Sequential(
-                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
-                nn.ReLU(),
-            )
         elif self.tgt_encoding == "linear_2":
             self.tgt_encoder = nn.Sequential(
                 nn.Linear(self._n_input_goal, self.tgt_embeding_size),
@@ -815,48 +804,25 @@ class PointNavContextVarNet(PointNavBaselineNet):
                 nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
                 nn.ReLU(),
             )
-        if "context_waypoint" in observation_space.keys():
-            self.context_type = "waypoint"
-        else:
-            self.context_type = "map"
         self.context_hidden_size = context_hidden_size
-        if self.context_type == "map":
-            if self.cnn_type == "cnn_test_2":
-                self.map_cnn = SimpleCNNContext(
-                    observation_space, self.context_hidden_size, self.cnn_type
-                )
-                self.context_encoder = GaussianNet(
-                    1024,
-                    2,
-                    policy_config.ACTION_DIST,
-                )
-            else:
-                self.context_encoder = SimpleCNNContext(
-                    observation_space, self.context_hidden_size, self.cnn_type
-                )
-            if self.use_waypoint_encoder:
-                self.waypoint_encoder = nn.Sequential(
-                    nn.Linear(2, 512),
-                    nn.ReLU(),
-                    nn.Linear(512, 512),
-                    nn.ReLU(),
-                )
-        else:
-            self.context_encoder = nn.Sequential(
-                nn.Linear(2, self.tgt_embeding_size),
-                nn.ReLU(),
-                nn.Linear(self.tgt_embeding_size, self.context_hidden_size),
-                nn.ReLU(),
-            )
+        from habitat_baselines.rl.ddppo.policy import resnet
 
-        context_hidden_size = (
-            self.context_hidden_size if not self.use_waypoint_encoder else 512
+        self.map_cnn = getattr(resnet, "resnet18")(2, 32, 32)
+        self.visual_fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(16384, 512),
         )
+        self.context_encoder = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 3),
+        )
+
         self.state_encoder = build_rnn_state_encoder(
             self._hidden_size
             + prev_action_embedding_size
-            + self.tgt_embeding_size
-            + context_hidden_size,
+            + self.tgt_embeding_size,
             self._hidden_size,
             rnn_type=rnn_type,
             num_layers=num_recurrent_layers,
@@ -864,72 +830,77 @@ class PointNavContextVarNet(PointNavBaselineNet):
         print(
             f"##### USING CONTEXT, HIDDEN SIZE: {self.context_hidden_size}, RNN TYPE {rnn_type}, NUM LAYERS: {num_recurrent_layers} #####"
         )
+        self.debug = False
         self.train()
 
     def forward(self, observations, rnn_hidden_states, prev_actions, masks):
         x = []
-        torch.set_printoptions(profile="full")
-        if not self.is_blind:
-            ve = self.visual_encoder(observations)
-            x.append(ve)
-        if (
-            IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations
-            or IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
-            in observations
-        ):
-            if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-                goal_observations = observations[
-                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-                ]
-            elif (
-                IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
-                in observations
-            ):
-                goal_observations = observations[
-                    IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
-                ]
-            if (
-                self.tgt_encoding == "sin_cos"
-                and goal_observations.shape[1] == 2
-            ):
-                goal_observations = torch.stack(
-                    [
-                        goal_observations[:, 0],
-                        torch.cos(-goal_observations[:, 1]),
-                        torch.sin(-goal_observations[:, 1]),
-                    ],
-                    -1,
-                )
-            te = self.tgt_encoder(goal_observations)
-            x.append(te)
-        if (
-            ContextWaypointSensor.cls_uuid in observations
-            or ContextMapSensor.cls_uuid in observations
-        ):
-            if self.context_type == "waypoint":
-                self.waypoint_ce = ce = self.context_encoder(
-                    observations[ContextWaypointSensor.cls_uuid]
-                )
-            elif self.context_type == "map":
-                # print("map img: ", observations[ContextMapSensor.cls_uuid][0])
-                if self.cnn_type == "cnn_test_2":
-                    context = []
-                    map_ve = self.map_cnn(
-                        observations[ContextMapSensor.cls_uuid]
-                    )
-                    context.append(map_ve)
-                    context.append(te)
-                    context_out = torch.cat(context, dim=1)
-                    self.map_ce = ce_dist = self.context_encoder(context_out)
-                    ce = ce_dist.sample()
-                else:
-                    self.map_ce = ce = self.context_encoder(
-                        observations[ContextMapSensor.cls_uuid]
-                    )
+        ve = self.visual_encoder(observations)
+        x.append(ve)
 
-                if self.use_waypoint_encoder:
-                    ce = self.waypoint_encoder(ce)
-            x.append(ce)
+        map_ve = self.map_cnn(
+            observations[ContextMapSensor.cls_uuid].permute(0, 3, 1, 2)
+        )
+        out = self.visual_fc(map_ve)
+        ce = self.context_encoder(out)
+        # returns as r, sin_theta, cos_theta
+
+        self.pred_wpt = ce
+        if ContextWaypointSensor.cls_uuid in observations:
+            self.gt_wpt = observations[ContextWaypointSensor.cls_uuid]
+
+        if self.debug:
+            map_obs = observations[ContextMapSensor.cls_uuid]
+
+            map_overlay = map_obs[0, :, :, 0].cpu().numpy()
+            map_overlay[map_obs[0, :, :, 1].cpu().numpy() == 1.0] = 0.3
+            pred_r = ce[:, 0]
+            pred_theta = torch.atan2(ce[:, 1], ce[:, 2])
+            xx = (pred_r / 0.1) * torch.cos(pred_theta)
+            yy = (pred_r / 0.1) * torch.sin(pred_theta)
+            row, col = np.clip(int(128 - xx.cpu().numpy()), 5, 250), np.clip(
+                int(128 - yy.cpu().numpy()), 5, 250
+            )
+            rr, cc = disk((row, col), 5)
+            map_overlay[rr, cc] = 0.7
+
+            o = np.ones((256, 1)) * 255
+            cat_img = np.concatenate(
+                [
+                    map_obs[0, :, :, 0].cpu().numpy() * 255.0,
+                    o,
+                    map_obs[0, :, :, 1].cpu().numpy() * 255.0,
+                    o,
+                    map_overlay * 255.0,
+                ],
+                axis=1,
+            )
+            curr_time = time.time()
+            cv2.imwrite(
+                f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/cat_{curr_time}.png",
+                cat_img,
+            )
+
+        # prevent invalid values for log
+        if self.tgt_encoding == "sin_cos":
+            goal_observations = torch.stack(
+                [
+                    torch.log(torch.clamp(ce[:, 0], min=1e-5)),
+                    ce[:, 1],
+                    ce[:, 2],
+                ],
+                -1,
+            )
+        else:
+            goal_observations = torch.stack(
+                [
+                    torch.log(torch.clamp(ce[:, 0], min=1e-5)),
+                    torch.atan2(ce[:, 1], ce[:, 2]),
+                ],
+                -1,
+            )
+        te = self.tgt_encoder(goal_observations)
+        x.append(te)
         if self.use_prev_action:
             prev_actions = self.prev_action_embedding(prev_actions.float())
             x.append(prev_actions)

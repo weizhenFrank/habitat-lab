@@ -24,35 +24,25 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch,
-    apply_obs_transforms_obs_space,
-    get_active_obs_transforms,
-)
+    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
+    get_active_obs_transforms)
 from habitat_baselines.common.rollout_storage import RolloutStorage
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.rl.ddppo.algo import DDPPO
-from habitat_baselines.rl.ddppo.ddp_utils import (
-    EXIT,
-    add_signal_handlers,
-    get_distrib_size,
-    init_distrib_slurm,
-    is_slurm_batch_job,
-    load_resume_state,
-    rank0_only,
-    requeue_job,
-    save_resume_state,
-)
-from habitat_baselines.rl.ddppo.policy import (
-    PointNavResNetPolicy,
-)  # noqa: F401.
+from habitat_baselines.rl.ddppo.ddp_utils import (EXIT, add_signal_handlers,
+                                                  get_distrib_size,
+                                                  init_distrib_slurm,
+                                                  is_slurm_batch_job,
+                                                  load_resume_state,
+                                                  rank0_only, requeue_job,
+                                                  save_resume_state)
+from habitat_baselines.rl.ddppo.policy import \
+    PointNavResNetPolicy  # noqa: F401.
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.ppo.policy import Policy
-from habitat_baselines.utils.common import (
-    ObservationBatchingCache,
-    action_to_velocity_control,
-    batch_obs,
-    generate_video,
-)
+from habitat_baselines.utils.common import (ObservationBatchingCache,
+                                            action_to_velocity_control,
+                                            batch_obs, generate_video)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
@@ -206,6 +196,75 @@ class PPOTrainer(BaseRLTrainer):
                     if k.startswith(prefix)
                 }
             )
+        if self.config.RL.PPO.get("use_waypoint_encoder", False):
+            prefix = "actor_critic.net.context_encoder."
+            waypoint_pretrained_state = torch.load(
+                self.config.RL.DDPPO.teacher_pretrained_weights,
+                map_location="cpu",
+            )
+            self.actor_critic.net.waypoint_encoder.load_state_dict(
+                {
+                    k[len(prefix) :]: v
+                    for k, v in waypoint_pretrained_state["state_dict"].items()
+                    if k.startswith(prefix)
+                }
+            )
+
+        if self.config.RL.PPO.get("use_pretrained_planner", False):
+            pretrained_planner = torch.load(
+                self.config.RL.DDPPO.pretrained_planner,
+                map_location="cpu",
+            )
+            if (
+                self.config.RL.PPO.get("cnn_type", "cnn_ans_test_2")
+                == "resnet"
+            ):
+                print("LOADING RESNET HERE!")
+                prefix = "encoder."
+                self.actor_critic.net.map_cnn.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_planner.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                print("LOADING RESNET VISUAL FC HERE!")
+
+                prefix = "visual_fc."
+                self.actor_critic.net.visual_fc.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_planner.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                print("LOADING RESNET MLP HERE!")
+
+                prefix = "mlp."
+                self.actor_critic.net.context_encoder.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_planner.items()
+                        if k.startswith(prefix)
+                    }
+                )
+            else:
+                prefix = "encoder."
+                self.actor_critic.net.map_cnn.cnn.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_planner.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                prefix = "mlp."
+                self.actor_critic.net.context_encoder.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_planner.items()
+                        if k.startswith(prefix)
+                    }
+                )
 
         if not self.config.RL.DDPPO.train_encoder:
             self._static_encoder = True
@@ -1351,6 +1410,56 @@ class PPOTrainer(BaseRLTrainer):
                 # episode continues
                 elif len(self.config.VIDEO_OPTION) > 0:
                     # TODO move normalization / channel changing out of the policy and undo it here
+                    try:
+                        gt_r_theta = self.actor_critic.net.gt_wpt.cpu().numpy()
+                        gt_r = gt_r_theta[0, 0]
+                        gt_theta = gt_r_theta[0, 1]
+                        print(
+                            "gt_r: ",
+                            np.exp(gt_r),
+                            "gt_theta: ",
+                            np.rad2deg(gt_theta),
+                        )
+                        xx = (np.exp(gt_r) / 0.1) * np.cos(gt_theta)
+                        yy = (np.exp(gt_r) / 0.1) * np.sin(gt_theta)
+                        row, col = np.clip(int(128 - xx), 5, 250), np.clip(
+                            int(128 - yy), 5, 250
+                        )
+
+                        infos[0]["top_down_map"]["gt_wpt"] = {
+                            "x": row,
+                            "y": col,
+                        }
+                    except:
+                        print("gt wpt exception!")
+                        pass
+                    try:
+                        pred_r_theta = (
+                            self.actor_critic.net.pred_wpt.cpu().numpy()
+                        )
+                        pred_r = pred_r_theta[0, 0]
+                        sin_theta = pred_r_theta[0, 1]
+                        cos_theta = pred_r_theta[0, 2]
+                        xx = (pred_r / 0.1) * cos_theta
+                        yy = (pred_r / 0.1) * sin_theta
+                        print(
+                            "pred_r: ",
+                            pred_r,
+                            "pred_theta: ",
+                            np.rad2deg(np.arctan2(sin_theta, cos_theta)),
+                        )
+
+                        row, col = np.clip(int(128 - xx), 5, 250), np.clip(
+                            int(128 - yy), 5, 250
+                        )
+
+                        infos[0]["top_down_map"]["pred_wpt"] = {
+                            "x": row,
+                            "y": col,
+                        }
+                    except:
+                        print("pred wpt exception!")
+                        pass
                     frame = observations_to_image(
                         {k: v[i] for k, v in batch.items()}, infos[i]
                     )
