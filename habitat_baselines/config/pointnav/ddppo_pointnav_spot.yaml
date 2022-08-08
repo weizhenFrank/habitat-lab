@@ -21,6 +21,7 @@ NUM_CHECKPOINTS: 100
 # Force PyTorch to be single threaded as
 # this improves performance considerably
 FORCE_TORCH_SINGLE_THREADED: True
+EVAL_DETERMINISTIC: False
 
 RL:
   SUCCESS_REWARD: 10.0
@@ -73,8 +74,9 @@ RL:
     context_hidden_size: 512
     tgt_hidden_size: 512
     tgt_encoding: "linear_2"
-    context_encoding: "cnn"
     use_prev_action: False
+    cnn_type: "cnn_2d"
+    use_waypoint_encoder: False
 
     # Use double buffered sampling, typically helps
     # when environment time is similar or large than
@@ -87,19 +89,25 @@ RL:
     distrib_backend: NCCL
     # Visual encoder backbone
     pretrained_weights: data/ddppo-models/gibson-2plus-resnet50.pth
+    pretrained_map_encoder_weights: /coc/testnvme/jtruong33/google_nav/habitat-lab/sl/sl_weights/planning/planning_model_50k_resnet_4x.pth
+    teacher_pretrained_weights: /coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_-1.0_1.0_bp_0.03_sd_2_16env_context_no_noise_log_waypoint/checkpoints/ckpt.64.pth
     # Initialize with pretrained weights
     pretrained: False
     # Initialize just the visual encoder backbone with pretrained weights
     pretrained_encoder: False
+    # Initialize just the map encoder backbone with pretrained weights
+    pretrained_map_encoder: False
     # Whether or not the visual encoder backbone will be trained.
     train_encoder: True
+    # Whether or not the visual encoder backbone will be trained.
+    train_map_encoder: True
     # Whether or not to reset the critic linear layer
     reset_critic: True
 
     # Model parameters
     backbone: resnet18
-    rnn_type: LSTM
-    num_recurrent_layers: 2
+    rnn_type: GRU
+    num_recurrent_layers: 1
 
 EVAL:
     SPLIT: "val"
