@@ -180,6 +180,60 @@ class PPOTrainer(BaseRLTrainer):
                 self.config.RL.DDPPO.pretrained_weights, map_location="cpu"
             )
 
+        if self.config.RL.DDPPO.get("pretrained_map_encoder", False):
+            pretrained_map_encoder = torch.load(
+                self.config.RL.DDPPO.pretrained_map_encoder_weights,
+                map_location="cpu",
+            )
+            print(
+                "CNN TYPE: ",
+                self.config.RL.PPO.get("cnn_type", "cnn_ans_test_2"),
+            )
+            if "resnet" in self.config.RL.PPO.get(
+                "cnn_type", "cnn_ans_test_2"
+            ):
+                prefix = "encoder."
+                self.actor_critic.net.map_cnn.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_map_encoder.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                prefix = "visual_fc."
+                self.actor_critic.net.visual_fc.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_map_encoder.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                prefix = "mlp."
+                self.actor_critic.net.mlp.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_map_encoder.items()
+                        if k.startswith(prefix)
+                    }
+                )
+            else:
+                prefix = "encoder."
+                self.actor_critic.net.map_cnn.cnn.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_map_encoder.items()
+                        if k.startswith(prefix)
+                    }
+                )
+                prefix = "mlp."
+                self.actor_critic.net.context_encoder.load_state_dict(
+                    {
+                        k[len(prefix) :]: v
+                        for k, v in pretrained_map_encoder.items()
+                        if k.startswith(prefix)
+                    }
+                )
+
         if self.config.RL.DDPPO.pretrained:
             self.actor_critic.load_state_dict(
                 {
@@ -210,66 +264,25 @@ class PPOTrainer(BaseRLTrainer):
                 }
             )
 
-        if self.config.RL.PPO.get("use_pretrained_planner", False):
-            pretrained_planner = torch.load(
-                self.config.RL.DDPPO.pretrained_planner,
-                map_location="cpu",
-            )
-            if (
-                self.config.RL.PPO.get("cnn_type", "cnn_ans_test_2")
-                == "resnet"
-            ):
-                print("LOADING RESNET HERE!")
-                prefix = "encoder."
-                self.actor_critic.net.map_cnn.load_state_dict(
-                    {
-                        k[len(prefix) :]: v
-                        for k, v in pretrained_planner.items()
-                        if k.startswith(prefix)
-                    }
-                )
-                print("LOADING RESNET VISUAL FC HERE!")
-
-                prefix = "visual_fc."
-                self.actor_critic.net.visual_fc.load_state_dict(
-                    {
-                        k[len(prefix) :]: v
-                        for k, v in pretrained_planner.items()
-                        if k.startswith(prefix)
-                    }
-                )
-                print("LOADING RESNET MLP HERE!")
-
-                prefix = "mlp."
-                self.actor_critic.net.context_encoder.load_state_dict(
-                    {
-                        k[len(prefix) :]: v
-                        for k, v in pretrained_planner.items()
-                        if k.startswith(prefix)
-                    }
-                )
-            else:
-                prefix = "encoder."
-                self.actor_critic.net.map_cnn.cnn.load_state_dict(
-                    {
-                        k[len(prefix) :]: v
-                        for k, v in pretrained_planner.items()
-                        if k.startswith(prefix)
-                    }
-                )
-                prefix = "mlp."
-                self.actor_critic.net.context_encoder.load_state_dict(
-                    {
-                        k[len(prefix) :]: v
-                        for k, v in pretrained_planner.items()
-                        if k.startswith(prefix)
-                    }
-                )
-
         if not self.config.RL.DDPPO.train_encoder:
             self._static_encoder = True
             for param in self.actor_critic.net.visual_encoder.parameters():
                 param.requires_grad_(False)
+
+        if not self.config.RL.DDPPO.get("train_map_encoder", True):
+            if "resnet" in self.config.RL.PPO.get(
+                "cnn_type", "cnn_ans_test_2"
+            ):
+                for param in self.actor_critic.net.map_cnn.parameters():
+                    param.requires_grad_(False)
+                for param in self.actor_critic.net.visual_fc.parameters():
+                    param.requires_grad_(False)
+                if (
+                    self.config.RL.PPO.get("cnn_type", "cnn_ans_test_2")
+                    == "resnet18"
+                ):
+                    for param in self.actor_critic.net.mlp.parameters():
+                        param.requires_grad_(False)
 
         if self.config.RL.DDPPO.reset_critic:
             nn.init.orthogonal_(self.actor_critic.critic.fc.weight)
@@ -1412,6 +1425,8 @@ class PPOTrainer(BaseRLTrainer):
                     # TODO move normalization / channel changing out of the policy and undo it here
                     try:
                         gt_r_theta = self.actor_critic.net.gt_wpt.cpu().numpy()
+                        assert gt_r_theta.shape[1] == 2
+
                         gt_r = gt_r_theta[0, 0]
                         gt_theta = gt_r_theta[0, 1]
                         print(
@@ -1437,6 +1452,7 @@ class PPOTrainer(BaseRLTrainer):
                         pred_r_theta = (
                             self.actor_critic.net.pred_wpt.cpu().numpy()
                         )
+                        assert pred_r_theta.shape[1] == 3
                         pred_r = pred_r_theta[0, 0]
                         sin_theta = pred_r_theta[0, 1]
                         cos_theta = pred_r_theta[0, 2]

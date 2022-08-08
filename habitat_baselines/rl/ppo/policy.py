@@ -11,21 +11,16 @@ import numpy as np
 import torch
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    ContextMapSensor,
-    ContextWaypointSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    IntegratedPointGoalNoisyGPSAndCompassSensor,
-)
+from habitat.tasks.nav.nav import (ContextMapSensor, ContextWaypointSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
 from habitat_baselines.common.baseline_registry import baseline_registry
-
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import (
-    build_rnn_state_encoder,
-)
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from skimage.draw import disk
@@ -530,17 +525,34 @@ class PointNavContextNet(PointNavBaselineNet):
                 from habitat_baselines.rl.ddppo.policy import resnet
 
                 fc_out = 65536 if self.cnn_type == "resnet50" else 16384
-                self.map_cnn = getattr(resnet, self.cnn_type)(2, 32, 32)
+                if self.cnn_type == "resnet18_rl":
+                    self.map_cnn = getattr(resnet, "resnet18")(2, 32, 32)
+                else:
+                    self.map_cnn = getattr(resnet, self.cnn_type)(2, 32, 32)
                 self.visual_fc = nn.Sequential(
                     nn.Flatten(),
                     nn.Linear(fc_out, 512),
                 )
-                self.context_encoder = nn.Sequential(
-                    nn.ReLU(),
-                    nn.Linear(512, 256),
-                    nn.ReLU(),
-                    nn.Linear(256, self.context_hidden_size),
-                )
+                if self.cnn_type == "resnet18_rl":
+                    self.context_encoder = nn.Sequential(
+                        nn.ReLU(),
+                        nn.Linear(512, 256),
+                        nn.ReLU(),
+                        nn.Linear(256, self.context_hidden_size),
+                    )
+                else:
+                    self.mlp = nn.Sequential(
+                        nn.ReLU(),
+                        nn.Linear(512, 256),
+                        nn.ReLU(),
+                        nn.Linear(256, self.context_hidden_size),
+                    )
+                    self.context_encoder = nn.Sequential(
+                        nn.Linear(self.context_hidden_size, 512),
+                        nn.ReLU(),
+                        nn.Linear(512, 512),
+                        nn.ReLU(),
+                    )
             elif self.cnn_type == "cnn_ans":
                 self.map_cnn = SimpleCNNContext(
                     observation_space, self.context_hidden_size, self.cnn_type
@@ -660,7 +672,11 @@ class PointNavContextNet(PointNavBaselineNet):
                         )
                     )
                     out = self.visual_fc(map_ve)
-                    self.map_ce = ce = self.context_encoder(out)
+                    if self.cnn_type == "resnet18_rl":
+                        self.map_ce = ce = self.context_encoder(out)
+                    else:
+                        out = self.mlp(out)
+                        self.map_ce = ce = self.context_encoder(out)
                 elif self.cnn_type == "cnn_ans":
                     map_ve = self.map_cnn(
                         observations[ContextMapSensor.cls_uuid]
@@ -744,6 +760,8 @@ class PointNavContextNet(PointNavBaselineNet):
                     ce = self.waypoint_encoder(wpt_ce)
                 else:
                     self.pred_wpt = map_ve
+                if self.cnn_type == "resnet18":
+                    self.pred_wpt = out
             x.append(ce)
         if self.use_prev_action:
             prev_actions = self.prev_action_embedding(prev_actions.float())
@@ -794,9 +812,7 @@ class PointNavContextGoalNet(PointNavBaselineNet):
         self.tgt_embeding_size = tgt_hidden_size
         self.tgt_encoding = tgt_encoding
         if self.tgt_encoding == "sin_cos":
-            self.tgt_encoder = nn.Linear(
-                self._n_input_goal + 1, self.tgt_embeding_size
-            )
+            self.tgt_encoder = nn.Linear(self._n_input_goal + 1, 32)
         elif self.tgt_encoding == "linear_2":
             self.tgt_encoder = nn.Sequential(
                 nn.Linear(self._n_input_goal, self.tgt_embeding_size),
