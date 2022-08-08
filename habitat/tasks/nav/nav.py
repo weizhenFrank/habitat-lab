@@ -686,6 +686,7 @@ class ContextWaypointSensor(Sensor):
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
         self.thresh = getattr(config, "THRESHOLD", 1)
+        self.n_wpts = getattr(config, "N_WAYPOINTS", 1)
 
         super().__init__(sim=sim, config=config)
 
@@ -725,7 +726,6 @@ class ContextWaypointSensor(Sensor):
                 curr_pt = _shortest_path_points[0]
                 next_pt = _shortest_path_points[1]
                 rho = np.linalg.norm(next_pt - curr_pt)
-
                 # find waypoints within 1m of current position
                 if int(rho) > self.thresh:
                     xnew = np.linspace(
@@ -1070,9 +1070,11 @@ class ContextMapSensor(PointGoalSensor):
             # don't use log scale b/c we're adding it to the map
             r, theta = self._get_goal_vector(episode, use_log_scale=False)
 
-            x = (r / self.meters_per_pixel) * np.cos(theta)
-            y = (r / self.meters_per_pixel) * np.sin(theta)
+            r_limit = (self._map_resolution // 2) * self.meters_per_pixel
+            goal_r = np.clip(r, -r_limit, r_limit)
 
+            x = (goal_r / self.meters_per_pixel) * np.cos(theta)
+            y = (goal_r / self.meters_per_pixel) * np.sin(theta)
             mid = self._map_resolution // 2
             row, col = np.clip(
                 int(mid - x),
@@ -1083,6 +1085,7 @@ class ContextMapSensor(PointGoalSensor):
                 0 + self.disk_radius,
                 y_limit - (self.disk_radius + 1),
             )
+
             rr, cc = disk((row, col), self.disk_radius)
             local_top_down_map_filled[rr, cc, 1] = 1.0
         else:
