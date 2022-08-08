@@ -22,12 +22,14 @@ parser.add_argument("experiment_name")
 # Training
 parser.add_argument("-sd", "--seed", type=int, default=1)
 parser.add_argument("-ds", "--dataset", default="ny")
-parser.add_argument("-ne", "--num_environments", type=int, default=72)
+parser.add_argument("-ne", "--num_environments", type=int, default=64)
 parser.add_argument(
     "-tf", "--teacher-force", default=False, action="store_true"
 )
 parser.add_argument("-bl", "--batch-length", type=int, default=8)
 parser.add_argument("-sf", "--save-freq", type=int, default=100)
+parser.add_argument("-msew", "--mse-weight", type=float, default=1.0)
+parser.add_argument("-isw", "--is-weight", type=float, default=1.0)
 
 parser.add_argument(
     "-cw", "--context-waypoint", default=False, action="store_true"
@@ -35,12 +37,16 @@ parser.add_argument(
 parser.add_argument(
     "-dwpt", "--debug-waypoint", default=False, action="store_true"
 )
-parser.add_argument(
-    "-rma", "--waypoint-rma", default=False, action="store_true"
-)
+parser.add_argument("-r", "--regress", default="actions")
 parser.add_argument("-cm", "--context-map", default=False, action="store_true")
 parser.add_argument(
     "-crw", "--context-resnet-waypoint", default=False, action="store_true"
+)
+parser.add_argument(
+    "-wpte", "--use-waypoint-encoder", default=False, action="store_true"
+)
+parser.add_argument(
+    "-pp", "--use-pretrained-planner", default=False, action="store_true"
 )
 parser.add_argument(
     "-crm", "--context-resnet-map", default=False, action="store_true"
@@ -71,6 +77,7 @@ parser.add_argument(
     "-npg", "--noisy-pointgoal", default=False, action="store_true"
 )
 parser.add_argument("-cd", "--context-debug", default="")
+parser.add_argument("--freeze", default=False, action="store_true")
 parser.add_argument("-ft", "--finetune", default=False, action="store_true")
 parser.add_argument(
     "-wpts", "--use-waypoint-student", default=False, action="store_true"
@@ -209,6 +216,8 @@ if not args.eval:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_1157/content/mtv1157-1_lab.json.gz"
             elif args.dataset == "hm3d_mf":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor/{split}/{split}.json.gz"
+            elif args.dataset == "ny_val":
+                data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/val/val.json.gz"
             task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
     with open(new_task_yaml_path, "w") as f:
         f.write("\n".join(task_yaml_data))
@@ -274,13 +283,25 @@ if not args.eval:
                 exp_yaml_data[idx] = f"CLIP_MSE: True"
         elif i.startswith("LOSS:"):
             exp_yaml_data[idx] = f"LOSS: {args.loss}"
-        elif i.startswith("WAYPOINT_RMA:"):
-            if args.waypoint_rma:
-                exp_yaml_data[idx] = f"WAYPOINT_RMA: True"
+        elif i.startswith("REGRESS:"):
+            exp_yaml_data[idx] = f"REGRESS: {args.regress}"
+        elif i.startswith("FREEZE_POLICY:"):
+            if args.freeze:
+                exp_yaml_data[idx] = f"FREEZE_POLICY: True"
+        elif i.startswith("MSE_WEIGHT:"):
+            exp_yaml_data[idx] = f"MSE_WEIGHT: {args.mse_weight}"
+        elif i.startswith("IS_WEIGHT:"):
+            exp_yaml_data[idx] = f"IS_WEIGHT: {args.is_weight}"
         elif i.startswith("    num_cnns:"):
             exp_yaml_data[idx] = f"    num_cnns: {args.num_cnns}"
         elif i.startswith("    tgt_encoding:"):
             exp_yaml_data[idx] = f"    tgt_encoding: '{args.target_encoding}'"
+        elif i.startswith("    use_waypoint_encoder:"):
+            if args.use_waypoint_encoder:
+                exp_yaml_data[idx] = f"    use_waypoint_encoder: True"
+        elif i.startswith("    use_pretrained_planner:"):
+            if args.use_pretrained_planner:
+                exp_yaml_data[idx] = f"    use_pretrained_planner: True"
         elif i.startswith("    context_hidden_size:"):
             exp_yaml_data[
                 idx
@@ -435,8 +456,10 @@ else:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val/content/boulder4772-2_v3.json.gz"
             elif args.dataset == "google_val":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_all/val.json.gz"
-            elif args.dataset == "ny":
-                data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
+            elif args.dataset == "ny_val":
+                data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/val/val.json.gz"
+            elif args.dataset == "ny_mini":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson_ny/val_mini/val_mini.json.gz"
             elif args.dataset == "ny_train":
                 data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/train/train.json.gz"
             elif args.dataset == "ny_1":
@@ -551,6 +574,12 @@ else:
                 eval_exp_yaml_data[idx] = f"    use_prev_action: True"
         elif i.startswith("    cnn_type:"):
             eval_exp_yaml_data[idx] = f"    cnn_type: '{args.cnn_type}'"
+        elif i.startswith("    use_waypoint_encoder:"):
+            if args.use_waypoint_encoder:
+                eval_exp_yaml_data[idx] = f"    use_waypoint_encoder: True"
+        elif i.startswith("    use_pretrained_planner:"):
+            if args.use_pretrained_planner:
+                eval_exp_yaml_data[idx] = f"    use_pretrained_planner: True"
 
     if os.path.isdir(tb_dir):
         response = input(

@@ -47,6 +47,9 @@ parser.add_argument(
     "-cw", "--context-waypoint", default=False, action="store_true"
 )
 parser.add_argument(
+    "-wpte", "--use-waypoint-encoder", default=False, action="store_true"
+)
+parser.add_argument(
     "-crm", "--context-resnet-map", default=False, action="store_true"
 )
 parser.add_argument(
@@ -54,6 +57,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "-sc", "--second-channel", default=False, action="store_true"
+)
+parser.add_argument(
+    "-mc", "--multi-channel", default=False, action="store_true"
 )
 parser.add_argument("-csn", "--context-sensor-noise", type=float, default=0.0)
 parser.add_argument("-chs", "--context-hidden-size", type=int, default=512)
@@ -268,7 +274,13 @@ if not args.eval:
                 else "POINTGOAL_WITH_GPS_COMPASS_SENSOR"
             )
             task_yaml_data[idx] = f"  SENSORS: ['{pg}']"
-            if args.context_map or args.context_resnet_map:
+            if (args.context_map or args.context_resnet_map) and (
+                args.context_waypoint or args.context_resnet_waypoint
+            ):
+                task_yaml_data[
+                    idx
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
+            elif args.context_map or args.context_resnet_map:
                 task_yaml_data[
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
@@ -278,9 +290,6 @@ if not args.eval:
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             task_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
-        elif i.startswith("    LOG_POINTGOAL:"):
-            if args.log_pointgoal:
-                task_yaml_data[idx] = f"    LOG_POINTGOAL: True"
         elif i.startswith("    BIN_POINTGOAL:"):
             if args.target_encoding == "ans_bin":
                 task_yaml_data[idx] = f"    BIN_POINTGOAL: True"
@@ -298,6 +307,9 @@ if not args.eval:
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 task_yaml_data[idx] = f"    SECOND_CHANNEL: True"
+        elif i.startswith("    MULTI_CHANNEL:"):
+            if args.multi_channel:
+                task_yaml_data[idx] = f"    MULTI_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
             task_yaml_data[
                 idx
@@ -478,6 +490,9 @@ if not args.eval:
                 exp_yaml_data[idx] = "      use_log_std: True"
         elif i.startswith("    tgt_encoding:"):
             exp_yaml_data[idx] = f"    tgt_encoding: '{args.target_encoding}'"
+        elif i.startswith("    use_waypoint_encoder:"):
+            if args.use_waypoint_encoder:
+                exp_yaml_data[idx] = f"    use_waypoint_encoder: True"
         elif i.startswith("    context_hidden_size:"):
             exp_yaml_data[
                 idx
@@ -651,6 +666,9 @@ else:
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 eval_yaml_data[idx] = f"    SECOND_CHANNEL: True"
+        elif i.startswith("    MULTI_CHANNEL:"):
+            if args.multi_channel:
+                eval_yaml_data[idx] = f"    MULTI_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
             eval_yaml_data[
                 idx
@@ -666,7 +684,13 @@ else:
                 else "POINTGOAL_WITH_GPS_COMPASS_SENSOR"
             )
             eval_yaml_data[idx] = f"  SENSORS: ['{pg}']"
-            if args.context_map or args.context_resnet_map:
+            if (args.context_map or args.context_resnet_map) and (
+                args.context_waypoint or args.context_resnet_waypoint
+            ):
+                eval_yaml_data[
+                    idx
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
+            elif args.context_map or args.context_resnet_map:
                 eval_yaml_data[
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
@@ -676,9 +700,6 @@ else:
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             eval_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
-        elif i.startswith("    LOG_POINTGOAL:"):
-            if args.log_pointgoal:
-                eval_yaml_data[idx] = f"    LOG_POINTGOAL: True"
         elif i.startswith("    BIN_POINTGOAL:"):
             if args.target_encoding == "ans_bin":
                 eval_yaml_data[idx] = f"    BIN_POINTGOAL: True"
@@ -772,6 +793,8 @@ else:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_spot_ny_google/val/val.json.gz"
             elif args.dataset == "google_1157":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_1157/content/mtv1157-1_lab.json.gz"
+            elif args.dataset == "ny_mini":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson_ny/val_mini/val_mini.json.gz"
             eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
         elif i.startswith("      noise_multiplier:"):
             eval_yaml_data[
@@ -893,6 +916,9 @@ else:
             eval_exp_yaml_data[
                 idx
             ] = f"    tgt_encoding: '{args.target_encoding}'"
+        elif i.startswith("    use_waypoint_encoder:"):
+            if args.use_waypoint_encoder:
+                eval_exp_yaml_data[idx] = f"    use_waypoint_encoder: True"
         elif i.startswith("    num_cnns:"):
             if args.two_cnns:
                 eval_exp_yaml_data[idx] = "    num_cnns: 2"
