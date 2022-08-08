@@ -16,36 +16,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 BASE_PTH = "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl"
 MODEL_DIR = os.path.join(
-    BASE_PTH, "sl_weights/planning/100k_student_1157_16x_resnet"
+    BASE_PTH, "sl_weights/planning/100k_student_resnet18_4x_3m"
 )
 os.makedirs(MODEL_DIR, exist_ok=True)
 TB_DIR = os.path.join(BASE_PTH, f"sl_tbs/sl_tb_{time.time()}")
 IMG_DIR = os.path.join(BASE_PTH, "sl_planning_1157_imgs")
 
-MAP_PTH = os.path.join(BASE_PTH, "context_maps_100k_student.npy")
-GOAL_PTH = os.path.join(BASE_PTH, "context_goals_100k_student.npy")
-WPT_MAP_PTH = os.path.join(BASE_PTH, "context_waypoint_maps_100k_student.npy")
-WPT_PTH = os.path.join(BASE_PTH, "context_waypoints_100k_student.npy")
+MAP_PTH = os.path.join(BASE_PTH, "context_maps_100k_student_3m.npy")
+WPT_PTH = os.path.join(BASE_PTH, "context_waypoints_100k_student_3m.npy")
 
 # EVAL_MAP_PTH = os.path.join(BASE_PTH, "eval_context_maps_10k_rot.npy")
-# EVAL_GOAL_PTH = os.path.join(BASE_PTH, "eval_context_goals_10k_rot.npy")
-# EVAL_WPT_MAP_PTH = os.path.join(
-#     BASE_PTH, "eval_context_waypoint_maps_10k_rot.npy"
-# )
 # EVAL_WPT_PTH = os.path.join(BASE_PTH, "eval_context_waypoints_10k_rot.npy")
 
-EVAL_MAP_PTH = os.path.join(BASE_PTH, "data/1157_data/context_maps_1157.npy")
-EVAL_GOAL_PTH = os.path.join(BASE_PTH, "data/1157_data/context_goals_1157.npy")
-EVAL_WPT_MAP_PTH = os.path.join(
-    BASE_PTH, "data/1157_data/context_waypoint_maps_1157.npy"
-)
+EVAL_MAP_PTH = os.path.join(BASE_PTH, "eval_context_maps_1157_student_3m.npy")
 EVAL_WPT_PTH = os.path.join(
-    BASE_PTH, "data/1157_data/context_waypoints_1157.npy"
+    BASE_PTH, "eval_context_waypoints_1157_student_3m.npy"
 )
 
 TEST_MAP_PTH = os.path.join(BASE_PTH, "test_context_maps.npy")
-TEST_GOAL_PTH = os.path.join(BASE_PTH, "test_context_goals.npy")
-TEST_WPT_MAP_PTH = os.path.join(BASE_PTH, "test_context_waypoint_maps.npy")
 TEST_WPT_PTH = os.path.join(BASE_PTH, "test_context_waypoints.npy")
 
 
@@ -61,74 +49,12 @@ class Encoder(nn.Module):
             nn.Flatten(),
             nn.Linear(16384, 512),
         )
-
-        # self.encoder = nn.Sequential(*list(resnet.children())[0:8])
-        # self.encoder = nn.Sequential(
-        #     nn.MaxPool2d(2),
-        #     nn.Conv2d(in_channels, 32, 3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.MaxPool2d(2),
-        #     nn.Conv2d(32, 64, 3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.MaxPool2d(2),
-        #     nn.Conv2d(64, 128, 3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.MaxPool2d(2),
-        #     nn.Conv2d(128, 64, 3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.Conv2d(64, 32, 3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(32 * cnn_out_dim, 512),
-        # )
-        # self.localization = nn.Sequential(
-        #     nn.Conv2d(2, 8, kernel_size=7),
-        #     nn.MaxPool2d(2, stride=2),
-        #     nn.ReLU(True),
-        #     nn.Conv2d(8, 10, kernel_size=5),
-        #     nn.MaxPool2d(2, stride=2),
-        #     nn.ReLU(True),
-        # )
-        #
-        # # Regressor for the 3 * 2 affine matrix
-        # self.fc_loc = nn.Sequential(
-        #     nn.Linear(10 * 3 * 3, 32), nn.ReLU(True), nn.Linear(32, 3 * 2)
-        # )
-
         self.mlp = nn.Sequential(
             nn.ReLU(), nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 3)
         )
-        # self.attn = nn.Linear(self.hidden_size * 2, self.max_length)
-        # self.attn_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
-
-    # def stn(self, x):
-    #     xs = self.localization(x)
-    #     print("xs shape: ", xs.shape)
-    #     xs = xs.reshape(-1, 10 * 3 * 3)
-    #     print("xs shape 2: ", xs.shape)
-    #     theta = self.fc_loc(xs)
-    #     print("theta shape 1: ", xs.shape)
-    #     theta = theta.reshape(-1, 2, 3)
-    #     print("theta shape 2: ", theta.shape, x.size())
-    #     grid = F.affine_grid(theta, x.size())
-    #     x = F.grid_sample(x, grid)
-    #
-    #     return x
 
     def forward(self, x):
         x = x.permute(0, 3, 1, 2)
-
-        # attn_weights = F.softmax(
-        #     self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1
-        # )
-        # attn_applied = torch.bmm(
-        #     attn_weights.unsqueeze(0), encoder_outputs.unsqueeze(0)
-        # )
-        #
-        # output = torch.cat((embedded[0], attn_applied[0]), 1)
-        # output = self.attn_combine(output).unsqueeze(0)
-
-        # x = self.stn(x)
 
         pred_out = self.encoder(x)
         pred_out = self.visual_fc(pred_out)
@@ -163,27 +89,25 @@ class Planner:
         if mode != "test":
             self.train_dataloader = self.load_data(
                 MAP_PTH,
-                GOAL_PTH,
                 WPT_PTH,
                 # EVAL_MAP_PTH,
-                # EVAL_GOAL_PTH,
                 # EVAL_WPT_PTH,
                 batch_size=self.batch_length,
             )
             print("loading val")
             self.val_dataloader = self.load_data(
-                EVAL_MAP_PTH, EVAL_GOAL_PTH, EVAL_WPT_PTH, batch_size=1
+                EVAL_MAP_PTH, EVAL_WPT_PTH, batch_size=1
             )
             print("# train", len(self.train_dataloader))
             print("# val: ", len(self.val_dataloader))
 
-    def load_data(self, map_pth, goal_pth, wpt_pth, batch_size, shuffle=True):
-        input = self.setup_input(map_pth, goal_pth)
+    def load_data(self, map_pth, wpt_pth, batch_size, shuffle=True):
+        input = self.setup_input(map_pth)
         output = self.setup_output(wpt_pth)
         dataset = tuple(zip(input, output))
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
-    def setup_input(self, map_pth, goal_pth):
+    def setup_input(self, map_pth):
         return np.load(map_pth).astype(np.float32)
 
         # context_maps = np.load(map_pth).astype(np.float32)
@@ -211,6 +135,10 @@ class Planner:
 
     def setup_networks(self, input_shape):
         self.model = Encoder(input_shape, self.hidden_size).to(self.device)
+        print(
+            "# PARAMS: ",
+            sum(p.numel() for p in self.model.parameters() if p.requires_grad),
+        )
 
     def compute_r_theta(self, goal_coord):
         origin = np.array([self.input_shape[0] // 2, self.input_shape[0] // 2])
@@ -252,7 +180,7 @@ class Planner:
                 loss_theta = F.mse_loss(
                     pred_out[:, 1:], label_wpt_vec[:, 1:].to(self.device)
                 )
-                loss = loss_r + 16 * loss_theta
+                loss = loss_r + 4 * loss_theta
                 self.optimizer.zero_grad()
                 loss /= float(self.batch_length)
                 loss.backward()
@@ -294,13 +222,10 @@ class Planner:
         self.model.eval()
         self.batch_length = 1
         TEST_MAP_PTH = os.path.join(
-            BASE_PTH, "data/1157_data/context_maps_1157.npy"
-        )
-        TEST_GOAL_PTH = os.path.join(
-            BASE_PTH, "data/1157_data/context_goals_1157.npy"
+            BASE_PTH, "data/1157_data/context_maps_1157_student.npy"
         )
         TEST_WPT_PTH = os.path.join(
-            BASE_PTH, "data/1157_data/context_waypoints_1157.npy"
+            BASE_PTH, "data/1157_data/context_waypoints_1157_student.npy"
         )
         # TEST_MAP_PTH = os.path.join(BASE_PTH, "1157_data/context_maps.npy")
         # TEST_GOAL_PTH = os.path.join(BASE_PTH, "1157_data/context_goals.npy")
@@ -310,7 +235,6 @@ class Planner:
 
         self.test_dataloader = self.load_data(
             TEST_MAP_PTH,
-            TEST_GOAL_PTH,
             TEST_WPT_PTH,
             batch_size=1,
             shuffle=False,

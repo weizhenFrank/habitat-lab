@@ -13,15 +13,21 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
-    get_active_obs_transforms)
+    apply_obs_transforms_batch,
+    apply_obs_transforms_obs_space,
+    get_active_obs_transforms,
+)
 from habitat_baselines.config.default import get_config
-from habitat_baselines.rl.behavioral_cloning.agents import (BaselineStudent,
-                                                            MapStudent,
-                                                            WaypointStudent,
-                                                            WaypointTeacher)
-from habitat_baselines.utils.common import (action_to_velocity_control,
-                                            batch_obs)
+from habitat_baselines.rl.behavioral_cloning.agents import (
+    BaselineStudent,
+    MapStudent,
+    WaypointStudent,
+    WaypointTeacher,
+)
+from habitat_baselines.utils.common import (
+    action_to_velocity_control,
+    batch_obs,
+)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch.utils.tensorboard import SummaryWriter
 
@@ -35,11 +41,6 @@ class BehavioralCloning(BaseRLTrainer):
 
     def __init__(self, config=None):
         logger.info(f"env config: {config}")
-
-        # Faster loading
-        # config.defrost()
-        # config.TASK_CONFIG.DATASET.SPLIT = 'val'
-        # config.freeze()
 
         self.config = config
         random.seed(self.config.TASK_CONFIG.SEED)
@@ -60,7 +61,6 @@ class BehavioralCloning(BaseRLTrainer):
         self.obs_transforms = get_active_obs_transforms(self.config)
         self.batch_length = self.config.BATCH_LENGTH
         self.batch_save_length = self.config.BATCHES_PER_CHECKPOINT
-        self.clip_mse = config.get("CLIP_MSE", False)
         self.loss = config.get("LOSS", "log_prob")
         self.regress = config.get("REGRESS", "actions")
         self.debug_waypoint = config.get("DEBUG_WAYPOINT", False)
@@ -171,23 +171,14 @@ class BehavioralCloning(BaseRLTrainer):
                 in_not_done,
                 deterministic=False,
             )
-            if self.regress == "waypoint_rma":
-                ## make student map encoder feats same as waypoint encoder feats
-                assert (
-                    self.student.actor_critic.net.map_ce.shape
-                    == self.teacher.actor_critic.net.waypoint_ce.shape
-                )
-                loss = F.mse_loss(
-                    self.student.actor_critic.net.map_ce,
-                )
-            elif self.regress == "waypoint_rma_2":
+            if self.regress == "waypoint_rma_2":
                 ## make student map encoder output same as waypoint
 
                 teacher_label = torch.stack(
                     [
                         batch["context_waypoint"][:, 0],
-                        torch.cos(-batch["context_waypoint"][:, 1]),
-                        torch.sin(-batch["context_waypoint"][:, 1]),
+                        torch.sin(batch["context_waypoint"][:, 1]),
+                        torch.cos(batch["context_waypoint"][:, 1]),
                     ],
                     -1,
                 )
@@ -196,19 +187,25 @@ class BehavioralCloning(BaseRLTrainer):
                     == teacher_label.shape
                 )
 
-                loss = F.mse_loss(
-                    self.student.actor_critic.net.map_ce,
-                    teacher_label,
+                loss_r = F.mse_loss(
+                    self.student.actor_critic.net.map_ce[:, 0],
+                    teacher_label[:, 0],
                 )
+                loss_theta = F.mse_loss(
+                    self.student.actor_critic.net.map_ce[:, 1:],
+                    teacher_label[:, 1:],
+                )
+                loss = loss_r + 4 * loss_theta
+                del loss_r
+                del loss_theta
+                del teacher_label
+                # loss = F.mse_loss(
+                #     self.student.actor_critic.net.map_ce,
+                #     teacher_label,
+                # )
             elif self.regress == "actions":
                 if self.loss == "mse":
-                    if self.clip_mse:
-                        loss = F.mse_loss(
-                            torch.clip(student_actions, min=-1, max=1),
-                            torch.clip(teacher_actions, min=-1, max=1),
-                        )
-                    else:
-                        loss = F.mse_loss(student_actions, teacher_actions)
+                    loss = F.mse_loss(student_actions, teacher_actions)
                 elif self.loss == "log_prob":
                     loss = -self.student.actor_critic.distribution.log_prob(
                         teacher_actions

@@ -9,12 +9,18 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch, get_active_obs_transforms)
+    apply_obs_transforms_batch,
+    get_active_obs_transforms,
+)
 from habitat_baselines.config.default import get_config
-from habitat_baselines.rl.behavioral_cloning.agents import (MapStudent,
-                                                            WaypointTeacher)
-from habitat_baselines.utils.common import (action_to_velocity_control,
-                                            batch_obs)
+from habitat_baselines.rl.behavioral_cloning.agents import (
+    MapStudent,
+    WaypointTeacher,
+)
+from habitat_baselines.utils.common import (
+    action_to_velocity_control,
+    batch_obs,
+)
 from habitat_baselines.utils.env_utils import construct_envs
 from skimage.draw import disk
 
@@ -29,9 +35,11 @@ class DataCollector(BaseRLTrainer):
     def __init__(self, config=None, eval=False):
         logger.info(f"env config: {config}")
         self.eval = eval
-        config.defrost()
-        config.TASK_CONFIG.DATASET.DATA_PATH = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/val/val.json.gz"
-        config.freeze()
+        if self.eval:
+            config.defrost()
+            # config.TASK_CONFIG.DATASET.DATA_PATH = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/val_1157/val.json.gz"
+            config.TASK_CONFIG.DATASET.DATA_PATH = "/coc/testnvme/jtruong33/data/datasets/google/val_1157/content/mtv1157-1_lab.json.gz"
+            config.freeze()
 
         self.config = config
         random.seed(self.config.TASK_CONFIG.SEED)
@@ -79,9 +87,10 @@ class DataCollector(BaseRLTrainer):
         context_goals = []
         context_waypoint_maps = []
         # n_iter = 10000 if self.eval else 2000000
-        # n_iter = 1000000
-        n_iter = 100000
+        # n_iter = 200000
+        # n_iter = 100000
         # n_iter = 50000
+        n_iter = 1000
         print("N_ITER: ", n_iter)
         for iteration in range(1, n_iter):
             print(f"# iter: {iteration}, {n_iter}")
@@ -120,6 +129,7 @@ class DataCollector(BaseRLTrainer):
                     if k == "context_map":
                         context_maps.append(v)
                     elif k == "context_waypoint":
+                        # returns r, theta
                         mid = 128
                         mpp = 0.1
                         waypoint_map = np.zeros((256, 256))
@@ -163,23 +173,28 @@ class DataCollector(BaseRLTrainer):
         base_pth = "/coc/testnvme/jtruong33/google_nav/habitat-lab/sl/"
         prefix = "eval_" if self.eval else ""
         np.save(
-            os.path.join(base_pth, prefix + "context_maps_100k_student.npy"),
+            os.path.join(
+                base_pth, prefix + "context_maps_1157_student_3m.npy"
+            ),
             np.array(context_maps),
         )
         np.save(
             os.path.join(
-                base_pth, prefix + "context_waypoint_maps_100k_student.npy"
+                base_pth,
+                prefix + "context_waypoint_maps_1157_student_3m.npy",
             ),
             np.array(context_waypoint_maps),
         )
         np.save(
             os.path.join(
-                base_pth, prefix + "context_waypoints_100k_student.npy"
+                base_pth, prefix + "context_waypoints_1157_student_3m.npy"
             ),
             np.array(context_waypoints),
         )
         np.save(
-            os.path.join(base_pth, prefix + "context_goals_100k_student.npy"),
+            os.path.join(
+                base_pth, prefix + "context_goals_1157_student_3m.npy"
+            ),
             np.array(context_goals),
         )
         self.envs.close()
