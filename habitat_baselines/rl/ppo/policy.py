@@ -184,7 +184,6 @@ class PointNavBaselineNet(Net):
             self._hidden_size + self.tgt_embeding_size,
             self._hidden_size,
         )
-
         self.train()
 
     @property
