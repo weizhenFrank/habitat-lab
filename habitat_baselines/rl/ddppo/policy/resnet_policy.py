@@ -360,9 +360,10 @@ class ResNetEncoderContext(ResNetEncoder):
             make_backbone=make_backbone,
             normalize_visual_inputs=normalize_visual_inputs,
         )
+        self._n_input_map = 1
         if normalize_visual_inputs:
             self.running_mean_and_var: nn.Module = RunningMeanAndVar(
-                self._n_input_depth + self._n_input_rgb
+                self._n_input_map
             )
         else:
             self.running_mean_and_var = nn.Sequential()
@@ -787,10 +788,11 @@ class PointNavResNetContextNet(PointNavResNetNet):
                 nn.ReLU(),
             )
 
-        if observation_space["context_map"].shape == (2,):
-            self.context_type = "waypoint"
-        else:
+        if "context_map" in observation_space.keys():
             self.context_type = "map"
+        elif "context_waypoint" in observation_space.keys():
+            self.context_type = "waypoint"
+
         self.context_hidden_size = context_hidden_size
         if self.context_type == "map":
             if self.cnn_type == "cnn_ans":

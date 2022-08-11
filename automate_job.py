@@ -516,8 +516,6 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if args.context_resnet_map or args.context_resnet_waypoint:
                 exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
-            if args.policy_name == "context_map":
-                exp_yaml_data[idx] = "    name: PointNavContextMapPolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
                 exp_yaml_data[
@@ -829,8 +827,6 @@ else:
         elif i.startswith("    name:"):
             if args.policy_name == "cnn":
                 eval_exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
-            if args.policy_name == "context_map":
-                eval_exp_yaml_data[idx] = "    name: PointNavContextMapPolicy"
             if args.outdoor_nav:
                 eval_exp_yaml_data[idx] = "    name: OutdoorPolicy"
             if args.context_map or args.context_waypoint:
