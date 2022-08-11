@@ -13,7 +13,7 @@ EVAL_CKPT_PATH_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_r
 CHECKPOINT_FOLDER:  '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/bc/checkpoints'
 TXT_DIR:            '/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/bc/txts'
 TEST_EPISODE_COUNT: -1
-NUM_ENVIRONMENTS: 72
+NUM_ENVIRONMENTS: 48
 SENSORS: ['SPOT_LEFT_DEPTH_SENSOR', 'SPOT_RIGHT_DEPTH_SENSOR']
 NUM_UPDATES: -1
 LOG_INTERVAL: 10
@@ -22,19 +22,11 @@ NUM_CHECKPOINTS: 100
 # this improves performance considerably
 FORCE_TORCH_SINGLE_THREADED: True
 EVAL_DETERMINISTIC: False
-SL_LR: 2.5e-4
+SL_LR: 2.5e-5
 SL_WD: 0
 BATCH_LENGTH: 8
 BATCHES_PER_CHECKPOINT: 100
-USE_WAYPOINT_STUDENT: False
-USE_BASELINE_STUDENT: False
-DEBUG_WAYPOINT: False
-CLIP_MSE: False
-LOSS: 'log_prob'
-REGRESS: "actions"
-FREEZE_POLICY: False
-MSE_WEIGHT: 1.0
-IS_WEIGHT: 1.0
+FREEZE_POLICY: True
 
 RL:
   SUCCESS_REWARD: 10.0
@@ -85,11 +77,11 @@ RL:
     use_normalized_advantage: False
 
     hidden_size: 512
-    context_hidden_size: 512
+    context_hidden_size: 3
     tgt_hidden_size: 512
     tgt_encoding: "linear_2"
     use_prev_action: False
-    cnn_type: "cnn_2d"
+    cnn_type: "resnet18_rl"
     use_waypoint_encoder: False
     use_pretrained_planner: False
 
@@ -103,17 +95,17 @@ RL:
     # The PyTorch distributed backend to use
     distrib_backend: NCCL
     # Visual encoder backbone
-    teacher_pretrained_weights: /coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_-1.0_1.0_bp_0.03_sd_2_16env_context_no_noise_log_waypoint/checkpoints/ckpt.64.pth
-    pretrained_weights: /coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_-1.0_1.0_bp_0.03_sd_2_16env_context_no_noise_log_waypoint/checkpoints/ckpt.64.pth
-    pretrained_planner: /coc/testnvme/jtruong33/google_nav/habitat-lab/sl/sl_weights/planning/v1/planning_model_long.pth
+#    teacher_pretrained_weights: /coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_-1.0_1.0_bp_0.03_sd_2_16env_context_no_noise_log_waypoint/checkpoints/ckpt.64.pth
+    teacher_pretrained_weights: /coc/testnvme/jtruong33/google_nav/habitat-lab/sl/sl_weights/planning/combined/combined_weights_resnet_4x.pth
     # Initialize with pretrained weights
     pretrained: False
     # Initialize just the visual encoder backbone with pretrained weights
     pretrained_encoder: False
     # Whether or not the visual encoder backbone will be trained.
-    train_encoder: False
+    train_encoder: True
     # Whether or not to reset the critic linear layer
     reset_critic: True
+
 
     # Model parameters
     backbone: resnet18

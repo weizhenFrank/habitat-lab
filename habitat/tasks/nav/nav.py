@@ -22,35 +22,21 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (
-    EmbodiedTask,
-    Measure,
-    SimulatorTaskAction,
-)
+from habitat.core.embodied_task import (EmbodiedTask, Measure,
+                                        SimulatorTaskAction)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (
-    AgentState,
-    RGBSensor,
-    Sensor,
-    SensorTypes,
-    ShortestPathPoint,
-    Simulator,
-)
+from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
+                                    ShortestPathPoint, Simulator)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor,
-    HabitatSimRGBSensor,
-)
+    HabitatSimDepthSensor, HabitatSimRGBSensor)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (
-    Cutout,
-    euler_from_quaternion,
-    quaternion_from_coeff,
-    quaternion_rotate_vector,
-)
+from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
+                                          quaternion_from_coeff,
+                                          quaternion_rotate_vector)
 from habitat.utils.visualizations import fog_of_war, maps
 from skimage.draw import disk
 
@@ -64,10 +50,8 @@ except ImportError:
 
 import time
 
-from .robot_utils.raibert_controller import (
-    Raibert_controller_turn,
-    Raibert_controller_turn_stable,
-)
+from .robot_utils.raibert_controller import (Raibert_controller_turn,
+                                             Raibert_controller_turn_stable)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -711,8 +695,44 @@ class ContextWaypointSensor(Sensor):
             -direction_vector_agent[2], direction_vector_agent[0]
         )
         if self.log_pointgoal:
-            return np.array([np.log(rho), -phi], dtype=np.float32)
-        return np.array([rho, -phi], dtype=np.float32)
+            return np.array(
+                [np.log(rho), wrap_heading(-phi)], dtype=np.float32
+            )
+        return np.array([rho, wrap_heading(-phi)], dtype=np.float32)
+
+    def interp_pts(self, curr_pt, next_pt, thresh):
+        rho = np.linalg.norm(next_pt - curr_pt)
+        if int(rho) > thresh:
+            x_new = np.linspace(
+                curr_pt[0],
+                next_pt[0],
+                num=int(np.ceil(rho / thresh)),
+                endpoint=False,
+            )
+            x = [curr_pt[0], next_pt[0] + 1e-5]
+            y = [curr_pt[2], next_pt[2] + 1e-5]
+            f = interp1d(x, y)
+            y_new = f(x_new)
+
+            interp_pts = np.array(
+                [(x_new[i], curr_pt[1], y_new[i]) for i in range(len(y_new))]
+            )
+        else:
+            return np.array([curr_pt, next_pt])
+
+        return interp_pts
+
+    def get_n_wpts(self, shortest_path_points, n):
+        all_wpts = []
+        for i in range(len(shortest_path_points) - 1):
+            curr_pt = shortest_path_points[i]
+            next_pt = shortest_path_points[i + 1]
+            all_wpts.extend(self.interp_pts(curr_pt, next_pt, self.thresh))
+            if len(all_wpts) > n:
+                break
+        all_wpts = all_wpts[1:]
+        waypoints = all_wpts[:n] if n < len(all_wpts) else all_wpts
+        return waypoints
 
     def get_next_shortest_path_point(self, episode):
         agent_position = self._sim.get_agent_state().position
@@ -722,57 +742,35 @@ class ContextWaypointSensor(Sensor):
                     agent_position, goal.position
                 )
             )
-            if len(_shortest_path_points) > 0:
-                curr_pt = _shortest_path_points[0]
-                next_pt = _shortest_path_points[1]
-                rho = np.linalg.norm(next_pt - curr_pt)
-                # find waypoints within 1m of current position
-                if int(rho) > self.thresh:
-                    xnew = np.linspace(
-                        curr_pt[0],
-                        next_pt[0],
-                        num=int(np.ceil(rho / self.thresh)),
-                        endpoint=False,
-                    )
-                    x = [curr_pt[0], next_pt[0] + 1e-5]
-                    y = [curr_pt[2], next_pt[2] + 1e-5]
-                    f = interp1d(x, y)
-                    interp_pts = f(xnew)
-                    next_shortest_path_point = np.array(
-                        [xnew[1], curr_pt[1], interp_pts[1]]
-                    )
-                else:
-                    next_shortest_path_point = next_pt
-            else:
-                next_shortest_path_point = goal.position
-            grid_coords = maps.to_grid(
-                next_shortest_path_point[2],
-                next_shortest_path_point[0],
-                (self._map_resolution, self._map_resolution),
-                sim=self._sim,
-            )
-
+            waypoints = self.get_n_wpts(_shortest_path_points, self.n_wpts)
+            goal_vectors = []
             agent_state = self._sim.get_agent_state()
             agent_position = agent_state.position
             rotation_world_agent = agent_state.rotation
-            goal_position = next_shortest_path_point
-
-            goal_vector = self._compute_pointgoal(
-                agent_position, rotation_world_agent, goal_position
-            )
-        return goal_vector, grid_coords
+            for waypoint in waypoints:
+                goal_vector = self._compute_pointgoal(
+                    agent_position, rotation_world_agent, waypoint
+                )
+                goal_vectors.append(goal_vector)
+        return np.array(goal_vectors)
         # return goal_vector
 
     def get_observation(
         self, observations, episode, task, *args: Any, **kwargs: Any
     ):
-        waypoint_vector, waypoint_coord = self.get_next_shortest_path_point(
-            episode
-        )
-        if np.isnan(waypoint_vector).any():
-            waypoint_vector, waypoint_coord = np.zeros_like(waypoint_vector)
+        try:
+            waypoint_vectors = self.get_next_shortest_path_point(episode)
+        except:
+            waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
             task.is_stop_called = True
-        return waypoint_vector
+        if len(waypoint_vectors.flatten()) < 2:
+            print("waypoint_vectors: ", waypoint_vectors)
+            waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
+            task.is_stop_called = True
+        if np.isnan(waypoint_vectors).any():
+            waypoint_vectors = np.zeros_like(waypoint_vectors)
+            task.is_stop_called = True
+        return waypoint_vectors.flatten()
 
 
 @registry.register_sensor

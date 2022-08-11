@@ -61,7 +61,9 @@ def load_pretrained_weights(actor_critic, cfg, load_context_encoder=False):
     )
 
     if load_context_encoder:
-        prefix = "actor_critic.net.context_encoder."
+        # key = "context_encoder."
+        key = "waypoint_encoder."
+        prefix = "actor_critic.net." + key
         actor_critic.net.waypoint_encoder.load_state_dict(
             {
                 k[len(prefix) :]: v
@@ -186,7 +188,6 @@ class MapStudent:
         )
 
         self.actor_critic.to(self.device)
-
         if config.RL.DDPPO.pretrained:
             pretrained_state = torch.load(
                 config.RL.DDPPO.pretrained_weights, map_location="cpu"

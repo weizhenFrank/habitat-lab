@@ -14,6 +14,5 @@
 
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
-srun $CONDA_ENV -u -m habitat_baselines.run \
-     --exp-config $CONFIG_YAML \
-     --run-type train
+srun $CONDA_ENV -u -m habitat_baselines.rl.behavioral_cloning.bc_planner \
+     --exp-config $CONFIG_YAML

@@ -13,19 +13,13 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch,
-    apply_obs_transforms_obs_space,
-    get_active_obs_transforms,
-)
+    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
+    get_active_obs_transforms)
 from habitat_baselines.config.default import get_config
-from habitat_baselines.rl.behavioral_cloning.agents import (
-    BaselineStudent,
-    MapStudent,
-)
-from habitat_baselines.utils.common import (
-    action_to_velocity_control,
-    batch_obs,
-)
+from habitat_baselines.rl.behavioral_cloning.agents import (BaselineStudent,
+                                                            MapStudent)
+from habitat_baselines.utils.common import (action_to_velocity_control,
+                                            batch_obs)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch.utils.tensorboard import SummaryWriter
 
@@ -52,6 +46,7 @@ class BehavioralCloningPlanner(BaseRLTrainer):
         self.batch_save_length = self.config.BATCHES_PER_CHECKPOINT
 
         self.tb_dir = self.config.TENSORBOARD_DIR
+        self.mse_weight = torch.tensor([1 / 9, 4 / 9, 4 / 9]).to(self.device)
 
     def copy_batch(self, batch):
         batch_copy = defaultdict(list)
@@ -59,12 +54,15 @@ class BehavioralCloningPlanner(BaseRLTrainer):
             batch_copy[sensor] = batch[sensor].detach().clone()
         return batch_copy
 
+    def weighted_mse_loss(self, pred, target, weight):
+        return (weight * (pred - target) ** 2).mean()
+
     def train(self):
         self.envs = construct_envs(config, get_env_class(config.ENV_NAME))
         observations = self.envs.reset()
 
         batch = batch_obs(observations, device=self.device)
-        batch = apply_obs_transforms_batch(batch, self.obs_transforms)
+        # batch = apply_obs_transforms_batch(batch, self.obs_transforms)
 
         # Student tensors
         num_actions = 2
@@ -112,20 +110,20 @@ class BehavioralCloningPlanner(BaseRLTrainer):
             writer = SummaryWriter(self.tb_dir)
         else:
             writer = None
-        for iteration in range(1, 1000000):
-            (
-                _,
-                student_actions,
-                _,
-                student_hidden_states,
-            ) = self.student.actor_critic.act(
-                self.copy_batch(batch),
-                student_hidden_states.detach().clone(),
-                student_prev_actions.detach().clone(),
-                not_done_masks.detach().clone(),
-                deterministic=False,
-            )
-            print("student_actions: ", student_actions)
+        for iteration in range(1, 100000000000):
+            with torch.no_grad():
+                (
+                    _,
+                    student_actions,
+                    _,
+                    student_hidden_states,
+                ) = self.student.actor_critic.act(
+                    self.copy_batch(batch),
+                    student_hidden_states.detach().clone(),
+                    student_prev_actions.detach().clone(),
+                    not_done_masks.detach().clone(),
+                    deterministic=False,
+                )
 
             batch["context_waypoint"] = torch.squeeze(
                 batch["context_waypoint"], dim=1
@@ -133,50 +131,26 @@ class BehavioralCloningPlanner(BaseRLTrainer):
 
             teacher_label = torch.stack(
                 [
-                    batch["context_waypoint"][:, 0],
+                    torch.exp(batch["context_waypoint"][:, 0]),
+                    # batch["context_waypoint"][:, 0],
                     torch.sin(batch["context_waypoint"][:, 1]),
                     torch.cos(batch["context_waypoint"][:, 1]),
                 ],
                 -1,
             )
 
-            assert (
-                self.student.actor_critic.net.map_ce.shape
-                == teacher_label.shape
-            )
+            map_ce = self.student.actor_critic.net.get_features(batch)
+            assert map_ce.shape == teacher_label.shape
 
-            # print("student: ", self.student.actor_critic.net.map_ce)
-            # print("teacher: ", teacher_label)
-            print("mapce1 : ", self.student.actor_critic.net.map_ce)
-            # teacher_label = torch.zeros_like(student_actions)
+            action_loss += self.weighted_mse_loss(
+                map_ce, teacher_label, self.mse_weight
+            )
             # action_loss += F.mse_loss(
-            #     student_actions,
-            #     teacher_label,
-            # )
-            action_loss += F.mse_loss(
-                self.student.actor_critic.net.map_ce[:, 0],
-                # teacher_label[:, 0],
-                torch.zeros_like(self.student.actor_critic.net.map_ce[:, 0]),
-            )
-            # loss_theta = F.mse_loss(
-            #     self.a[:, 1:],
-            #     teacher_label[:, 1:],
-            # )
+            #     map_ce[:, 0], teacher_label[:, 0]
+            # ) + 10 * (F.mse_loss(map_ce[:, 1:], teacher_label[:, 1:]))
 
-            # loss_r = F.mse_loss(
-            #     self.student.actor_critic.net.map_ce[:, 0],
-            #     teacher_label[:, 0],
-            # )
-            #
-            # loss_theta = F.mse_loss(
-            #     self.student.actor_critic.net.map_ce[:, 1:],
-            #     teacher_label[:, 1:],
-            # )
-
+            # action_loss += F.mse_loss(map_ce, teacher_label)
             del teacher_label
-            # action_loss += loss_r + 4 * loss_theta
-            # del loss_r
-            # del loss_theta
 
             if iteration % self.batch_length == 0:
                 self.optimizer.zero_grad()
@@ -245,14 +219,13 @@ class BehavioralCloningPlanner(BaseRLTrainer):
                 list(x) for x in zip(*outputs)
             ]
             del outputs
-            del batch
             for idx, done in enumerate(dones):
                 if done:
                     spl_deq.append(infos[idx]["spl"])
                     succ_deq.append(infos[idx]["success"])
 
             batch = batch_obs(observations, device=self.device)
-            batch = apply_obs_transforms_batch(batch, self.obs_transforms)
+            # batch = apply_obs_transforms_batch(batch, self.obs_transforms)
             not_done_masks = torch.tensor(
                 [[not done] for done in dones],
                 dtype=torch.bool,

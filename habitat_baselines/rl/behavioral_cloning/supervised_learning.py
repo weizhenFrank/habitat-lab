@@ -13,15 +13,21 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
-    get_active_obs_transforms)
+    apply_obs_transforms_batch,
+    apply_obs_transforms_obs_space,
+    get_active_obs_transforms,
+)
 from habitat_baselines.config.default import get_config
-from habitat_baselines.rl.behavioral_cloning.agents import (BaselineStudent,
-                                                            MapStudent,
-                                                            WaypointStudent,
-                                                            WaypointTeacher)
-from habitat_baselines.utils.common import (action_to_velocity_control,
-                                            batch_obs)
+from habitat_baselines.rl.behavioral_cloning.agents import (
+    BaselineStudent,
+    MapStudent,
+    WaypointStudent,
+    WaypointTeacher,
+)
+from habitat_baselines.utils.common import (
+    action_to_velocity_control,
+    batch_obs,
+)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch.utils.tensorboard import SummaryWriter
 
@@ -35,6 +41,11 @@ class BehavioralCloning(BaseRLTrainer):
 
     def __init__(self, config=None):
         logger.info(f"env config: {config}")
+
+        # Faster loading
+        # config.defrost()
+        # config.TASK_CONFIG.DATASET.SPLIT = 'val'
+        # config.freeze()
 
         self.config = config
         random.seed(self.config.TASK_CONFIG.SEED)
@@ -52,66 +63,21 @@ class BehavioralCloning(BaseRLTrainer):
                 self.student = WaypointStudent(self.config.RL)
             else:
                 self.student = MapStudent(self.config)
-        self.obs_transforms = get_active_obs_transforms(self.config)
+
         self.batch_length = self.config.BATCH_LENGTH
-        self.batch_save_length = self.config.BATCHES_PER_CHECKPOINT
-        self.loss = config.get("LOSS", "log_prob")
-        self.regress = config.get("REGRESS", "actions")
-        self.debug_waypoint = config.get("DEBUG_WAYPOINT", False)
-
-        self.mse_weight = config.get("MSE_WEIGHT", 1)
-        self.is_weight = config.get("IS_WEIGHT", 1)
-
         self.tb_dir = self.config.TENSORBOARD_DIR
         print("USING LOSS: ", self.loss)
 
+    def sample_rand(
+        self,
+        min,
+        max,
+    ):
+        return (max - min) * torch.rand((self.batch_length, 1)) + min
+
     def train(self):
-        self.envs = construct_envs(config, get_env_class(config.ENV_NAME))
-        observations = self.envs.reset()
-
-        batch = batch_obs(observations, device=self.device)
-        # batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
-        # Teacher tensors
-        teacher_hidden_states = torch.zeros(
-            self.config.NUM_ENVIRONMENTS,
-            self.teacher.actor_critic.net.num_recurrent_layers,
-            self.config.RL.PPO.hidden_size,
-            device=self.device,
-        )
-        num_actions = 2
-        teacher_prev_actions = torch.zeros(
-            self.config.NUM_ENVIRONMENTS,
-            num_actions,
-            device=self.device,
-            dtype=torch.float,
-        )
-        # Student tensors
-        student_hidden_states = torch.zeros(
-            self.config.NUM_ENVIRONMENTS,
-            self.student.actor_critic.net.num_recurrent_layers,
-            self.config.RL.PPO.hidden_size,
-            device=self.device,
-        )
-        student_prev_actions = torch.zeros(
-            self.config.NUM_ENVIRONMENTS,
-            num_actions,
-            device=self.device,
-            dtype=torch.float,
-        )
-
-        not_done_masks = torch.zeros(
-            self.config.NUM_ENVIRONMENTS,
-            1,
-            dtype=torch.bool,
-            device=self.device,
-        )
-
         self.teacher.actor_critic.eval()
 
-        for n, p in self.student.actor_critic.named_parameters():
-            if p.requires_grad:
-                print("requires grad: ", n)
         self.optimizer = optim.Adam(
             list(
                 filter(
@@ -133,10 +99,31 @@ class BehavioralCloning(BaseRLTrainer):
             writer = SummaryWriter(self.tb_dir)
         else:
             writer = None
-        for iteration in range(1, 100000000000):
+
+        for iteration in range(1, 1500000):
+            r = self.sample_rand(
+                -1,
+                1,
+            )
+            t = self.sample_rand(
+                -np.pi,
+                np.pi,
+            )
+            wpt_vec = torch.cat((r, t), axis=1, device=self.device)
+            teacher_outs = self.teacher.context_encoder(wpt_vec)
+            teacher_outs = self.student.context_encoder(wpt_vec)
+
+            not_done_masks = torch.zeros(
+                self.config.NUM_ENVIRONMENTS,
+                1,
+                dtype=torch.bool,
+                device=self.device,
+            )
+
             in_hidden = student_hidden_states.detach().clone()
             in_prev_actions = student_prev_actions.detach().clone()
             in_not_done = not_done_masks.clone()
+
             with torch.no_grad():
                 (
                     _,
@@ -152,7 +139,6 @@ class BehavioralCloning(BaseRLTrainer):
                 )
             if self.debug_waypoint:
                 batch["context_waypoint"] *= 0
-
             (
                 _,
                 student_actions,
@@ -165,65 +151,45 @@ class BehavioralCloning(BaseRLTrainer):
                 in_not_done,
                 deterministic=False,
             )
-            if self.regress == "waypoint_rma_2":
-                ## make student map encoder output same as waypoint
-
-                teacher_label = torch.stack(
-                    [
-                        batch["context_waypoint"][:, 0],
-                        torch.sin(batch["context_waypoint"][:, 1]),
-                        torch.cos(batch["context_waypoint"][:, 1]),
-                    ],
-                    -1,
-                )
+            if self.regress == "waypoint_rma":
+                ## make student map encoder feats same as waypoint encoder feats
                 assert (
                     self.student.actor_critic.net.map_ce.shape
-                    == teacher_label.shape
+                    == self.teacher.actor_critic.net.waypoint_ce.shape
                 )
-
-                loss_r = F.mse_loss(
-                    self.student.actor_critic.net.map_ce[:, 0],
-                    teacher_label[:, 0],
+                loss = F.mse_loss(
+                    self.student.actor_critic.net.map_ce,
+                    self.teacher.actor_critic.net.waypoint_ce,
                 )
-                loss_theta = F.mse_loss(
-                    self.student.actor_critic.net.map_ce[:, 1:],
-                    teacher_label[:, 1:],
-                )
-                loss = loss_r + 4 * loss_theta
-                del loss_r
-                del loss_theta
-                del teacher_label
-                # loss = F.mse_loss(
-                #     self.student.actor_critic.net.map_ce,
-                #     teacher_label,
-                # )
+            elif self.regress == "waypoint_rma_2":
+                ## make student map encoder output same as waypoint
+                if self.loss == "mse":
+                    assert (
+                        self.student.actor_critic.net.map_ce.shape
+                        == batch["context_waypoint"].shape
+                    )
+                    loss = F.mse_loss(
+                        self.student.actor_critic.net.map_ce,
+                        batch["context_waypoint"],
+                    )
+                elif self.loss == "log_prob":
+                    loss = -self.student.actor_critic.net.map_ce.log_prob(
+                        batch["context_waypoint"]
+                    ).mean()
             elif self.regress == "actions":
                 if self.loss == "mse":
-                    loss = F.mse_loss(student_actions, teacher_actions)
+                    if self.clip_mse:
+                        loss = F.mse_loss(
+                            torch.clip(student_actions, min=-1, max=1),
+                            torch.clip(teacher_actions, min=-1, max=1),
+                        )
+                    else:
+                        loss = F.mse_loss(student_actions, teacher_actions)
                 elif self.loss == "log_prob":
                     loss = -self.student.actor_critic.distribution.log_prob(
                         teacher_actions
                     ).mean()
-            elif self.regress == "waypoint_rma_2_actions":
-                assert (
-                    self.student.actor_critic.net.map_ce.shape
-                    == batch["context_waypoint"].shape
-                )
-                loss = self.mse_weight * F.mse_loss(
-                    self.student.actor_critic.net.map_ce,
-                    batch["context_waypoint"],
-                )
-                # print("mse loss: ", loss)
-                is_loss = (
-                    self.is_weight
-                    * -self.student.actor_critic.distribution.log_prob(
-                        teacher_actions
-                    ).mean()
-                )
-                loss += is_loss
-                del is_loss
             action_loss += loss
-            del loss
 
             if iteration % self.batch_length == 0:
                 self.optimizer.zero_grad()
@@ -231,7 +197,6 @@ class BehavioralCloning(BaseRLTrainer):
                 action_loss.backward()
                 self.optimizer.step()
                 batch_num += 1
-
                 print(
                     f"#{batch_num}"
                     f"  action_loss: {action_loss.item():.4f}"
@@ -270,6 +235,7 @@ class BehavioralCloning(BaseRLTrainer):
                     writer.add_scalars("metrics", metrics_data, batch_num)
                     writer.add_scalars("loss", loss_data, batch_num)
                 action_loss = 0
+
             # Step environment
             # teacher_thresh = 1.0 - float(batch_num) / float(LAST_TEACHER_BATCH)
             # teacher_drives = np.random.rand() < teacher_thresh
@@ -296,17 +262,15 @@ class BehavioralCloning(BaseRLTrainer):
                     spl_deq.append(infos[idx]["spl"])
                     succ_deq.append(infos[idx]["success"])
 
-            if "rma" in self.regress:
-                del self.student.actor_critic.net.map_ce
-                del batch
-
             batch = batch_obs(observations, device=self.device)
-            # batch = apply_obs_transforms_batch(batch, self.obs_transforms)
+            batch = apply_obs_transforms_batch(batch, self.obs_transforms)
+
             not_done_masks = torch.tensor(
                 [[not done] for done in dones],
                 dtype=torch.bool,
                 device=self.device,
             )
+
         self.envs.close()
 
 

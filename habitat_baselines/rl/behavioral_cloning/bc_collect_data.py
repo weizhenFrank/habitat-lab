@@ -90,7 +90,7 @@ class DataCollector(BaseRLTrainer):
         # n_iter = 200000
         # n_iter = 100000
         # n_iter = 50000
-        n_iter = 1000
+        n_iter = 100
         print("N_ITER: ", n_iter)
         for iteration in range(1, n_iter):
             print(f"# iter: {iteration}, {n_iter}")
@@ -133,16 +133,17 @@ class DataCollector(BaseRLTrainer):
                         mid = 128
                         mpp = 0.1
                         waypoint_map = np.zeros((256, 256))
-                        r, theta = v
-                        x = (np.exp(r) / mpp) * np.cos(theta)
-                        y = (np.exp(r) / mpp) * np.sin(theta)
+                        for vec in v:
+                            r, theta = vec
+                            x = (np.exp(r) / mpp) * np.cos(theta)
+                            y = (np.exp(r) / mpp) * np.sin(theta)
 
-                        row, col = np.clip(int(mid - x), 5, 250), np.clip(
-                            int(mid - y), 5, 250
-                        )
-                        rr, cc = disk((row, col), 5)
-                        waypoint_map[rr, cc] = 1.0
-                        context_waypoints.append(np.array([r, theta]))
+                            row, col = np.clip(int(mid - x), 5, 250), np.clip(
+                                int(mid - y), 5, 250
+                            )
+                            rr, cc = disk((row, col), 5)
+                            waypoint_map[rr, cc] = 1.0
+                        context_waypoints.append(np.array(v))
                         context_waypoint_maps.append(waypoint_map)
                     elif k == "pointgoal_with_gps_compass":
                         mid = 128
@@ -174,29 +175,36 @@ class DataCollector(BaseRLTrainer):
         prefix = "eval_" if self.eval else ""
         np.save(
             os.path.join(
-                base_pth, prefix + "context_maps_1157_student_3m.npy"
+                base_pth, prefix + "context_maps_1157_multi_wpts.npy"
             ),
             np.array(context_maps),
         )
         np.save(
             os.path.join(
                 base_pth,
-                prefix + "context_waypoint_maps_1157_student_3m.npy",
+                prefix + "context_waypoint_maps_1157_multi_wpts.npy",
             ),
             np.array(context_waypoint_maps),
         )
-        np.save(
+        print(
+            "saved to: ",
             os.path.join(
-                base_pth, prefix + "context_waypoints_1157_student_3m.npy"
+                base_pth,
+                prefix + "context_waypoint_maps_1157_multi_wpts.npy",
             ),
-            np.array(context_waypoints),
         )
-        np.save(
-            os.path.join(
-                base_pth, prefix + "context_goals_1157_student_3m.npy"
-            ),
-            np.array(context_goals),
-        )
+        # np.save(
+        #     os.path.join(
+        #         base_pth, prefix + "context_waypoints_1157_multi_wpts.npy"
+        #     ),
+        #     np.array(context_waypoints),
+        # )
+        # np.save(
+        #     os.path.join(
+        #         base_pth, prefix + "context_goals_1157_multi_wpts.npy"
+        #     ),
+        #     np.array(context_goals),
+        # )
         self.envs.close()
 
 

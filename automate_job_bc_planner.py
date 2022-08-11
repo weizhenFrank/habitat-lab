@@ -13,7 +13,7 @@ automate_command = "python " + " ".join(sys.argv)
 HABITAT_LAB = "/coc/testnvme/jtruong33/google_nav/habitat-lab"
 CONDA_ENV = "/nethome/jtruong33/miniconda3/envs/habitat-outdoor/bin/python"
 RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
-SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "slurm_template_bc.sh")
+SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "slurm_template_bc_planner.sh")
 EVAL_SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "eval_slurm_template.sh")
 
 parser = argparse.ArgumentParser()
@@ -22,7 +22,7 @@ parser.add_argument("experiment_name")
 # Training
 parser.add_argument("-sd", "--seed", type=int, default=1)
 parser.add_argument("-ds", "--dataset", default="ny")
-parser.add_argument("-ne", "--num_environments", type=int, default=64)
+parser.add_argument("-ne", "--num_environments", type=int, default=48)
 parser.add_argument(
     "-tf", "--teacher-force", default=False, action="store_true"
 )
@@ -51,8 +51,6 @@ parser.add_argument(
 parser.add_argument(
     "-crm", "--context-resnet-map", default=False, action="store_true"
 )
-parser.add_argument("-mr", "--map-resolution", type=int, default=100)
-parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.5)
 parser.add_argument(
     "-nrotm", "--no-rotate-map", default=False, action="store_true"
 )
@@ -66,9 +64,6 @@ parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
 parser.add_argument("-tgte", "--target_encoding", default="linear_2")
 parser.add_argument(
     "-pa", "--use-prev-action", default=False, action="store_true"
-)
-parser.add_argument(
-    "-sc", "--second-channel", default=False, action="store_true"
 )
 parser.add_argument(
     "-mc", "--multi-channel", default=False, action="store_true"
@@ -101,7 +96,7 @@ parser.add_argument("-x", default=False, action="store_true")
 
 args = parser.parse_args()
 
-EXP_YAML = "habitat_baselines/config/pointnav/behavioral_cloning.yaml"
+EXP_YAML = "habitat_baselines/config/pointnav/bc_planner.yaml"
 
 TASK_YAML = "configs/tasks/pointnav_context_spot.yaml"
 
@@ -182,25 +177,7 @@ if not args.eval:
             )
             task_yaml_data[
                 idx
-            ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR', 'CONTEXT_MAP_SENSOR']"
-        elif i.startswith("    BIN_POINTGOAL:"):
-            if args.target_encoding == "ans_bin":
-                task_yaml_data[idx] = f"    BIN_POINTGOAL: True"
-        elif i.startswith("    MAP_RESOLUTION:"):
-            task_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
-        elif i.startswith("    METERS_PER_PIXEL:"):
-            task_yaml_data[
-                idx
-            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
-        elif i.startswith("    ROTATE_MAP:"):
-            if args.no_rotate_map:
-                task_yaml_data[idx] = f"    ROTATE_MAP: False"
-        elif i.startswith("    SECOND_CHANNEL:"):
-            if args.second_channel:
-                task_yaml_data[idx] = f"    SECOND_CHANNEL: True"
-        elif i.startswith("    MULTI_CHANNEL:"):
-            if args.multi_channel:
-                task_yaml_data[idx] = f"    MULTI_CHANNEL: True"
+            ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    DEBUG:"):
             task_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("SEED:"):
@@ -410,7 +387,7 @@ else:
             if args.context_waypoint and args.context_map:
                 eval_yaml_data[
                     idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR', 'CONTEXT_MAP_SENSOR']"
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
             elif args.context_waypoint or args.context_resnet_waypoint:
                 eval_yaml_data[
                     idx
@@ -423,24 +400,6 @@ else:
             eval_yaml_data[idx] = f"  SUCCESS_DISTANCE: 0.425"
         elif i.startswith("    SUCCESS_DISTANCE:"):
             eval_yaml_data[idx] = f"    SUCCESS_DISTANCE: 0.425"
-        elif i.startswith("    BIN_POINTGOAL:"):
-            if args.target_encoding == "ans_bin":
-                eval_yaml_data[idx] = f"    BIN_POINTGOAL: True"
-        elif i.startswith("    MAP_RESOLUTION:"):
-            eval_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
-        elif i.startswith("    METERS_PER_PIXEL:"):
-            eval_yaml_data[
-                idx
-            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
-        elif i.startswith("    ROTATE_MAP:"):
-            if args.no_rotate_map:
-                eval_yaml_data[idx] = f"    ROTATE_MAP: True"
-        elif i.startswith("    SECOND_CHANNEL:"):
-            if args.second_channel:
-                eval_yaml_data[idx] = f"    SECOND_CHANNEL: True"
-        elif i.startswith("    MULTI_CHANNEL:"):
-            if args.multi_channel:
-                eval_yaml_data[idx] = f"    MULTI_CHANNEL: True"
         elif i.startswith("    DEBUG:"):
             eval_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("      MIN_RAND_PITCH:"):

@@ -11,16 +11,8 @@ import shutil
 import tarfile
 from collections import defaultdict
 from io import BytesIO
-from typing import (
-    Any,
-    DefaultDict,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import (Any, DefaultDict, Dict, Iterable, List, Optional, Tuple,
+                    Union)
 
 import attr
 import numpy as np

@@ -250,8 +250,22 @@ class PPOTrainer(BaseRLTrainer):
                     if k.startswith(prefix)
                 }
             )
-        if self.config.RL.PPO.get("use_waypoint_encoder", False):
+        if self.config.RL.PPO.get("use_teacher_waypoint_encoder", False):
             prefix = "actor_critic.net.context_encoder."
+            waypoint_pretrained_state = torch.load(
+                self.config.RL.DDPPO.teacher_pretrained_weights,
+                map_location="cpu",
+            )
+            self.actor_critic.net.waypoint_encoder.load_state_dict(
+                {
+                    k[len(prefix) :]: v
+                    for k, v in waypoint_pretrained_state["state_dict"].items()
+                    if k.startswith(prefix)
+                }
+            )
+
+        if self.config.RL.PPO.get("use_waypoint_encoder", False):
+            prefix = "actor_critic.net.waypoint_encoder."
             waypoint_pretrained_state = torch.load(
                 self.config.RL.DDPPO.teacher_pretrained_weights,
                 map_location="cpu",

@@ -26,30 +26,32 @@ python scripts/generate_spot_nav_episodes.py \
 '''
 python scripts/generate_spot_nav_episodes.py \
        /coc/testnvme/jtruong33/google_nav/habitat-lab/configs/tasks/pointnav_dataset_generator.yaml \
-       /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.3_multi_floor/train/content \
-       10000 \
+       /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.4_multi_floor_long/train/content \
        /coc/testnvme/datasets/habitat-sim-datasets/hm3d/train \
        hm3d \
-       -mind 1 \
-       -maxd 500 \
+       -mind 20 \
+       -maxd 200 \
        -si 0 \
-       -ei 9
-       
+       -ei 799 \
+       -mf \
+       -ne 5 
 '''
 
 parser = argparse.ArgumentParser()
 parser.add_argument("config_yaml")
 parser.add_argument("out_dir")
-parser.add_argument("num_episodes_per_scene", type=int)
 parser.add_argument("glb_dir")
 parser.add_argument("ty", type=str, help="hm3d or gibson")
 parser.add_argument("-r", "--robot", default="Spot")
 parser.add_argument("-mind", "--min-dist", type=float, default=5.0)
 parser.add_argument("-maxd", "--max_dist", type=float, default=20.0)
+parser.add_argument("-ne", "--num_episodes", type=float, default=250)
 parser.add_argument("-si", "--start-idx", type=int)
 parser.add_argument("-ei", "--end-idx", type=int)
 parser.add_argument("-v", "--val", action="store_true")
 parser.add_argument("-u", "--unfurnished", action="store_true")
+parser.add_argument("-mf", "--multi_floor", action="store_true")
+parser.add_argument("-sf", "--single_floor", action="store_true")
 args = parser.parse_args()
 
 # Task config yaml file. Needed for agent radius and height, not sure what else...
@@ -58,112 +60,110 @@ CONFIG_YAML = args.config_yaml
 # Folder where json.gz files will be saved:
 TRAIN_EP_DIR = args.out_dir
 
-NUM_EPISODES_PER_SCENE = args.num_episodes_per_scene
-
 if args.ty == "hm3d":
-    VAL = [
-        "00800-TEEsavR23oF",
-        "00801-HaxA7YrQdEC",
-        "00802-wcojb4TFT35",
-        "00803-k1cupFYWXJ6",
-        "00804-BHXhpBwSMLh",
-        "00805-SUHsP6z2gcJ",
-        "00806-tQ5s4ShP627",
-        "00807-rsggHU7g7dh",
-        "00808-y9hTuugGdiq",
-        "00809-Qpor2mEya8F",
-        "00810-CrMo8WxCyVb",
-        "00811-7UrtFsADwob",
-        "00812-mma8eWq3nNQ",
-        "00813-svBbv1Pavdk",
-        "00814-p53SfW6mjZe",
-        "00815-h1zeeAwLh9Z",
-        "00816-q3hn1WQ12rz",
-        "00817-X4qjx5vquwH",
-        "00818-rJhMRvNn4DS",
-        "00819-6D36GQHuP8H",
-        "00820-mL8ThkuaVTM",
-        "00821-eF36g7L6Z9M",
-        "00822-nrA1tAA17Yp",
-        "00823-7MXmsvcQjpJ",
-        "00824-Dd4bFSTQ8gi",
-        "00825-jgPBycuV1Jq",
-        "00826-BFRyYbPCCPE",
-        "00827-BAbdmeyTvMZ",
-        "00828-X7gTkoDHViv",
-        "00829-QaLdnwvtxbs",
-        "00830-5jp3fCRSRjc",
-        "00831-yr17PDCnDDW",
-        "00832-qyAac8rV8Zk",
-        "00833-dHwjuKfkRUR",
-        "00834-AWUFxHEyV3T",
-        "00835-q3zU7Yy5E5s",
-        "00836-7GAhQPFzMot",
-        "00837-vBMLrTe4uLA",
-        "00838-kJJyRFXVpx2",
-        "00839-zt1RVoi7PcG",
-        "00840-z9YwN9M8FpG",
-        "00841-SByzJLxpRGn",
-        "00842-hkr2MGpHD6B",
-        "00843-DYehNKdT76V",
-        "00844-q5QZSEeHe5g",
-        "00845-c3WKCnkEdha",
-        "00846-LNg5mXe1BDj",
-        "00847-bCPU9suPUw9",
-        "00848-ziup5kvtCCR",
-        "00849-a8BtkwhxdRV",
-        "00850-W7k2QWzBrFY",
-        "00851-YRUkbU5xsYj",
-        "00852-T6nG3E2Uui9",
-        "00853-5cdEh9F2hJL",
-        "00854-SiKqEZx7Ejt",
-        "00855-c5eTyR3Rxyh",
-        "00856-FnSn2KSrALj",
-        "00857-L53DsRRk4Ch",
-        "00858-cYkrGrCg2kB",
-        "00859-3t8DB4Uzvkt",
-        "00860-RJaJt8UjXav",
-        "00861-GLAQ4DNUx5U",
-        "00862-LT9Jq6dN3Ea",
-        "00863-b28CWbpQvor",
-        "00864-QHhQZWdMpGJ",
-        "00865-fsQtJ8t3nTf",
-        "00866-XNeHsjL6nBB",
-        "00867-uLz9jNga3kC",
-        "00868-vd3HHTEpmyA",
-        "00869-MHPLjHsuG27",
-        "00870-AYpsNQsWncn",
-        "00871-VBzV5z6i1WS",
-        "00872-F7EAMsdDASd",
-        "00873-bxsVRursffK",
-        "00874-uSKXQ5fFg6u",
-        "00875-66seV3BWPoX",
-        "00876-mv2HUxq3B53",
-        "00877-4ok3usBNeis",
-        "00878-XB4GS9ShBRE",
-        "00879-7Ukhou1GxYi",
-        "00880-Nfvxx8J5NCo",
-        "00881-u1bkiGRVyu9",
-        "00882-rXXL6twQiWc",
-        "00883-u8ug2rtNARf",
-        "00884-XMHNu9rRQ1y",
-        "00885-dVW2D7TDctW",
-        "00886-TPhiubUHKcP",
-        "00887-hyFzGGJCSYs",
-        "00888-hDBqLgydy1n",
-        "00889-HMkoS756sz6",
-        "00890-6s7QHgap2fW",
-        "00891-cvZr5TUy5C5",
-        "00892-bzCsHPLDztK",
-        "00893-yZME6UR9dUN",
-        "00894-HY1NcmCgn3n",
-        "00895-auFeVz9Go4m",
-        "00896-5hGmubEE6ZF",
-        "00897-LEFTm3JecaC",
-        "00898-8CRYizAb6yd",
-        "00899-58NLZxWBSpk",
-    ]
-
+    VAL = ["00894-HY1NcmCgn3n"]
+    # VAL = [
+    #     "00800-TEEsavR23oF",
+    #     "00801-HaxA7YrQdEC",
+    #     "00802-wcojb4TFT35",
+    #     "00803-k1cupFYWXJ6",
+    #     "00804-BHXhpBwSMLh",
+    #     "00805-SUHsP6z2gcJ",
+    #     "00806-tQ5s4ShP627",
+    #     "00807-rsggHU7g7dh",
+    #     "00808-y9hTuugGdiq",
+    #     "00809-Qpor2mEya8F",
+    #     "00810-CrMo8WxCyVb",
+    #     "00811-7UrtFsADwob",
+    #     "00812-mma8eWq3nNQ",
+    #     "00813-svBbv1Pavdk",
+    #     "00814-p53SfW6mjZe",
+    #     "00815-h1zeeAwLh9Z",
+    #     "00816-q3hn1WQ12rz",
+    #     "00817-X4qjx5vquwH",
+    #     "00818-rJhMRvNn4DS",
+    #     "00819-6D36GQHuP8H",
+    #     "00820-mL8ThkuaVTM",
+    #     "00821-eF36g7L6Z9M",
+    #     "00822-nrA1tAA17Yp",
+    #     "00823-7MXmsvcQjpJ",
+    #     "00824-Dd4bFSTQ8gi",
+    #     "00825-jgPBycuV1Jq",
+    #     "00826-BFRyYbPCCPE",
+    #     "00827-BAbdmeyTvMZ",
+    #     "00828-X7gTkoDHViv",
+    #     "00829-QaLdnwvtxbs",
+    #     "00830-5jp3fCRSRjc",
+    #     "00831-yr17PDCnDDW",
+    #     "00832-qyAac8rV8Zk",
+    #     "00833-dHwjuKfkRUR",
+    #     "00834-AWUFxHEyV3T",
+    #     "00835-q3zU7Yy5E5s",
+    #     "00836-7GAhQPFzMot",
+    #     "00837-vBMLrTe4uLA",
+    #     "00838-kJJyRFXVpx2",
+    #     "00839-zt1RVoi7PcG",
+    #     "00840-z9YwN9M8FpG",
+    #     "00841-SByzJLxpRGn",
+    #     "00842-hkr2MGpHD6B",
+    #     "00843-DYehNKdT76V",
+    #     "00844-q5QZSEeHe5g",
+    #     "00845-c3WKCnkEdha",
+    #     "00846-LNg5mXe1BDj",
+    #     "00847-bCPU9suPUw9",
+    #     "00848-ziup5kvtCCR",
+    #     "00849-a8BtkwhxdRV",
+    #     "00850-W7k2QWzBrFY",
+    #     "00851-YRUkbU5xsYj",
+    #     "00852-T6nG3E2Uui9",
+    #     "00853-5cdEh9F2hJL",
+    #     "00854-SiKqEZx7Ejt",
+    #     "00855-c5eTyR3Rxyh",
+    #     "00856-FnSn2KSrALj",
+    #     "00857-L53DsRRk4Ch",
+    #     "00858-cYkrGrCg2kB",
+    #     "00859-3t8DB4Uzvkt",
+    #     "00860-RJaJt8UjXav",
+    #     "00861-GLAQ4DNUx5U",
+    #     "00862-LT9Jq6dN3Ea",
+    #     "00863-b28CWbpQvor",
+    #     "00864-QHhQZWdMpGJ",
+    #     "00865-fsQtJ8t3nTf",
+    #     "00866-XNeHsjL6nBB",
+    #     "00867-uLz9jNga3kC",
+    #     "00868-vd3HHTEpmyA",
+    #     "00869-MHPLjHsuG27",
+    #     "00870-AYpsNQsWncn",
+    #     "00871-VBzV5z6i1WS",
+    #     "00872-F7EAMsdDASd",
+    #     "00873-bxsVRursffK",
+    #     "00874-uSKXQ5fFg6u",
+    #     "00875-66seV3BWPoX",
+    #     "00876-mv2HUxq3B53",
+    #     "00877-4ok3usBNeis",
+    #     "00878-XB4GS9ShBRE",
+    #     "00879-7Ukhou1GxYi",
+    #     "00880-Nfvxx8J5NCo",
+    #     "00881-u1bkiGRVyu9",
+    #     "00882-rXXL6twQiWc",
+    #     "00883-u8ug2rtNARf",
+    #     "00884-XMHNu9rRQ1y",
+    #     "00885-dVW2D7TDctW",
+    #     "00886-TPhiubUHKcP",
+    #     "00887-hyFzGGJCSYs",
+    #     "00888-hDBqLgydy1n",
+    #     "00889-HMkoS756sz6",
+    #     "00890-6s7QHgap2fW",
+    #     "00891-cvZr5TUy5C5",
+    #     "00892-bzCsHPLDztK",
+    #     "00893-yZME6UR9dUN",
+    #     "00894-HY1NcmCgn3n",
+    #     "00895-auFeVz9Go4m",
+    #     "00896-5hGmubEE6ZF",
+    #     "00897-LEFTm3JecaC",
+    #     "00898-8CRYizAb6yd",
+    #     "00899-58NLZxWBSpk",
+    # ]
     TRAIN = [
         "00000-kfPV7w3FaU5",
         "00001-UVdNNRcVyV1",
@@ -1170,7 +1170,7 @@ def _generate_fn(scene):
         radius = 0.45 / 2
         succ_dist = 0.20
     elif args.robot == "Spot":
-        radius = 0.6 / 2
+        radius = 0.8 / 2
         succ_dist = 0.3
 
     cfg = habitat.get_config(CONFIG_YAML)
@@ -1188,44 +1188,53 @@ def _generate_fn(scene):
     min_range = args.min_dist
     dist_step_size = 5
     # num_eps_per_scene = args.num_episodes_per_scene // ((args.max_dist - args.min_dist) // dist_step_size)
-    num_eps_per_scene = 500
+    num_eps_per_scene = 0
+    if args.multi_floor:
+        num_eps_per_scene += args.num_episodes
+    if args.single_floor:
+        num_eps_per_scene += args.num_episodes
 
+    if args.val:
+        num_eps_per_scene /= 100
     print("num_eps_per_scene: ", num_eps_per_scene)
     rng = int((args.max_dist - args.min_dist) // dist_step_size)
     print("range: ", rng, min_range, min_range+dist_step_size)
 
     for _ in range(rng):
-        episodes += list(
-            generate_pointnav_episode(
-                sim,
-                int(num_eps_per_scene),
-                is_gen_shortest_path=False,
-                shortest_path_max_steps=1000,
-                geodesic_to_euclid_min_ratio=1.0,
-                closest_dist_limit=min_range,
-                furthest_dist_limit=min_range + dist_step_size,
-                shortest_path_success_distance=succ_dist,
-                robot=args.robot,
-                multi_floor=False
+        if args.single_floor:
+            new_eps = list(
+                generate_pointnav_episode(
+                    sim,
+                    int(num_eps_per_scene),
+                    is_gen_shortest_path=False,
+                    shortest_path_max_steps=1000,
+                    geodesic_to_euclid_min_ratio=1.0,
+                    closest_dist_limit=min_range,
+                    furthest_dist_limit=min_range + dist_step_size,
+                    shortest_path_success_distance=succ_dist,
+                    robot=args.robot,
+                    multi_floor=False
+                )
             )
-        )
-        new_mf_eps = list(
-            generate_pointnav_episode(
-                sim,
-                int(num_eps_per_scene),
-                is_gen_shortest_path=False,
-                shortest_path_max_steps=1000,
-                geodesic_to_euclid_min_ratio=1.0,
-                closest_dist_limit=min_range,
-                furthest_dist_limit=min_range + dist_step_size,
-                shortest_path_success_distance=succ_dist,
-                robot=args.robot,
-                multi_floor=True
+        if args.multi_floor:
+            new_eps = list(
+                generate_pointnav_episode(
+                    sim,
+                    int(num_eps_per_scene),
+                    is_gen_shortest_path=False,
+                    shortest_path_max_steps=1000,
+                    geodesic_to_euclid_min_ratio=1.0,
+                    closest_dist_limit=min_range,
+                    furthest_dist_limit=min_range + dist_step_size,
+                    shortest_path_success_distance=succ_dist,
+                    robot=args.robot,
+                    multi_floor=True
+                )
             )
-        )
-        if len(new_mf_eps) == 0:
+        if len(new_eps) == 0:
             break
-        episodes += new_mf_eps
+        else:
+            episodes += new_eps
         min_range += dist_step_size
     dset.episodes = episodes
 
