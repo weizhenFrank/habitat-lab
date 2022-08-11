@@ -12,21 +12,16 @@ import torch
 import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    ContextMapSensor,
-    ContextWaypointSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    IntegratedPointGoalNoisyGPSAndCompassSensor,
-)
+from habitat.tasks.nav.nav import (ContextMapSensor, ContextWaypointSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
 from habitat_baselines.common.baseline_registry import baseline_registry
-
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import (
-    build_rnn_state_encoder,
-)
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from skimage.draw import disk
@@ -457,9 +452,8 @@ class PointNavContextNet(PointNavBaselineNet):
         if "context_map" in observation_space.keys():
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
-                from habitat_baselines.rl.ddppo.policy.resnet_policy import (
-                    ResNetEncoderContext,
-                )
+                from habitat_baselines.rl.ddppo.policy.resnet_policy import \
+                    ResNetEncoderContext
 
                 if "full" in self.cnn_type:
                     self.context_encoder = ResNetEncoderContext(
@@ -582,76 +576,3 @@ class PointNavContextNet(PointNavBaselineNet):
                 dim=1,
             )
         return out
-
-
-class PointNavContextWaypointNet(PointNavContextNet):
-    r"""Network which passes the input image through CNN and concatenates
-    goal vector with CNN's output and passes that through RNN. + Map
-    """
-
-    def __init__(
-        self,
-        observation_space: spaces.Dict,
-        hidden_size: int,
-        num_recurrent_layers: int,
-        rnn_type: str,
-        tgt_hidden_size: int,
-        tgt_encoding: str,
-        context_hidden_size: int,
-        use_prev_action: bool,
-        use_waypoint_encoder: bool,
-        cnn_type: str,
-        policy_config: None,
-    ):
-        super().__init__(
-            observation_space=observation_space,
-            hidden_size=hidden_size,
-            num_recurrent_layers=num_recurrent_layers,
-            rnn_type=rnn_type,
-            tgt_hidden_size=tgt_hidden_size,
-            tgt_encoding=tgt_encoding,
-            context_hidden_size=context_hidden_size,
-            use_prev_action=use_prev_action,
-            use_waypoint_encoder=use_waypoint_encoder,
-            cnn_type=cnn_type,
-            policy_config=policy_config,
-        )
-
-        self.train()
-
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks):
-        x = []
-        ## Egocentric observations
-        ve = self.visual_encoder(observations)
-        x.append(ve)
-        ## Goal vector
-        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-            goal_observations = observations[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ]
-            if (
-                self.tgt_encoding == "sin_cos"
-                and goal_observations.shape[1] == 2
-            ):
-                goal_observations = torch.stack(
-                    [
-                        goal_observations[:, 0],
-                        torch.cos(-goal_observations[:, 1]),
-                        torch.sin(-goal_observations[:, 1]),
-                    ],
-                    -1,
-                )
-            te = self.tgt_encoder(goal_observations)
-            x.append(te)
-        ## Waypoint observation
-
-        ## Previous actions
-        if self.use_prev_action:
-            prev_actions = self.prev_action_embedding(prev_actions.float())
-            x.append(prev_actions)
-        x_out = torch.cat(x, dim=1)
-        x_out, rnn_hidden_states = self.state_encoder(
-            x_out, rnn_hidden_states, masks
-        )
-
-        return x_out, rnn_hidden_states

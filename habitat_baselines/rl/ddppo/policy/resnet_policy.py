@@ -12,26 +12,18 @@ import numpy as np
 import torch
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    ContextMapSensor,
-    ContextWaypointSensor,
-    EpisodicCompassSensor,
-    EpisodicGPSSensor,
-    HeadingSensor,
-    ImageGoalSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    PointGoalSensor,
-    ProximitySensor,
-)
+from habitat.tasks.nav.nav import (ContextMapSensor, ContextWaypointSensor,
+                                   EpisodicCompassSensor, EpisodicGPSSensor,
+                                   HeadingSensor, ImageGoalSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   PointGoalSensor, ProximitySensor)
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.rl.ddppo.policy import resnet
-from habitat_baselines.rl.ddppo.policy.running_mean_and_var import (
-    RunningMeanAndVar,
-)
-from habitat_baselines.rl.models.rnn_state_encoder import (
-    build_rnn_state_encoder,
-)
+from habitat_baselines.rl.ddppo.policy.running_mean_and_var import \
+    RunningMeanAndVar
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.rl.ppo import Net, Policy
 from torch import nn as nn
@@ -371,7 +363,7 @@ class ResNetEncoderContext(ResNetEncoder):
         spatial_size_h = observation_space.spaces["context_map"].shape[0] // 2
         spatial_size_w = observation_space.spaces["context_map"].shape[1] // 2
 
-        input_channels = 1
+        input_channels = 2
         self.backbone = make_backbone(input_channels, baseplanes, ngroups)
         final_spatial_h = int(
             np.ceil(spatial_size_h * self.backbone.final_spatial_compress)
