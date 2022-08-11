@@ -12,16 +12,21 @@ import torch
 import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (ContextMapSensor, ContextWaypointSensor,
-                                   IntegratedPointGoalGPSAndCompassSensor,
-                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
+from habitat.tasks.nav.nav import (
+    ContextMapSensor,
+    ContextWaypointSensor,
+    IntegratedPointGoalGPSAndCompassSensor,
+    IntegratedPointGoalNoisyGPSAndCompassSensor,
+)
 from habitat_baselines.common.baseline_registry import baseline_registry
+
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import \
-    build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import (
+    build_rnn_state_encoder,
+)
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from skimage.draw import disk
@@ -452,8 +457,9 @@ class PointNavContextNet(PointNavBaselineNet):
         if "context_map" in observation_space.keys():
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
-                from habitat_baselines.rl.ddppo.policy.resnet_policy import \
-                    ResNetEncoderContext
+                from habitat_baselines.rl.ddppo.policy.resnet_policy import (
+                    ResNetEncoderContext,
+                )
 
                 if "full" in self.cnn_type:
                     self.context_encoder = ResNetEncoderContext(
@@ -463,16 +469,14 @@ class PointNavContextNet(PointNavBaselineNet):
                         make_backbone=getattr(
                             resnet, self.cnn_type.split("_")[0]
                         ),
-                        normalize_visual_inputs=self.normalize_visual_inputs,
-                        compress=self.compress,
+                        normalize_visual_inputs=False,
                     )
                     dim = np.prod(self.context_encoder.output_shape)
                 else:
                     dim = 65536 if "resnet50" in self.cnn_type else 16384
                     dim = (
                         4096
-                        if observation_space["context_map"].shape
-                        == (2, 100, 100)
+                        if observation_space["context_map"].shape[0] == 100
                         else dim
                     )
                     self.context_encoder = getattr(resnet, self.cnn_type)(
@@ -483,7 +487,6 @@ class PointNavContextNet(PointNavBaselineNet):
                     nn.Linear(dim, self.context_hidden_size),
                     nn.ReLU(True),
                 )
-
             elif self.cnn_type == "vit":
                 self.context_encoder = SimpleViT(
                     image_size=256,
@@ -494,6 +497,10 @@ class PointNavContextNet(PointNavBaselineNet):
                     heads=8,
                     mlp_dim=1024,
                     channels=2,
+                )
+            elif self.cnn_type == "cnn_2d":
+                self.context_encoder = SimpleCNNContext(
+                    observation_space, hidden_size, self.cnn_type
                 )
         elif "context_waypoint" in observation_space.keys():
             self.context_encoder = nn.Sequential(
@@ -563,11 +570,12 @@ class PointNavContextNet(PointNavBaselineNet):
         return x_out, rnn_hidden_states
 
     def get_features(self, observations):
-        out = self.context_encoder(
-            observations[ContextMapSensor.cls_uuid].permute(0, 3, 1, 2)
-        )
+        obs = observations[ContextMapSensor.cls_uuid]
+        if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
+            obs = obs.permute(0, 3, 1, 2)
+        out = self.context_encoder(obs)
         if "resnet" in self.cnn_type:
-            out = self.visual_fc(out)
+            out = self.context_fc(out)
         if self.context_hidden_size == 3:
             out = torch.cat(
                 [F.sigmoid(out[:, :1]), torch.tanh(out[:, 1:])],
