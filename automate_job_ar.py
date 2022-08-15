@@ -49,6 +49,7 @@ parser.add_argument("-e", "--eval", default=False, action="store_true")
 parser.add_argument("-cpt", "--ckpt", type=int, default=-1)
 parser.add_argument("-v", "--video", default=False, action="store_true")
 parser.add_argument("-ts", "--timestep", type=float, default=1.0)
+parser.add_argument("-tns", "--total_num_steps", type=int, default=-1)
 
 parser.add_argument("-d", "--debug", default=False, action="store_true")
 parser.add_argument("--ext", default="")
@@ -235,6 +236,8 @@ if not args.eval:
         elif i.startswith("TOTAL_NUM_STEPS:"):
             max_num_steps = 5e8 if args.control_type == "kinematic" else 5e7
             exp_yaml_data[idx] = "TOTAL_NUM_STEPS: {}".format(max_num_steps)
+            if args.total_num_steps != -1:
+                exp_yaml_data[idx] = "TOTAL_NUM_STEPS: {}".format(args.total_num_steps)
         elif i.startswith("TENSORBOARD_DIR:"):
             exp_yaml_data[idx] = "TENSORBOARD_DIR:    '{}'".format(
                 os.path.join(dst_dir, "tb")
