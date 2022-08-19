@@ -22,21 +22,35 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (EmbodiedTask, Measure,
-                                        SimulatorTaskAction)
+from habitat.core.embodied_task import (
+    EmbodiedTask,
+    Measure,
+    SimulatorTaskAction,
+)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
-                                    ShortestPathPoint, Simulator)
+from habitat.core.simulator import (
+    AgentState,
+    RGBSensor,
+    Sensor,
+    SensorTypes,
+    ShortestPathPoint,
+    Simulator,
+)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor, HabitatSimRGBSensor)
+    HabitatSimDepthSensor,
+    HabitatSimRGBSensor,
+)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
-                                          quaternion_from_coeff,
-                                          quaternion_rotate_vector)
+from habitat.utils.geometry_utils import (
+    Cutout,
+    euler_from_quaternion,
+    quaternion_from_coeff,
+    quaternion_rotate_vector,
+)
 from habitat.utils.visualizations import fog_of_war, maps
 from skimage.draw import disk
 
@@ -50,8 +64,10 @@ except ImportError:
 
 import time
 
-from .robot_utils.raibert_controller import (Raibert_controller_turn,
-                                             Raibert_controller_turn_stable)
+from .robot_utils.raibert_controller import (
+    Raibert_controller_turn,
+    Raibert_controller_turn_stable,
+)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -841,7 +857,8 @@ class ContextMapSensor(PointGoalSensor):
             # p=0.25,
         )
         self.debug = getattr(config, "DEBUG", "")
-        self.disk_radius = 5
+        # self.disk_radius = (5 * self._map_resolution) / 256
+        self.disk_radius = 1.0 / self.meters_per_pixel
         super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:

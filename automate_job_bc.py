@@ -63,6 +63,8 @@ parser.add_argument("-chs", "--context-hidden-size", type=int, default=512)
 parser.add_argument("-ths", "--tgt-hidden-size", type=int, default=512)
 parser.add_argument("-ncnn", "--num-cnns", type=int, default=0)
 parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
+parser.add_argument("-rnnt", "--rnn-type", default="GRU")
+parser.add_argument("-nrl", "--num_recurrent_layers", type=int, default=1)
 parser.add_argument("-tgte", "--target_encoding", default="linear_2")
 parser.add_argument(
     "-pa", "--use-prev-action", default=False, action="store_true"
@@ -313,6 +315,12 @@ if not args.eval:
                 exp_yaml_data[idx] = f"    use_prev_action: True"
         elif i.startswith("    cnn_type:"):
             exp_yaml_data[idx] = f"    cnn_type: '{args.cnn_type}'"
+        elif i.startswith("    rnn_type:"):
+            exp_yaml_data[idx] = f"    rnn_type: '{args.rnn_type}'"
+        elif i.startswith("    num_recurrent_layers:"):
+            exp_yaml_data[
+                idx
+            ] = f"    num_recurrent_layers: '{args.num_recurrent_layers}'"
         elif i.startswith("    name:"):
             if args.context_waypoint or args.context_map:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"

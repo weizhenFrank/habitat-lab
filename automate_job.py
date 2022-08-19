@@ -79,6 +79,8 @@ parser.add_argument(
     "-pa", "--use-prev-action", default=False, action="store_true"
 )
 parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
+parser.add_argument("-rnnt", "--rnn-type", default="GRU")
+parser.add_argument("-nrl", "--num_recurrent_layers", type=int, default=1)
 parser.add_argument("-tgte", "--target_encoding", default="linear_2")
 parser.add_argument("-ft", "--finetune", default=False, action="store_true")
 parser.add_argument(
@@ -571,6 +573,12 @@ if not args.eval:
         elif i.startswith("    pretrained: "):
             if args.finetune:
                 exp_yaml_data[idx] = f"    pretrained: True"
+        elif i.startswith("    rnn_type:"):
+            exp_yaml_data[idx] = f"    rnn_type: '{args.rnn_type}'"
+        elif i.startswith("    num_recurrent_layers:"):
+            exp_yaml_data[
+                idx
+            ] = f"    num_recurrent_layers: '{args.num_recurrent_layers}'"
     with open(new_exp_yaml_path, "w") as f:
         f.write("\n".join(exp_yaml_data))
     print("Created " + new_exp_yaml_path)
@@ -970,6 +978,12 @@ else:
                 eval_exp_yaml_data[
                     idx
                 ] = f"    visual_encoder: {visual_encoder}"
+        elif i.startswith("    rnn_type:"):
+            eval_exp_yaml_data[idx] = f"    rnn_type: '{args.rnn_type}'"
+        elif i.startswith("    num_recurrent_layers:"):
+            eval_exp_yaml_data[
+                idx
+            ] = f"    num_recurrent_layers: '{args.num_recurrent_layers}'"
 
     if os.path.isdir(tb_dir):
         response = input(
