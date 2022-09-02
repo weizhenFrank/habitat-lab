@@ -360,7 +360,7 @@ class PointNavResNetNet(Net):
             [k.startswith("spot") for k in observation_space.spaces.keys()]
         )
         if not self.visual_encoder.is_blind:
-            dim = 2048 if using_spot else 2040
+            dim = 2048 if using_spot else 2055
             self.visual_fc = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(dim, hidden_size),
