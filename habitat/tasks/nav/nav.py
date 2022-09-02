@@ -38,10 +38,6 @@ from habitat.core.simulator import (
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
-from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor,
-    HabitatSimRGBSensor,
-)
 from habitat.tasks.utils import cartesian_to_polar
 from habitat.utils.geometry_utils import quaternion_from_coeff, quaternion_rotate_vector
 from habitat.utils.visualizations import fog_of_war, maps
@@ -52,8 +48,13 @@ try:
     from habitat_sim.physics import VelocityControl
 
     from habitat.sims.habitat_simulator.habitat_simulator import HabitatSim
+    from habitat.sims.habitat_simulator.habitat_simulator import (
+        HabitatSimDepthSensor,
+        HabitatSimRGBSensor,
+    )
+    SIM_IMPORTED = True
 except ImportError:
-    pass
+    SIM_IMPORTED = False
 
 from .spot_utils.raibert_controller import (
     Raibert_controller_turn,
@@ -1652,91 +1653,93 @@ class InteractiveNavigationTask(NavigationTask):
         return observations
 
 
-@registry.register_sensor
-class SpotLeftRgbSensor(HabitatSimRGBSensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_left_rgb"
+if SIM_IMPORTED:
+    @registry.register_sensor
+    class SpotLeftRgbSensor(HabitatSimRGBSensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_left_rgb"
 
 
-@registry.register_sensor
-class SpotRightRgbSensor(HabitatSimRGBSensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_right_rgb"
+    @registry.register_sensor
+    class SpotRightRgbSensor(HabitatSimRGBSensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_right_rgb"
 
 
-@registry.register_sensor
-class SpotGraySensor(HabitatSimRGBSensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_gray"
+    @registry.register_sensor
+    class SpotGraySensor(HabitatSimRGBSensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_gray"
 
-    ## Hack to get Spot cameras resized to 256,256 after concatenation
-    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
-        return spaces.Box(
-            low=0,
-            high=255,
-            shape=(256, 128, 1),
-            dtype=np.float32,
-        )
-
-    def get_observation(self, sim_obs):
-        obs = sim_obs.get(self.uuid, None)
-        assert isinstance(obs, np.ndarray)
-        obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
-        obs = cv2.resize(obs, (128, 256))
-        obs = obs.reshape([*obs.shape[:2], 1])
-        return obs
-
-
-@registry.register_sensor
-class SpotLeftGraySensor(SpotGraySensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_left_gray"
-
-
-@registry.register_sensor
-class SpotRightGraySensor(SpotGraySensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_right_gray"
-
-
-@registry.register_sensor
-class SpotDepthSensor(HabitatSimDepthSensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_depth"
-
-    ## Hack to get Spot cameras resized to 256,256 after concatenation
-    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
-        return spaces.Box(
-            low=self.min_depth_value,
-            high=self.max_depth_value,
-            shape=(256, 128, 1),
-            dtype=np.float32,
-        )
-
-    def get_observation(self, sim_obs):
-        obs = sim_obs.get(self.uuid, None)
-        assert isinstance(obs, np.ndarray)
-        obs[obs > self.config.MAX_DEPTH] = 0.0  # Spot blacks out far pixels
-        obs = np.clip(obs, self.config.MIN_DEPTH, self.config.MAX_DEPTH)
-        obs = cv2.resize(obs, (128, 256))
-
-        obs = np.expand_dims(obs, axis=2)  # make depth observation a 3D array
-        if self.config.NORMALIZE_DEPTH:
-            # normalize depth observation to [0, 1]
-            obs = (obs - self.config.MIN_DEPTH) / (
-                self.config.MAX_DEPTH - self.config.MIN_DEPTH
+        ## Hack to get Spot cameras resized to 256,256 after concatenation
+        def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
+            return spaces.Box(
+                low=0,
+                high=255,
+                shape=(256, 128, 1),
+                dtype=np.float32,
             )
 
-        return obs
+        def get_observation(self, sim_obs):
+            obs = sim_obs.get(self.uuid, None)
+            assert isinstance(obs, np.ndarray)
+            obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
+            obs = cv2.resize(obs, (128, 256))
+            obs = obs.reshape([*obs.shape[:2], 1])
+            return obs
 
 
-@registry.register_sensor
-class SpotLeftDepthSensor(SpotDepthSensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_left_depth"
+    @registry.register_sensor
+    class SpotLeftGraySensor(SpotGraySensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_left_gray"
 
 
-@registry.register_sensor
-class SpotRightDepthSensor(SpotDepthSensor):
-    def _get_uuid(self, *args, **kwargs):
-        return "spot_right_depth"
+    @registry.register_sensor
+    class SpotRightGraySensor(SpotGraySensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_right_gray"
+
+
+    @registry.register_sensor
+    class SpotDepthSensor(HabitatSimDepthSensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_depth"
+
+        ## Hack to get Spot cameras resized to 256,256 after concatenation
+        def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
+            return spaces.Box(
+                low=self.min_depth_value,
+                high=self.max_depth_value,
+                shape=(256, 128, 1),
+                dtype=np.float32,
+            )
+
+        def get_observation(self, sim_obs):
+            obs = sim_obs.get(self.uuid, None)
+            assert isinstance(obs, np.ndarray)
+            obs[obs > self.config.MAX_DEPTH] = 0.0  # Spot blacks out far pixels
+            obs = np.clip(obs, self.config.MIN_DEPTH, self.config.MAX_DEPTH)
+            obs = cv2.resize(obs, (128, 256))
+
+            obs = np.expand_dims(obs, axis=2)  # make depth observation a 3D array
+            if self.config.NORMALIZE_DEPTH:
+                # normalize depth observation to [0, 1]
+                obs = (obs - self.config.MIN_DEPTH) / (
+                    self.config.MAX_DEPTH - self.config.MIN_DEPTH
+                )
+
+            return obs
+
+
+    @registry.register_sensor
+    class SpotLeftDepthSensor(SpotDepthSensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_left_depth"
+
+
+    @registry.register_sensor
+    class SpotRightDepthSensor(SpotDepthSensor):
+        def _get_uuid(self, *args, **kwargs):
+            return "spot_right_depth"
+
