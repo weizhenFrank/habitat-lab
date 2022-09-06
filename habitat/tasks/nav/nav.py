@@ -1050,6 +1050,277 @@ class ContextMapSensor(PointGoalSensor):
             return map
 
 
+@registry.register_sensor
+class ContextMapWaypointSensor(Sensor):
+    r"""Sensor for passing in additional context (map, waypoint, etc.)
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the sensor.
+    """
+    cls_uuid: str = "context_map_waypoint"
+
+    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+        self._sim = sim
+        self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
+        self._rotate_map = getattr(config, "ROTATE_MAP", False)
+        self.meters_per_pixel = getattr(
+            config, "METERS_PER_PIXEL", 0.5
+        )  # cm per pixel; decreasing this makes map bigger, need more pixels to get 25m radius around robot
+
+        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+        self.save_map_debug = getattr(config, "SAVE_MAP", False)
+        self.map_shape = (self._map_resolution, self._map_resolution, 2)
+        self.disk_radius = 1.0 / self.meters_per_pixel
+        self._current_episode_id = None
+        self._top_down_map = None
+
+        self.ep_id = 0
+        self.ctr = 0
+
+        super().__init__(sim=sim, config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.MEASUREMENT
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        # 0 (white) if occupied, 1 (gray) if unoccupied
+        return spaces.Box(low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32)
+
+    def save_map(self, top_down_map, name, agent_coord=None):
+        if self.save_map_debug:
+            if top_down_map.ndim > 2:
+                top_down_map = top_down_map[:, :, 0]
+
+            color_map = maps.colorize_topdown_map(top_down_map)
+
+            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            cv2.imwrite(
+                f"{save_name}",
+                color_map,
+                # top_down_map * 255.0,
+            )
+            print(f"saved: {save_name}")
+
+    def _get_goal_vector(self, episode, use_log_scale=True):
+        goal = episode.goals[0]
+        goal_position = goal.position
+        agent_state = self._sim.get_agent_state()
+        agent_position = agent_state.position
+        rotation_world_agent = agent_state.rotation
+
+        return self._compute_pointgoal(
+            agent_position,
+            rotation_world_agent,
+            goal_position,
+            use_log_scale=use_log_scale,
+        )
+
+    def _compute_pointgoal(
+        self, agent_position, rotation_world_agent, goal_position, use_log_scale=True
+    ):
+        direction_vector = goal_position - agent_position
+        direction_vector_agent = quaternion_rotate_vector(
+            rotation_world_agent.inverse(), direction_vector
+        )
+        rho, phi = cartesian_to_polar(
+            -direction_vector_agent[2], direction_vector_agent[0]
+        )
+        if self.log_pointgoal and use_log_scale:
+            return np.array([np.log(rho), wrap_heading(-phi)], dtype=np.float32)
+        return np.array([rho, wrap_heading(-phi)], dtype=np.float32)
+
+    def interp_pts(self, curr_pt, next_pt, thresh):
+        rho = np.linalg.norm(next_pt - curr_pt)
+        if int(rho) > thresh:
+            x_new = np.linspace(
+                curr_pt[0],
+                next_pt[0],
+                num=int(np.ceil(rho / thresh)),
+                endpoint=False,
+            )
+            x = [curr_pt[0], next_pt[0] + 1e-5]
+            y = [curr_pt[2], next_pt[2] + 1e-5]
+            f = interp1d(x, y)
+            y_new = f(x_new)
+
+            interp_pts = np.array(
+                [(x_new[i], curr_pt[1], y_new[i]) for i in range(len(y_new))]
+            )
+        else:
+            return np.array([curr_pt, next_pt])
+
+        return interp_pts
+
+    def get_waypoints_to_goal(self, episode):
+        agent_position = self._sim.get_agent_state().position
+        for goal in episode.goals:
+            _shortest_path_points = self._sim.get_straight_shortest_path_points(
+                agent_position, goal.position
+            )
+            all_wpts = []
+            for i in range(len(_shortest_path_points) - 1):
+                curr_pt = _shortest_path_points[i]
+                next_pt = _shortest_path_points[i + 1]
+                all_wpts.extend(
+                    self.interp_pts(curr_pt, next_pt, self.meters_per_pixel)
+                )
+            all_wpts = all_wpts[1:]
+        return np.array(all_wpts)
+
+    def get_polar_angle(self):
+        agent_state = self._sim.get_agent_state()
+        # quaternion is in x, y, z, w format
+        ref_rotation = agent_state.rotation
+
+        heading_vector = quaternion_rotate_vector(
+            ref_rotation.inverse(), np.array([0, 0, -1])
+        )
+
+        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+        z_neg_z_flip = np.pi
+        return np.array(phi) + z_neg_z_flip
+
+    def crop_at_point(self, img, center_coord, size):
+        h, w = np.array(img).shape[:2]
+        a_x, a_y = center_coord
+        top = max(a_x - size // 2, 0)
+        bottom = min(a_x + size // 2, h)
+        left = max(a_y - size // 2, 0)
+        right = min(a_y + size // 2, w)
+
+        if img.ndim == 3:
+            return img[top:bottom, left:right, :]
+        else:
+            return img[top:bottom, left:right]
+
+    def get_rotated_point(self, img, im_rot, xy, agent_rotation):
+        yx = xy[::-1]
+        a = -(agent_rotation - np.pi)
+        org_center = (np.array(img.shape[:2][::-1]) - 1) // 2
+        rot_center = (np.array(im_rot.shape[:2][::-1]) - 1) // 2
+        org = yx - org_center
+        new = np.array(
+            [
+                org[0] * np.cos(a) + org[1] * np.sin(a),
+                -org[0] * np.sin(a) + org[1] * np.cos(a),
+            ]
+        )
+        rotated_pt = new + rot_center
+        return int(rotated_pt[1]), int(rotated_pt[0])
+
+    def get_observation(
+        self, observations, episode, task, *args: Any, **kwargs: Any
+    ):  # get waypoints along shortest path
+        waypoints_coord = self.get_waypoints_to_goal(episode)
+
+        if np.isnan(waypoints_coord).any():
+            task.is_stop_called = True
+            return np.zeros_like(self.map_shape, dtype=np.float32)
+        # get top down map
+        self.ep_id = int(episode.episode_id)
+        self.ctr += 1
+
+        # get local map from gt_top_down_map
+        # start = time.time()
+        episode_uniq_id = f"{episode.scene_id} {episode.episode_id}"
+        if episode_uniq_id != self._current_episode_id:
+            self._top_down_map = maps.get_topdown_map_from_sim(
+                self._sim,
+                map_resolution=self._map_resolution,
+                draw_border=False,
+                meters_per_pixel=self.meters_per_pixel,
+            )
+            self._current_episode_id = episode_uniq_id
+
+        curr_top_down_map = self._top_down_map.copy()
+        if self._rotate_map:
+            agent_rotation = self.get_polar_angle()
+            rot_angle = -(agent_rotation - np.pi)
+            top_down_map_rot = scipy.ndimage.interpolation.rotate(
+                curr_top_down_map, np.rad2deg(rot_angle), reshape=True
+            )
+            curr_top_down_map = top_down_map_rot
+
+        # blank_top_down_map = np.zeros_like(curr_top_down_map)
+        blank_top_down_map = curr_top_down_map
+        for waypoint in waypoints_coord:
+            a_x, a_y = maps.to_grid(
+                waypoint[2],
+                waypoint[0],
+                curr_top_down_map.shape[:2],
+                sim=self._sim,
+            )
+            if self._rotate_map:
+                ## rotate top down map to match agent's heading
+                a_x, a_y = self.get_rotated_point(
+                    curr_top_down_map,
+                    top_down_map_rot,
+                    np.array([a_x, a_y]),
+                    agent_rotation,
+                )
+            # blank_top_down_map[a_x, a_y] = 1.0
+            blank_top_down_map[a_x, a_y] = 2.0
+
+        pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
+        pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
+
+        local_top_down_map = self.crop_at_point(
+            blank_top_down_map,
+            (a_x, a_y),
+            self._map_resolution,
+        )
+        lh, lw = local_top_down_map.shape[:2]
+
+        local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
+        x_limit, y_limit = local_top_down_map_filled[:, :, 0].shape
+        local_top_down_map_filled[
+            pad_top : pad_top + lh, pad_left : pad_left + lw, 0
+        ] = local_top_down_map
+
+        # add a separate channel for agents
+        local_top_down_map_filled[::, 1] = np.zeros_like(
+            local_top_down_map_filled[::, 0]
+        )
+        mid_x = x_limit // 2
+        mid_y = y_limit // 2
+        rr, cc = disk((mid_x, mid_y), self.disk_radius)
+
+        local_top_down_map_filled[rr, cc, 1] = 1.0
+
+        # don't use log scale b/c we're adding it to the map
+        r, theta = self._get_goal_vector(episode, use_log_scale=False)
+
+        r_limit = (self._map_resolution // 2) * self.meters_per_pixel
+        goal_r = np.clip(r, -r_limit, r_limit)
+
+        x = (goal_r / self.meters_per_pixel) * np.cos(theta)
+        y = (goal_r / self.meters_per_pixel) * np.sin(theta)
+        mid = self._map_resolution // 2
+        row, col = np.clip(
+            int(mid - x),
+            0 + self.disk_radius,
+            x_limit - (self.disk_radius + 1),
+        ), np.clip(
+            int(mid - y),
+            0 + self.disk_radius,
+            y_limit - (self.disk_radius + 1),
+        )
+
+        rr, cc = disk((row, col), self.disk_radius)
+        local_top_down_map_filled[rr, cc, 1] = 1.0
+        self.save_map(local_top_down_map_filled, "local_map")
+
+        local_map = local_top_down_map_filled.astype(np.float32)
+        if np.isnan(local_map).any():
+            local_map = np.zeros_like(map)
+            task.is_stop_called = True
+        return local_map
+
+
 @registry.register_measure
 class Success(Measure):
     r"""Whether or not the agent succeeded at its task

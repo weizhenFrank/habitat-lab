@@ -12,19 +12,17 @@ import torch
 import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    ContextMapSensor,
-    ContextWaypointSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    IntegratedPointGoalNoisyGPSAndCompassSensor,
-)
+from habitat.tasks.nav.nav import (ContextMapSensor, ContextMapWaypointSensor,
+                                   ContextWaypointSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
 from habitat_baselines.common.baseline_registry import baseline_registry
-
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.rl.models.smt_state_encoder import SMTStateEncoder
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
@@ -142,7 +140,6 @@ class Policy(nn.Module, metaclass=abc.ABCMeta):
         distribution = self.action_distribution(features)
         value = self.critic(features)
 
-        print("action shape: ", action.shape)
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy()
 
@@ -591,12 +588,14 @@ class PointNavContextNet(PointNavBaselineNet):
                 nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
                 nn.ReLU(),
             )
-        if "context_map" in observation_space.keys():
+        if (
+            "context_map" in observation_space.keys()
+            or "context_map_waypoint" in observation_space.keys()
+        ):
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
-                from habitat_baselines.rl.ddppo.policy.resnet_policy import (
-                    ResNetEncoderContext,
-                )
+                from habitat_baselines.rl.ddppo.policy.resnet_policy import \
+                    ResNetEncoderContext
 
                 if "full" in self.cnn_type:
                     self.context_encoder = ResNetEncoderContext(
@@ -608,12 +607,13 @@ class PointNavContextNet(PointNavBaselineNet):
                     )
                     dim = np.prod(self.context_encoder.output_shape)
                 else:
-                    dim = 65536 if "resnet50" in self.cnn_type else 16384
-                    dim = (
-                        4096
-                        if observation_space["context_map"].shape[0] == 100
-                        else dim
+                    k = (
+                        "context_map"
+                        if "context_map" in observation_space.keys()
+                        else "context_map_waypoint"
                     )
+                    dim = 65536 if "resnet50" in self.cnn_type else 16384
+                    dim = 4096 if observation_space[k].shape[0] == 100 else dim
                     self.context_encoder = getattr(resnet, self.cnn_type)(2, 32, 32)
                 self.context_fc = nn.Sequential(
                     nn.Flatten(),
@@ -692,7 +692,10 @@ class PointNavContextNet(PointNavBaselineNet):
             te = self.tgt_encoder(goal_observations)
             x.append(te)
         ## Map observation
-        if ContextMapSensor.cls_uuid in observations:
+        if (
+            ContextMapSensor.cls_uuid in observations
+            or ContextMapWaypointSensor.cls_uuid in observations
+        ):
             map_ce = self.get_features(observations)
             x.append(map_ce)
         ## Waypoint observation
@@ -711,7 +714,11 @@ class PointNavContextNet(PointNavBaselineNet):
         return x_out, rnn_hidden_states, None
 
     def get_features(self, observations):
-        obs = observations[ContextMapSensor.cls_uuid]
+        if ContextMapSensor.cls_uuid in observations:
+            obs = observations[ContextMapSensor.cls_uuid]
+        else:
+            obs = observations[ContextMapWaypointSensor.cls_uuid]
+
         if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
             obs = obs.permute(0, 3, 1, 2)
         out = self.context_encoder(obs)

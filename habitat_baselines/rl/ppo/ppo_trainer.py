@@ -502,12 +502,26 @@ class PPOTrainer(BaseRLTrainer):
                         **obs_space.spaces,
                     }
                 )
-            else:
+            elif "CONTEXT_MAP_SENSOR" in str(self.config.TASK_CONFIG.TASK.SENSORS):
                 map_res = self.config.TASK_CONFIG.TASK.CONTEXT_MAP_SENSOR.MAP_RESOLUTION
                 context_shape = (map_res, map_res)
                 obs_space = spaces.Dict(
                     {
                         "context_map": spaces.Box(
+                            low=np.finfo(np.float32).min,
+                            high=np.finfo(np.float32).max,
+                            shape=context_shape,
+                            dtype=np.float32,
+                        ),
+                        **obs_space.spaces,
+                    }
+                )
+            else:
+                map_res = self.config.TASK_CONFIG.TASK.CONTEXT_MAP_SENSOR.MAP_RESOLUTION
+                context_shape = (map_res, map_res)
+                obs_space = spaces.Dict(
+                    {
+                        "context_map_waypoint": spaces.Box(
                             low=np.finfo(np.float32).min,
                             high=np.finfo(np.float32).max,
                             shape=context_shape,

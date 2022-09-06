@@ -79,15 +79,12 @@ class RolloutStorage:
         # This is kept outside for for backward compatibility with _collect_rollout_step
 
         # use_external_memory = False
-        if use_external_memory:
-            self.buffers["external_memory"] = torch.zeros(
-                self.em_size, numsteps + 1, num_envs, self.em_dim
-            )
-            self.buffers["external_memory_masks"] = torch.zeros(
-                numsteps + 1, num_envs, self.em_size
-            )
-            print("INIT MEMORY: ", self.buffers["external_memory"].shape)
-            print("INIT MEMORY MASKS: ", self.buffers["external_memory_masks"].shape)
+        self.buffers["external_memory"] = torch.zeros(
+            self.em_size, numsteps + 1, num_envs, self.em_dim
+        )
+        self.buffers["external_memory_masks"] = torch.zeros(
+            numsteps + 1, num_envs, self.em_size
+        )
 
         self.is_double_buffered = is_double_buffered
         self._nbuffers = 2 if is_double_buffered else 1
