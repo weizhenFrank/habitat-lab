@@ -9,18 +9,15 @@ import time
 from typing import Any, ClassVar, Dict, List, Tuple, Union
 
 import torch
-from numpy import ndarray
-from torch import Tensor
-
 from habitat import Config, logger
 from habitat.core.env import Env, RLEnv
 from habitat.core.vector_env import VectorEnv
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.rl.ddppo.ddp_utils import SAVE_STATE, is_slurm_batch_job
-from habitat_baselines.utils.common import (
-    get_checkpoint_id,
-    poll_checkpoint_folder,
-)
+from habitat_baselines.utils.common import (get_checkpoint_id,
+                                            poll_checkpoint_folder)
+from numpy import ndarray
+from torch import Tensor
 
 
 class BaseTrainer:
@@ -99,12 +96,10 @@ class BaseTrainer:
         with TensorboardWriter(
             self.config.TENSORBOARD_DIR, flush_secs=self.flush_secs
         ) as writer:
-            print('self.config.EVAL_CKPT_PATH_DIR',self.config.EVAL_CKPT_PATH_DIR)
+            print("self.config.EVAL_CKPT_PATH_DIR", self.config.EVAL_CKPT_PATH_DIR)
             if os.path.isfile(self.config.EVAL_CKPT_PATH_DIR):
                 # evaluate singe checkpoint
-                proposed_index = get_checkpoint_id(
-                    self.config.EVAL_CKPT_PATH_DIR
-                )
+                proposed_index = get_checkpoint_id(self.config.EVAL_CKPT_PATH_DIR)
                 if proposed_index is not None:
                     ckpt_idx = proposed_index
                 else:
@@ -217,10 +212,7 @@ class BaseRLTrainer(BaseTrainer):
         if self.config.NUM_CHECKPOINTS != -1:
             checkpoint_every = 1 / self.config.NUM_CHECKPOINTS
 
-            if (
-                self._last_checkpoint_percent + checkpoint_every
-                < self.percent_done()
-            ):
+            if self._last_checkpoint_percent + checkpoint_every < self.percent_done():
                 needs_checkpoint = True
                 self._last_checkpoint_percent = self.percent_done()
         else:
@@ -291,26 +283,19 @@ class BaseRLTrainer(BaseTrainer):
         prev_actions: Tensor,
         batch: Dict[str, Tensor],
         rgb_frames: Union[List[List[Any]], List[List[ndarray]]],
-    ) -> Tuple[
-        Union[VectorEnv, RLEnv, Env],
-        Tensor,
-        Tensor,
-        Tensor,
-        Tensor,
-        Dict[str, Tensor],
-        List[List[Any]],
-    ]:
+        test_em: None,
+    ):
         # pausing self.envs with no new episode
         if len(envs_to_pause) > 0:
             state_index = list(range(envs.num_envs))
             for idx in reversed(envs_to_pause):
                 state_index.pop(idx)
                 envs.pause_at(idx)
+                if test_em is not None:
+                    test_em.pop_at(idx)
 
             # indexing along the batch dimensions
-            test_recurrent_hidden_states = test_recurrent_hidden_states[
-                state_index
-            ]
+            test_recurrent_hidden_states = test_recurrent_hidden_states[state_index]
             not_done_masks = not_done_masks[state_index]
             current_episode_reward = current_episode_reward[state_index]
             prev_actions = prev_actions[state_index]
@@ -319,13 +304,24 @@ class BaseRLTrainer(BaseTrainer):
                 batch[k] = v[state_index]
 
             rgb_frames = [rgb_frames[i] for i in state_index]
-
-        return (
-            envs,
-            test_recurrent_hidden_states,
-            not_done_masks,
-            current_episode_reward,
-            prev_actions,
-            batch,
-            rgb_frames,
-        )
+        if test_em is None:
+            return (
+                envs,
+                test_recurrent_hidden_states,
+                not_done_masks,
+                current_episode_reward,
+                prev_actions,
+                batch,
+                rgb_frames,
+            )
+        else:
+            return (
+                envs,
+                test_recurrent_hidden_states,
+                not_done_masks,
+                test_em,
+                current_episode_reward,
+                prev_actions,
+                batch,
+                rgb_frames,
+            )

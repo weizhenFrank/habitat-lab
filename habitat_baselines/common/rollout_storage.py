@@ -8,7 +8,6 @@ import warnings
 
 import numpy as np
 import torch
-
 from habitat_baselines.common.tensor_dict import TensorDict
 
 
@@ -22,6 +21,10 @@ class RolloutStorage:
         observation_space,
         action_space,
         recurrent_hidden_state_size,
+        use_external_memory=False,
+        external_memory_size=150 + 128,
+        external_memory_capacity=150,
+        external_memory_dim=1088,
         num_recurrent_layers=1,
         action_shape: int = -1,
         is_double_buffered: bool = False,
@@ -41,7 +44,7 @@ class RolloutStorage:
                     dtype=observation_space.spaces[sensor].dtype,
                 )
             )
-            
+
         self.buffers["recurrent_hidden_states"] = torch.zeros(
             numsteps + 1,
             num_envs,
@@ -53,9 +56,7 @@ class RolloutStorage:
         self.buffers["value_preds"] = torch.zeros(numsteps + 1, num_envs, 1)
         self.buffers["returns"] = torch.zeros(numsteps + 1, num_envs, 1)
 
-        self.buffers["action_log_probs"] = torch.zeros(
-            numsteps + 1, num_envs, 1
-        )
+        self.buffers["action_log_probs"] = torch.zeros(numsteps + 1, num_envs, 1)
 
         if action_shape == -1:
             if action_space.__class__.__name__ == "ActionSpace":
@@ -63,22 +64,30 @@ class RolloutStorage:
             else:
                 action_shape = action_space.shape[0]
 
-        self.buffers["actions"] = torch.zeros(
-            numsteps + 1, num_envs, action_shape
-        )
-        self.buffers["prev_actions"] = torch.zeros(
-            numsteps + 1, num_envs, action_shape
-        )
-        if (
-            discrete_actions
-            and action_space.__class__.__name__ == "ActionSpace"
-        ):
+        self.buffers["actions"] = torch.zeros(numsteps + 1, num_envs, action_shape)
+        self.buffers["prev_actions"] = torch.zeros(numsteps + 1, num_envs, action_shape)
+        if discrete_actions and action_space.__class__.__name__ == "ActionSpace":
             self.buffers["actions"] = self.buffers["actions"].long()
             self.buffers["prev_actions"] = self.buffers["prev_actions"].long()
 
-        self.buffers["masks"] = torch.zeros(
-            numsteps + 1, num_envs, 1, dtype=torch.bool
-        )
+        self.buffers["masks"] = torch.zeros(numsteps + 1, num_envs, 1, dtype=torch.bool)
+
+        self.use_external_memory = use_external_memory
+        self.em_size = external_memory_size
+        self.em_capacity = external_memory_capacity
+        self.em_dim = external_memory_dim
+        # This is kept outside for for backward compatibility with _collect_rollout_step
+
+        # use_external_memory = False
+        if use_external_memory:
+            self.buffers["external_memory"] = torch.zeros(
+                self.em_size, numsteps + 1, num_envs, self.em_dim
+            )
+            self.buffers["external_memory_masks"] = torch.zeros(
+                numsteps + 1, num_envs, self.em_size
+            )
+            print("INIT MEMORY: ", self.buffers["external_memory"].shape)
+            print("INIT MEMORY MASKS: ", self.buffers["external_memory_masks"].shape)
 
         self.is_double_buffered = is_double_buffered
         self._nbuffers = 2 if is_double_buffered else 1
@@ -109,6 +118,7 @@ class RolloutStorage:
         value_preds=None,
         rewards=None,
         next_masks=None,
+        next_memory_features=None,
         buffer_index: int = 0,
     ):
         if not self.is_double_buffered:
@@ -119,6 +129,7 @@ class RolloutStorage:
             recurrent_hidden_states=next_recurrent_hidden_states,
             prev_actions=actions,
             masks=next_masks,
+            external_memory=next_memory_features,
         )
 
         current_step = dict(
@@ -156,15 +167,11 @@ class RolloutStorage:
     def after_update(self):
         self.buffers[0] = self.buffers[self.current_rollout_step_idx]
 
-        self.current_rollout_step_idxs = [
-            0 for _ in self.current_rollout_step_idxs
-        ]
+        self.current_rollout_step_idxs = [0 for _ in self.current_rollout_step_idxs]
 
     def compute_returns(self, next_value, use_gae, gamma, tau):
         if use_gae:
-            self.buffers["value_preds"][
-                self.current_rollout_step_idx
-            ] = next_value
+            self.buffers["value_preds"][self.current_rollout_step_idx] = next_value
             gae = 0
             for step in reversed(range(self.current_rollout_step_idx)):
                 delta = (
@@ -174,12 +181,8 @@ class RolloutStorage:
                     * self.buffers["masks"][step + 1]
                     - self.buffers["value_preds"][step]
                 )
-                gae = (
-                    delta + gamma * tau * gae * self.buffers["masks"][step + 1]
-                )
-                self.buffers["returns"][step] = (
-                    gae + self.buffers["value_preds"][step]
-                )
+                gae = delta + gamma * tau * gae * self.buffers["masks"][step + 1]
+                self.buffers["returns"][step] = gae + self.buffers["value_preds"][step]
         else:
             self.buffers["returns"][self.current_rollout_step_idx] = next_value
             for step in reversed(range(self.current_rollout_step_idx)):
@@ -193,11 +196,9 @@ class RolloutStorage:
     def recurrent_generator(self, advantages, num_mini_batch) -> TensorDict:
         num_environments = advantages.size(1)
         assert num_environments >= num_mini_batch, (
-            "Trainer requires the number of environments ({}) "
+            "Trainer requires the number of envirrecurrent_generatoronments ({}) "
             "to be greater than or equal to the number of "
-            "trainer mini batches ({}).".format(
-                num_environments, num_mini_batch
-            )
+            "trainer mini batches ({}).".format(num_environments, num_mini_batch)
         )
         if num_environments % num_mini_batch != 0:
             warnings.warn(
@@ -209,11 +210,91 @@ class RolloutStorage:
             )
         for inds in torch.randperm(num_environments).chunk(num_mini_batch):
             batch = self.buffers[0 : self.current_rollout_step_idx, inds]
-            batch["advantages"] = advantages[
-                0 : self.current_rollout_step_idx, inds
-            ]
-            batch["recurrent_hidden_states"] = batch[
-                "recurrent_hidden_states"
-            ][0:1]
+            batch["advantages"] = advantages[0 : self.current_rollout_step_idx, inds]
+            batch["recurrent_hidden_states"] = batch["recurrent_hidden_states"][0:1]
+            if self.use_external_memory:
+                batch["external_memory"] = batch["external_memory"][
+                    0 : self.current_rollout_step_idx, :, inds
+                ]
+                # batch["external_memory_masks"] = batch["external_memory_masks"][
+                #     0 : self.current_rollout_step_idx, inds
+                # ]
 
             yield batch.map(lambda v: v.flatten(0, 1))
+
+    @property
+    def external_memory(self):
+        return self.buffers["external_memory"].memory
+
+    @property
+    def external_memory_masks(self):
+        return self.buffers["external_memory"].masks
+
+    @property
+    def external_memory_idx(self):
+        return self.buffers["external_memory"].idx
+
+
+class ExternalMemory:
+    def __init__(self, num_envs, total_size, capacity, dim, num_copies=1):
+        r"""An external memory that keeps track of observations over time.
+        Inputs:
+            num_envs - number of parallel environments
+            capacity - total capacity of the memory per episode
+            total_size - capacity + additional buffer size for rollout updates
+            dim - size of observations
+            num_copies - number of copies of the data to maintain for efficient training
+        """
+        self.total_size = total_size
+        self.capacity = capacity
+        self.dim = dim
+
+        self.ext_masks = torch.zeros(num_envs, self.total_size)
+        self.ext_memory = torch.zeros(self.total_size, num_copies, num_envs, self.dim)
+        self.idx = 0
+
+    @classmethod
+    def from_tensor_dict(cls, tensor_dict):
+        instance = cls(1, 1, 1, 1, num_copies=1)
+        instance.ext_masks = tensor_dict["masks"]
+        instance.ext_memory = tensor_dict["memory"]
+        instance.idx = tensor_dict["idx"].item()
+        instance.total_size = tensor_dict["total_size"].item()
+        instance.capacity = tensor_dict["capacity"].item()
+        instance.dim = tensor_dict["dim"].item()
+        return instance
+
+    def to_tensor_dict(self):
+        device = self.ext_masks.device
+        t = TensorDict()
+        t["ext_masks"] = self.ext_masks
+        t["ext_memory"] = self.ext_memory
+        t["idx"] = torch.tensor([self.idx], device=device)
+        t["total_size"] = torch.tensor([self.total_size], device=device)
+        t["capacity"] = torch.tensor([self.capacity], device=device)
+        t["dim"] = torch.tensor([self.dim], device=device)
+        return t
+
+    def insert(self, em_features, not_done_masks):
+        # Update memory storage and add new memory as a valid entry
+        self.ext_memory[self.idx].copy_(em_features.unsqueeze(0))
+        # Account for overflow capacity
+        capacity_overflow_flag = self.ext_masks.sum(1) == self.capacity
+        assert not torch.any(self.ext_masks.sum(1) > self.capacity)
+        self.ext_masks[capacity_overflow_flag, self.idx - self.capacity] = 0.0
+        self.ext_masks[:, self.idx] = 1.0
+        # Mask out the entire memory for the next observation if episode done
+        self.ext_masks *= not_done_masks
+        self.idx = (self.idx + 1) % self.total_size
+
+    def pop_at(self, idx):
+        self.masks = torch.cat(
+            [self.ext_masks[:idx, :], self.ext_masks[idx + 1 :, :]], dim=0
+        )
+        self.ext_memory = torch.cat(
+            [self.ext_memory[:, :, :idx, :], self.ext_memory[:, :, idx + 1 :, :]], dim=2
+        )
+
+    def to(self, device):
+        self.ext_masks = self.ext_masks.to(device)
+        self.ext_memory = self.ext_memory.to(device)

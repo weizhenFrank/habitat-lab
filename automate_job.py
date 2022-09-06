@@ -12,7 +12,8 @@ import sys
 automate_command = "python " + " ".join(sys.argv)
 HABITAT_LAB = "/coc/testnvme/jtruong33/google_nav/habitat-lab"
 CONDA_ENV = "/nethome/jtruong33/miniconda3/envs/habitat-outdoor/bin/python"
-RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
+# RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
+RESULTS = "/coc/testnvme/jtruong33/results/outdoor_nav_results"
 SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "slurm_template.sh")
 EVAL_SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "eval_slurm_template.sh")
 
@@ -27,9 +28,7 @@ parser.add_argument("-rr", "--robot-radius", type=float, default=-1.0)
 parser.add_argument("-c", "--control-type", default="kinematic")
 parser.add_argument("-p", "--partition", default="long")
 parser.add_argument("-s", "--sliding", default=False, action="store_true")
-parser.add_argument(
-    "-nct", "--no-contact-test", default=False, action="store_true"
-)
+parser.add_argument("-nct", "--no-contact-test", default=False, action="store_true")
 parser.add_argument("-nhv", "--no-hor-vel", default=False, action="store_true")
 parser.add_argument("-cp", "--collision-penalty", type=float, default=0.003)
 parser.add_argument("-bp", "--backwards-penalty", type=float, default=0.03)
@@ -39,28 +38,18 @@ parser.add_argument("-rpl", "--randomize-pitch-min", type=float, default=0.0)
 parser.add_argument("-rpu", "--randomize-pitch-max", type=float, default=0.0)
 parser.add_argument("-pg", "--project-goal", type=float, default=-1.0)
 parser.add_argument("-ts", "--time-step", type=float, default=1.0)
-parser.add_argument(
-    "-odn", "--outdoor-nav", default=False, action="store_true"
-)
+parser.add_argument("-odn", "--outdoor-nav", default=False, action="store_true")
 parser.add_argument("-cm", "--context-map", default=False, action="store_true")
-parser.add_argument(
-    "-cw", "--context-waypoint", default=False, action="store_true"
-)
+parser.add_argument("-cw", "--context-waypoint", default=False, action="store_true")
 parser.add_argument(
     "-wpte", "--use-waypoint-encoder", default=False, action="store_true"
 )
-parser.add_argument(
-    "-crm", "--context-resnet-map", default=False, action="store_true"
-)
+parser.add_argument("-crm", "--context-resnet-map", default=False, action="store_true")
 parser.add_argument(
     "-crw", "--context-resnet-waypoint", default=False, action="store_true"
 )
-parser.add_argument(
-    "-sc", "--second-channel", default=False, action="store_true"
-)
-parser.add_argument(
-    "-mc", "--multi-channel", default=False, action="store_true"
-)
+parser.add_argument("-sc", "--second-channel", default=False, action="store_true")
+parser.add_argument("-mc", "--multi-channel", default=False, action="store_true")
 parser.add_argument("-csn", "--context-sensor-noise", type=float, default=0.0)
 parser.add_argument("-chs", "--context-hidden-size", type=int, default=512)
 parser.add_argument("-ths", "--tgt-hidden-size", type=int, default=512)
@@ -68,24 +57,16 @@ parser.add_argument("-cd", "--context-debug", default="")
 parser.add_argument("-ct", "--context-type", default="MAP")
 parser.add_argument("-mr", "--map-resolution", type=int, default=100)
 parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.5)
-parser.add_argument(
-    "-rotm", "--rotate-map", default=False, action="store_true"
-)
-parser.add_argument(
-    "-lpg", "--log-pointgoal", default=False, action="store_true"
-)
+parser.add_argument("-rotm", "--rotate-map", default=False, action="store_true")
+parser.add_argument("-lpg", "--log-pointgoal", default=False, action="store_true")
 parser.add_argument("-lstd", "--log-std", default=False, action="store_true")
-parser.add_argument(
-    "-pa", "--use-prev-action", default=False, action="store_true"
-)
+parser.add_argument("-pa", "--use-prev-action", default=False, action="store_true")
 parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
 parser.add_argument("-rnnt", "--rnn-type", default="GRU")
 parser.add_argument("-nrl", "--num_recurrent_layers", type=int, default=1)
 parser.add_argument("-tgte", "--target_encoding", default="linear_2")
 parser.add_argument("-ft", "--finetune", default=False, action="store_true")
-parser.add_argument(
-    "-npg", "--noisy-pointgoal", default=False, action="store_true"
-)
+parser.add_argument("-npg", "--noisy-pointgoal", default=False, action="store_true")
 parser.add_argument("--constraint", default="x")
 
 ## options for dataset are hm3d_gibson, hm3d, gibson
@@ -95,35 +76,23 @@ parser.add_argument("-ne", "--num_environments", type=int, default=24)
 parser.add_argument("-ngpu", "--num_gpus", type=int, default=8)
 
 parser.add_argument("-g", "--use_gray", default=False, action="store_true")
-parser.add_argument(
-    "-gd", "--use_gray_depth", default=False, action="store_true"
-)
+parser.add_argument("-gd", "--use_gray_depth", default=False, action="store_true")
 parser.add_argument("--coda", default=False, action="store_true")
 
 parser.add_argument("--splitnet", default=False, action="store_true")
-parser.add_argument(
-    "-sn", "--surface_normal", default=False, action="store_true"
-)
+parser.add_argument("-sn", "--surface_normal", default=False, action="store_true")
 parser.add_argument("-ve", "--visual-encoder", default="resnet")
 parser.add_argument("-ml", "--motion_loss", default=False, action="store_true")
 
 parser.add_argument("-2cnn", "--two_cnns", default=False, action="store_true")
 
-parser.add_argument(
-    "-pn", "--pepper_noise", default=False, action="store_true"
-)
-parser.add_argument(
-    "-rn", "--redwood_noise", default=False, action="store_true"
-)
+parser.add_argument("-pn", "--pepper_noise", default=False, action="store_true")
+parser.add_argument("-rn", "--redwood_noise", default=False, action="store_true")
 parser.add_argument("-mb", "--median_blur", default=False, action="store_true")
 parser.add_argument("-ks", "--kernel_size", type=float, default=9)
 parser.add_argument("-np", "--noise_percent", type=float, default=0.4)
-parser.add_argument(
-    "-cn", "--cutout_noise", default=False, action="store_true"
-)
-parser.add_argument(
-    "-curr", "--curriculum", default=False, action="store_true"
-)
+parser.add_argument("-cn", "--cutout_noise", default=False, action="store_true")
+parser.add_argument("-curr", "--curriculum", default=False, action="store_true")
 
 # Evaluation
 parser.add_argument("-e", "--eval", default=False, action="store_true")
@@ -136,9 +105,7 @@ parser.add_argument("--ext", default="")
 args = parser.parse_args()
 
 if args.splitnet:
-    EXP_YAML = (
-        "habitat_baselines/config/pointnav/ddppo_pointnav_spot_splitnet.yaml"
-    )
+    EXP_YAML = "habitat_baselines/config/pointnav/ddppo_pointnav_spot_splitnet.yaml"
 else:
     EXP_YAML = "habitat_baselines/config/pointnav/ddppo_pointnav_spot.yaml"
 
@@ -150,9 +117,7 @@ else:
 experiment_name = args.experiment_name
 
 dst_dir = os.path.join(RESULTS, experiment_name)
-eval_dst_dir = os.path.join(
-    RESULTS, experiment_name, "eval", args.control_type
-)
+eval_dst_dir = os.path.join(RESULTS, experiment_name, "eval", args.control_type)
 
 exp_yaml_path = os.path.join(HABITAT_LAB, EXP_YAML)
 task_yaml_path = os.path.join(HABITAT_LAB, TASK_YAML)
@@ -191,16 +156,12 @@ if args.no_contact_test:
     eval_dst_dir += f"_no_contact_test"
 
 new_eval_task_yaml_path = (
-    os.path.join(eval_dst_dir, os.path.basename(task_yaml_path)).split(
-        ".yaml"
-    )[0]
+    os.path.join(eval_dst_dir, os.path.basename(task_yaml_path)).split(".yaml")[0]
     + exp_name
     + ".yaml"
 )
 new_eval_exp_yaml_path = (
-    os.path.join(eval_dst_dir, os.path.basename(exp_yaml_path)).split(".yaml")[
-        0
-    ]
+    os.path.join(eval_dst_dir, os.path.basename(exp_yaml_path)).split(".yaml")[0]
     + exp_name
     + ".yaml"
 )
@@ -232,9 +193,7 @@ robot_radius = robot_radius_dict[robot]
 if not args.eval:
     # Create directory
     if os.path.isdir(dst_dir):
-        response = input(
-            f"'{dst_dir}' already exists. Delete or abort? [d/A]: "
-        )
+        response = input(f"'{dst_dir}' already exists. Delete or abort? [d/A]: ")
         if response == "d":
             print(f"Deleting {dst_dir}")
             shutil.rmtree(dst_dir)
@@ -246,10 +205,7 @@ if not args.eval:
 
     with open(os.path.join(dst_dir, "automate_job_cmd.txt"), "w") as f:
         f.write(automate_command)
-    print(
-        "Saved automate command: "
-        + os.path.join(dst_dir, "automate_job_cmd.txt")
-    )
+    print("Saved automate command: " + os.path.join(dst_dir, "automate_job_cmd.txt"))
 
     # Create task yaml file, using file within Habitat Lab repo as a template
     with open(task_yaml_path) as f:
@@ -283,13 +239,9 @@ if not args.eval:
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
             elif args.context_map or args.context_resnet_map:
-                task_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
+                task_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
             elif args.context_waypoint or args.context_resnet_waypoint:
-                task_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
+                task_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             task_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    BIN_POINTGOAL:"):
@@ -300,9 +252,7 @@ if not args.eval:
         elif i.startswith("    MAP_RESOLUTION:"):
             task_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
         elif i.startswith("    METERS_PER_PIXEL:"):
-            task_yaml_data[
-                idx
-            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
+            task_yaml_data[idx] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
         elif i.startswith("    ROTATE_MAP:"):
             if args.rotate_map:
                 task_yaml_data[idx] = f"    ROTATE_MAP: True"
@@ -313,9 +263,7 @@ if not args.eval:
             if args.multi_channel:
                 task_yaml_data[idx] = f"    MULTI_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
-            task_yaml_data[
-                idx
-            ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            task_yaml_data[idx] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
         elif i.startswith("    DEBUG:"):
             task_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("    CONTEXT_TYPE:"):
@@ -340,13 +288,9 @@ if not args.eval:
             if args.no_hor_vel:
                 task_yaml_data[idx] = "      HOR_VEL_RANGE: [ 0.0, 0.0 ]"
         elif i.startswith("      MIN_RAND_PITCH:"):
-            task_yaml_data[
-                idx
-            ] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
+            task_yaml_data[idx] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
         elif i.startswith("      MAX_RAND_PITCH:"):
-            task_yaml_data[
-                idx
-            ] = f"      MAX_RAND_PITCH: {args.randomize_pitch_max}"
+            task_yaml_data[idx] = f"      MAX_RAND_PITCH: {args.randomize_pitch_max}"
         elif i.startswith("      TIME_STEP:"):
             task_yaml_data[idx] = f"      TIME_STEP: {args.time_step}"
             if args.control_type == "dynamic":
@@ -419,9 +363,7 @@ if not args.eval:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_spot_unfurnished_0.4_single_floor_long/{split}/{split}.json.gz"
                 task_yaml_data[idx] = f"  DATA_PATH: {data_path}"
         elif i.startswith("      noise_multiplier:"):
-            task_yaml_data[
-                idx
-            ] = f"      noise_multiplier: {args.noise_percent}"
+            task_yaml_data[idx] = f"      noise_multiplier: {args.noise_percent}"
     with open(new_task_yaml_path, "w") as f:
         f.write("\n".join(task_yaml_data))
     print("Created " + new_task_yaml_path)
@@ -432,32 +374,22 @@ if not args.eval:
 
     for idx, i in enumerate(exp_yaml_data):
         if i.startswith("BASE_TASK_CONFIG_PATH:"):
-            exp_yaml_data[
-                idx
-            ] = f"BASE_TASK_CONFIG_PATH: '{new_task_yaml_path}'"
+            exp_yaml_data[idx] = f"BASE_TASK_CONFIG_PATH: '{new_task_yaml_path}'"
         elif i.startswith("TOTAL_NUM_STEPS:"):
             max_num_steps = 5e8 if args.control_type == "kinematic" else 5e7
             exp_yaml_data[idx] = f"TOTAL_NUM_STEPS: {max_num_steps}"
         elif i.startswith("TENSORBOARD_DIR:"):
-            exp_yaml_data[
-                idx
-            ] = f"TENSORBOARD_DIR:    '{os.path.join(dst_dir, 'tb')}'"
+            exp_yaml_data[idx] = f"TENSORBOARD_DIR:    '{os.path.join(dst_dir, 'tb')}'"
         elif i.startswith("NUM_ENVIRONMENTS:"):
             exp_yaml_data[idx] = f"NUM_ENVIRONMENTS: {args.num_environments}"
             if "ferst" in args.dataset or "coda" in args.dataset:
                 exp_yaml_data[idx] = "NUM_ENVIRONMENTS: 1"
         elif i.startswith("  COLLISION_PENALTY:"):
-            exp_yaml_data[
-                idx
-            ] = f"  COLLISION_PENALTY: {args.collision_penalty}"
+            exp_yaml_data[idx] = f"  COLLISION_PENALTY: {args.collision_penalty}"
         elif i.startswith("  BACKWARDS_PENALTY:"):
-            exp_yaml_data[
-                idx
-            ] = f"  BACKWARDS_PENALTY: {args.backwards_penalty}"
+            exp_yaml_data[idx] = f"  BACKWARDS_PENALTY: {args.backwards_penalty}"
         elif i.startswith("  ANG_ACCEL_PENALTY_COEFF:"):
-            exp_yaml_data[
-                idx
-            ] = f"  ANG_ACCEL_PENALTY_COEFF: {args.acc_penalty}"
+            exp_yaml_data[idx] = f"  ANG_ACCEL_PENALTY_COEFF: {args.acc_penalty}"
         elif i.startswith("SENSORS:"):
             if args.use_gray:
                 exp_yaml_data[
@@ -496,9 +428,7 @@ if not args.eval:
             if args.use_waypoint_encoder:
                 exp_yaml_data[idx] = f"    use_waypoint_encoder: True"
         elif i.startswith("    context_hidden_size:"):
-            exp_yaml_data[
-                idx
-            ] = f"    context_hidden_size: {args.context_hidden_size}"
+            exp_yaml_data[idx] = f"    context_hidden_size: {args.context_hidden_size}"
         elif i.startswith("    tgt_hidden_size:"):
             exp_yaml_data[idx] = f"    tgt_hidden_size: {args.tgt_hidden_size}"
         elif i.startswith("    use_prev_action:"):
@@ -518,26 +448,22 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if args.context_resnet_map or args.context_resnet_waypoint:
                 exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
+            if args.rnn_type == "TRANSFORMER":
+                exp_yaml_data[idx] = "    name: PointNavContextSMTPolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
-                exp_yaml_data[
-                    idx
-                ] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
+                exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
             elif args.cutout_noise:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
             elif args.median_blur:
-                exp_yaml_data[
-                    idx
-                ] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
+                exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
         elif i.startswith("        NOISE_PERCENT:"):
             exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
         elif i.startswith("        KERNEL_SIZE:"):
             exp_yaml_data[idx] = f"        KERNEL_SIZE: {args.kernel_size}"
         elif i.startswith("    decoder_output:"):
             if args.splitnet and args.surface_normal:
-                exp_yaml_data[
-                    idx
-                ] = "    decoder_output: ['depth', 'surface_normals']"
+                exp_yaml_data[idx] = "    decoder_output: ['depth', 'surface_normals']"
         elif i.startswith("    use_motion_loss:"):
             if args.splitnet and args.motion_loss:
                 exp_yaml_data[idx] = "    use_visual_loss: True"
@@ -558,9 +484,7 @@ if not args.eval:
                         idx
                     ] = f"    tasks: ['VisualReconstructionTask', 'EgomotionPredictionTask']"
                 else:
-                    exp_yaml_data[
-                        idx
-                    ] = f"    tasks: ['VisualReconstructionTask']"
+                    exp_yaml_data[idx] = f"    tasks: ['VisualReconstructionTask']"
         elif i.startswith("  USE_OUTDOOR:"):
             if args.outdoor_nav:
                 exp_yaml_data[idx] = f"  USE_OUTDOOR: True"
@@ -574,11 +498,11 @@ if not args.eval:
             if args.finetune:
                 exp_yaml_data[idx] = f"    pretrained: True"
         elif i.startswith("    rnn_type:"):
-            exp_yaml_data[idx] = f"    rnn_type: '{args.rnn_type}'"
+            exp_yaml_data[idx] = f"    rnn_type: {args.rnn_type}"
         elif i.startswith("    num_recurrent_layers:"):
             exp_yaml_data[
                 idx
-            ] = f"    num_recurrent_layers: '{args.num_recurrent_layers}'"
+            ] = f"    num_recurrent_layers: {args.num_recurrent_layers}"
     with open(new_exp_yaml_path, "w") as f:
         f.write("\n".join(exp_yaml_data))
     print("Created " + new_exp_yaml_path)
@@ -589,9 +513,7 @@ if not args.eval:
         slurm_data = slurm_data.replace("$TEMPLATE", experiment_name)
         slurm_data = slurm_data.replace("$CONDA_ENV", CONDA_ENV)
         slurm_data = slurm_data.replace("$HABITAT_REPO_PATH", HABITAT_LAB)
-        slurm_data = slurm_data.replace(
-            "$LOG", os.path.join(dst_dir, experiment_name)
-        )
+        slurm_data = slurm_data.replace("$LOG", os.path.join(dst_dir, experiment_name))
         slurm_data = slurm_data.replace("$CONFIG_YAML", new_exp_yaml_path)
         slurm_data = slurm_data.replace("$PARTITION", args.partition)
     if args.debug:
@@ -603,13 +525,9 @@ if not args.eval:
             "# CONSTRAINT", "#SBATCH --constraint rtx_6000|a40"
         )
     elif args.constraint == "6000":
-        slurm_data = slurm_data.replace(
-            "# CONSTRAINT", "#SBATCH --constraint rtx_6000"
-        )
+        slurm_data = slurm_data.replace("# CONSTRAINT", "#SBATCH --constraint rtx_6000")
     elif args.constraint == "a40":
-        slurm_data = slurm_data.replace(
-            "# CONSTRAINT", "#SBATCH --constraint a40"
-        )
+        slurm_data = slurm_data.replace("# CONSTRAINT", "#SBATCH --constraint a40")
     slurm_path = os.path.join(dst_dir, experiment_name + ".sh")
     with open(slurm_path, "w") as f:
         f.write(slurm_data)
@@ -634,8 +552,7 @@ else:
     with open(os.path.join(eval_dst_dir, "automate_job_cmd.txt"), "w") as f:
         f.write(automate_command)
     print(
-        "Saved automate command: "
-        + os.path.join(eval_dst_dir, "automate_job_cmd.txt")
+        "Saved automate command: " + os.path.join(eval_dst_dir, "automate_job_cmd.txt")
     )
 
     # Create task yaml file, using file within Habitat Lab repo as a template
@@ -665,9 +582,7 @@ else:
         elif i.startswith("    MAP_RESOLUTION:"):
             eval_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
         elif i.startswith("    METERS_PER_PIXEL:"):
-            eval_yaml_data[
-                idx
-            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
+            eval_yaml_data[idx] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
         elif i.startswith("    ROTATE_MAP:"):
             if args.rotate_map:
                 eval_yaml_data[idx] = f"    ROTATE_MAP: True"
@@ -678,9 +593,7 @@ else:
             if args.multi_channel:
                 eval_yaml_data[idx] = f"    MULTI_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
-            eval_yaml_data[
-                idx
-            ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            eval_yaml_data[idx] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
         elif i.startswith("    DEBUG:"):
             eval_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("    CONTEXT_TYPE:"):
@@ -699,13 +612,9 @@ else:
                     idx
                 ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
             elif args.context_map or args.context_resnet_map:
-                eval_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
+                eval_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
             elif args.context_waypoint or args.context_resnet_waypoint:
-                eval_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
+                eval_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             eval_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    BIN_POINTGOAL:"):
@@ -731,13 +640,9 @@ else:
             if args.no_hor_vel:
                 eval_yaml_data[idx] = "      HOR_VEL_RANGE: [ 0.0, 0.0 ]"
         elif i.startswith("      MIN_RAND_PITCH:"):
-            eval_yaml_data[
-                idx
-            ] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
+            eval_yaml_data[idx] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
         elif i.startswith("      MAX_RAND_PITCH:"):
-            eval_yaml_data[
-                idx
-            ] = f"      MAX_RAND_PITCH: {args.randomize_pitch_max}"
+            eval_yaml_data[idx] = f"      MAX_RAND_PITCH: {args.randomize_pitch_max}"
         elif i.startswith("      TIME_STEP:"):
             eval_yaml_data[idx] = f"      TIME_STEP: {args.time_step}"
             if args.control_type == "dynamic":
@@ -776,7 +681,9 @@ else:
             elif args.dataset == "google_v3":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val/content/boulder4772-2_v3.json.gz"
             elif args.dataset == "google_val":
-                data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_all/val.json.gz"
+                data_path = (
+                    "/coc/testnvme/jtruong33/data/datasets/google/val_all/val.json.gz"
+                )
             elif args.dataset == "ny":
                 data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
             elif args.dataset == "ny_train":
@@ -805,9 +712,7 @@ else:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson_ny/val_mini/val_mini.json.gz"
             eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
         elif i.startswith("      noise_multiplier:"):
-            eval_yaml_data[
-                idx
-            ] = f"      noise_multiplier: {args.noise_percent}"
+            eval_yaml_data[idx] = f"      noise_multiplier: {args.noise_percent}"
     with open(new_eval_task_yaml_path, "w") as f:
         f.write("\n".join(eval_yaml_data))
     print("Created " + new_eval_task_yaml_path)
@@ -840,13 +745,11 @@ else:
             if args.context_map or args.context_waypoint:
                 eval_exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if args.context_resnet_map or args.context_resnet_waypoint:
-                eval_exp_yaml_data[
-                    idx
-                ] = "    name: PointNavResNetContextPolicy"
+                eval_exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
+            if args.rnn_type == "TRANSFORMER":
+                eval_exp_yaml_data[idx] = "    name: PointNavContextSMTPolicy"
         elif i.startswith("  COLLISION_PENALTY:"):
-            eval_exp_yaml_data[
-                idx
-            ] = f"  COLLISION_PENALTY: {args.collision_penalty}"
+            eval_exp_yaml_data[idx] = f"  COLLISION_PENALTY: {args.collision_penalty}"
         elif i.startswith("CHECKPOINT_FOLDER:"):
             eval_exp_yaml_data[
                 idx
@@ -873,9 +776,7 @@ else:
             else:
                 eval_exp_yaml_data[idx] = "VIDEO_OPTION: []"
         elif i.startswith("NUM_ENVIRONMENTS:"):
-            eval_exp_yaml_data[
-                idx
-            ] = f"NUM_ENVIRONMENTS: {args.num_environments}"
+            eval_exp_yaml_data[idx] = f"NUM_ENVIRONMENTS: {args.num_environments}"
             if (
                 "ferst" in args.dataset
                 or "coda" in args.dataset
@@ -921,9 +822,7 @@ else:
             if args.log_std:
                 eval_exp_yaml_data[idx] = "      use_log_std: True"
         elif i.startswith("    tgt_encoding:"):
-            eval_exp_yaml_data[
-                idx
-            ] = f"    tgt_encoding: '{args.target_encoding}'"
+            eval_exp_yaml_data[idx] = f"    tgt_encoding: '{args.target_encoding}'"
         elif i.startswith("    use_waypoint_encoder:"):
             if args.use_waypoint_encoder:
                 eval_exp_yaml_data[idx] = f"    use_waypoint_encoder: True"
@@ -932,33 +831,21 @@ else:
                 eval_exp_yaml_data[idx] = "    num_cnns: 2"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
-                eval_exp_yaml_data[
-                    idx
-                ] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
+                eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
             elif args.cutout_noise:
-                eval_exp_yaml_data[
-                    idx
-                ] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
+                eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
             elif args.median_blur:
-                eval_exp_yaml_data[
-                    idx
-                ] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
+                eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
         elif i.startswith("        NOISE_PERCENT:"):
-            eval_exp_yaml_data[
-                idx
-            ] = f"        NOISE_PERCENT: {args.noise_percent}"
+            eval_exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
         elif i.startswith("        KERNEL_SIZE:"):
-            eval_exp_yaml_data[
-                idx
-            ] = f"        KERNEL_SIZE: {args.kernel_size}"
+            eval_exp_yaml_data[idx] = f"        KERNEL_SIZE: {args.kernel_size}"
         elif i.startswith("    context_hidden_size:"):
             eval_exp_yaml_data[
                 idx
             ] = f"    context_hidden_size: {args.context_hidden_size}"
         elif i.startswith("    tgt_hidden_size:"):
-            eval_exp_yaml_data[
-                idx
-            ] = f"    tgt_hidden_size: {args.tgt_hidden_size}"
+            eval_exp_yaml_data[idx] = f"    tgt_hidden_size: {args.tgt_hidden_size}"
         elif i.startswith("    use_prev_action:"):
             if args.use_prev_action:
                 eval_exp_yaml_data[idx] = f"    use_prev_action: True"
@@ -975,15 +862,13 @@ else:
                     visual_encoder = "ShallowVisualEncoder"
                 elif args.visual_encoder == "resnet":
                     visual_encoder = "BaseResNetEncoder"
-                eval_exp_yaml_data[
-                    idx
-                ] = f"    visual_encoder: {visual_encoder}"
+                eval_exp_yaml_data[idx] = f"    visual_encoder: {visual_encoder}"
         elif i.startswith("    rnn_type:"):
-            eval_exp_yaml_data[idx] = f"    rnn_type: '{args.rnn_type}'"
+            eval_exp_yaml_data[idx] = f"    rnn_type: {args.rnn_type}"
         elif i.startswith("    num_recurrent_layers:"):
             eval_exp_yaml_data[
                 idx
-            ] = f"    num_recurrent_layers: '{args.num_recurrent_layers}'"
+            ] = f"    num_recurrent_layers: {args.num_recurrent_layers}"
 
     if os.path.isdir(tb_dir):
         response = input(
@@ -1016,9 +901,7 @@ else:
         slurm_data = slurm_data.replace("$CONFIG_YAML", new_eval_exp_yaml_path)
         slurm_data = slurm_data.replace("$PARTITION", args.partition)
         if args.partition == "overcap":
-            slurm_data = slurm_data.replace(
-                "# ACCOUNT", "#SBATCH --account overcap"
-            )
+            slurm_data = slurm_data.replace("# ACCOUNT", "#SBATCH --account overcap")
     slurm_path = os.path.join(eval_dst_dir, eval_experiment_name + ".sh")
     with open(slurm_path, "w") as f:
         f.write(slurm_data)

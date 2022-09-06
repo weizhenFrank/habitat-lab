@@ -141,9 +141,7 @@ class TensorDict(Dict[str, Union["TensorDict", torch.Tensor]]):
 
         return dst
 
-    def map(
-        self, func: Callable[[torch.Tensor], torch.Tensor]
-    ) -> "TensorDict":
+    def map(self, func: Callable[[torch.Tensor], torch.Tensor]) -> "TensorDict":
         return self.map_func(func, self)
 
     def map_in_place(
