@@ -1051,14 +1051,14 @@ class ContextMapSensor(PointGoalSensor):
 
 
 @registry.register_sensor
-class ContextMapWaypointSensor(Sensor):
+class ContextMapTrajectorySensor(PointGoalSensor):
     r"""Sensor for passing in additional context (map, waypoint, etc.)
 
     Args:
         sim: reference to the simulator for calculating task observations.
         config: config for the sensor.
     """
-    cls_uuid: str = "context_map_waypoint"
+    cls_uuid: str = "context_map_trajectory"
 
     def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
         self._sim = sim
@@ -1074,10 +1074,12 @@ class ContextMapWaypointSensor(Sensor):
         self.disk_radius = 1.0 / self.meters_per_pixel
         self._current_episode_id = None
         self._top_down_map = None
+        self.blank_top_down_map = None
 
         self.ep_id = 0
         self.ctr = 0
 
+        print("INIT MAP TRAJECTORY")
         super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -1093,15 +1095,21 @@ class ContextMapWaypointSensor(Sensor):
     def save_map(self, top_down_map, name, agent_coord=None):
         if self.save_map_debug:
             if top_down_map.ndim > 2:
-                top_down_map = top_down_map[:, :, 0]
+                td_map = top_down_map[:, :, 0]
+                agent_map = top_down_map[:, :, 1]
 
-            color_map = maps.colorize_topdown_map(top_down_map)
+            color_map = maps.colorize_topdown_map(td_map)
+            agent_color_map = maps.colorize_topdown_map(agent_map)
 
             save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            agent_save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/AGENT_{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
             cv2.imwrite(
                 f"{save_name}",
                 color_map,
-                # top_down_map * 255.0,
+            )
+            cv2.imwrite(
+                f"{agent_save_name}",
+                agent_color_map,
             )
             print(f"saved: {save_name}")
 
@@ -1133,43 +1141,28 @@ class ContextMapWaypointSensor(Sensor):
             return np.array([np.log(rho), wrap_heading(-phi)], dtype=np.float32)
         return np.array([rho, wrap_heading(-phi)], dtype=np.float32)
 
-    def interp_pts(self, curr_pt, next_pt, thresh):
-        rho = np.linalg.norm(next_pt - curr_pt)
-        if int(rho) > thresh:
-            x_new = np.linspace(
-                curr_pt[0],
-                next_pt[0],
-                num=int(np.ceil(rho / thresh)),
-                endpoint=False,
-            )
-            x = [curr_pt[0], next_pt[0] + 1e-5]
-            y = [curr_pt[2], next_pt[2] + 1e-5]
-            f = interp1d(x, y)
-            y_new = f(x_new)
-
-            interp_pts = np.array(
-                [(x_new[i], curr_pt[1], y_new[i]) for i in range(len(y_new))]
-            )
-        else:
-            return np.array([curr_pt, next_pt])
-
-        return interp_pts
-
-    def get_waypoints_to_goal(self, episode):
+    def draw_trajectory(self, episode, top_down_map):
         agent_position = self._sim.get_agent_state().position
         for goal in episode.goals:
             _shortest_path_points = self._sim.get_straight_shortest_path_points(
                 agent_position, goal.position
             )
-            all_wpts = []
-            for i in range(len(_shortest_path_points) - 1):
-                curr_pt = _shortest_path_points[i]
-                next_pt = _shortest_path_points[i + 1]
-                all_wpts.extend(
-                    self.interp_pts(curr_pt, next_pt, self.meters_per_pixel)
+            self._shortest_path_points = [
+                maps.to_grid(
+                    p[2],
+                    p[0],
+                    self._top_down_map.shape[0:2],
+                    sim=self._sim,
                 )
-            all_wpts = all_wpts[1:]
-        return np.array(all_wpts)
+                for p in _shortest_path_points
+            ]
+            maps.draw_path(
+                top_down_map,
+                self._shortest_path_points,
+                2.0,
+                int(self.disk_radius),
+            )
+            agent_position = goal.position
 
     def get_polar_angle(self):
         agent_state = self._sim.get_agent_state()
@@ -1212,14 +1205,7 @@ class ContextMapWaypointSensor(Sensor):
         rotated_pt = new + rot_center
         return int(rotated_pt[1]), int(rotated_pt[0])
 
-    def get_observation(
-        self, observations, episode, task, *args: Any, **kwargs: Any
-    ):  # get waypoints along shortest path
-        waypoints_coord = self.get_waypoints_to_goal(episode)
-
-        if np.isnan(waypoints_coord).any():
-            task.is_stop_called = True
-            return np.zeros_like(self.map_shape, dtype=np.float32)
+    def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
         # get top down map
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
@@ -1234,42 +1220,41 @@ class ContextMapWaypointSensor(Sensor):
                 draw_border=False,
                 meters_per_pixel=self.meters_per_pixel,
             )
-            self._current_episode_id = episode_uniq_id
 
-        curr_top_down_map = self._top_down_map.copy()
+            self._current_episode_id = episode_uniq_id
+        self.blank_top_down_map = np.zeros_like(self._top_down_map)
+        # self.blank_top_down_map = self._top_down_map.copy()
+        self.draw_trajectory(episode, self.blank_top_down_map)
+
+        current_position = self._sim.get_agent_state().position
+        ### a_x is along height, a_y is along width
+        a_x, a_y = maps.to_grid(
+            current_position[2],
+            current_position[0],
+            self.blank_top_down_map.shape[:2],
+            sim=self._sim,
+        )
+
         if self._rotate_map:
             agent_rotation = self.get_polar_angle()
             rot_angle = -(agent_rotation - np.pi)
-            top_down_map_rot = scipy.ndimage.interpolation.rotate(
-                curr_top_down_map, np.rad2deg(rot_angle), reshape=True
-            )
-            curr_top_down_map = top_down_map_rot
 
-        # blank_top_down_map = np.zeros_like(curr_top_down_map)
-        blank_top_down_map = curr_top_down_map
-        for waypoint in waypoints_coord:
-            a_x, a_y = maps.to_grid(
-                waypoint[2],
-                waypoint[0],
-                curr_top_down_map.shape[:2],
-                sim=self._sim,
+            top_down_map_rot = scipy.ndimage.interpolation.rotate(
+                self.blank_top_down_map, np.rad2deg(rot_angle), reshape=True
             )
-            if self._rotate_map:
-                ## rotate top down map to match agent's heading
-                a_x, a_y = self.get_rotated_point(
-                    curr_top_down_map,
-                    top_down_map_rot,
-                    np.array([a_x, a_y]),
-                    agent_rotation,
-                )
-            # blank_top_down_map[a_x, a_y] = 1.0
-            blank_top_down_map[a_x, a_y] = 2.0
+            a_x, a_y = self.get_rotated_point(
+                self.blank_top_down_map,
+                top_down_map_rot,
+                np.array([a_x, a_y]),
+                agent_rotation,
+            )
+            self.blank_top_down_map = top_down_map_rot
 
         pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
         pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
 
         local_top_down_map = self.crop_at_point(
-            blank_top_down_map,
+            self.blank_top_down_map,
             (a_x, a_y),
             self._map_resolution,
         )

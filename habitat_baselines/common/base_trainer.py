@@ -304,24 +304,13 @@ class BaseRLTrainer(BaseTrainer):
                 batch[k] = v[state_index]
 
             rgb_frames = [rgb_frames[i] for i in state_index]
-        if test_em is None:
-            return (
-                envs,
-                test_recurrent_hidden_states,
-                not_done_masks,
-                current_episode_reward,
-                prev_actions,
-                batch,
-                rgb_frames,
-            )
-        else:
-            return (
-                envs,
-                test_recurrent_hidden_states,
-                not_done_masks,
-                test_em,
-                current_episode_reward,
-                prev_actions,
-                batch,
-                rgb_frames,
-            )
+        return (
+            envs,
+            test_recurrent_hidden_states,
+            not_done_masks,
+            test_em,
+            current_episode_reward,
+            prev_actions,
+            batch,
+            rgb_frames,
+        )

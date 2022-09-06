@@ -197,10 +197,10 @@ _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.NOISE_PERCENT = 0.0
 _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.MIN_CUTOUT = 2.0
 _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.MAX_CUTOUT = 10.0
 # -----------------------------------------------------------------------------
-# CONTEXT MAP WAYPOINT SENSOR
+# CONTEXT MAP TRAJECTORY SENSOR
 # -----------------------------------------------------------------------------
-_C.TASK.CONTEXT_MAP_WAYPOINT_SENSOR = CN()
-_C.TASK.CONTEXT_MAP_WAYPOINT_SENSOR.TYPE = "ContextMapWaypointSensor"
+_C.TASK.CONTEXT_MAP_TRAJECTORY_SENSOR = CN()
+_C.TASK.CONTEXT_MAP_TRAJECTORY_SENSOR.TYPE = "ContextMapTrajectorySensor"
 # -----------------------------------------------------------------------------
 # SUCCESS MEASUREMENT
 # -----------------------------------------------------------------------------

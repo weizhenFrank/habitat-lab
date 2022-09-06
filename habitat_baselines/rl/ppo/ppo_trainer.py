@@ -517,11 +517,13 @@ class PPOTrainer(BaseRLTrainer):
                     }
                 )
             else:
-                map_res = self.config.TASK_CONFIG.TASK.CONTEXT_MAP_SENSOR.MAP_RESOLUTION
+                map_res = (
+                    self.config.TASK_CONFIG.TASK.CONTEXT_MAP_TRAJECTORY_SENSOR.MAP_RESOLUTION
+                )
                 context_shape = (map_res, map_res)
                 obs_space = spaces.Dict(
                     {
-                        "context_map_waypoint": spaces.Box(
+                        "context_map_trajectory": spaces.Box(
                             low=np.finfo(np.float32).min,
                             high=np.finfo(np.float32).max,
                             shape=context_shape,
@@ -1453,12 +1455,6 @@ class PPOTrainer(BaseRLTrainer):
                         cos_theta = pred_r_theta[0, 2]
                         xx = (pred_r / 0.1) * cos_theta
                         yy = (pred_r / 0.1) * sin_theta
-                        # print(
-                        #     "pred_r: ",
-                        #     pred_r,
-                        #     "pred_theta: ",
-                        #     np.rad2deg(np.arctan2(sin_theta, cos_theta)),
-                        # )
 
                         row, col = np.clip(int(128 - xx), 5, 250), np.clip(
                             int(128 - yy), 5, 250

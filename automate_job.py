@@ -12,8 +12,8 @@ import sys
 automate_command = "python " + " ".join(sys.argv)
 HABITAT_LAB = "/coc/testnvme/jtruong33/google_nav/habitat-lab"
 CONDA_ENV = "/nethome/jtruong33/miniconda3/envs/habitat-outdoor/bin/python"
-# RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
-RESULTS = "/coc/testnvme/jtruong33/results/outdoor_nav_results"
+RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
+# RESULTS = "/coc/testnvme/jtruong33/results/outdoor_nav_results"
 SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "slurm_template.sh")
 EVAL_SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "eval_slurm_template.sh")
 
@@ -42,7 +42,7 @@ parser.add_argument("-odn", "--outdoor-nav", default=False, action="store_true")
 parser.add_argument("-cm", "--context-map", default=False, action="store_true")
 parser.add_argument("-cw", "--context-waypoint", default=False, action="store_true")
 parser.add_argument(
-    "-cmw", "--context-map-waypoint", default=False, action="store_true"
+    "-cmt", "--context-map-trajectory", default=False, action="store_true"
 )
 parser.add_argument(
     "-wpte", "--use-waypoint-encoder", default=False, action="store_true"
@@ -52,7 +52,7 @@ parser.add_argument(
     "-crw", "--context-resnet-waypoint", default=False, action="store_true"
 )
 parser.add_argument(
-    "-crmw", "--context-resnet-map-waypoint", default=False, action="store_true"
+    "-crmt", "--context-resnet-map-trajectory", default=False, action="store_true"
 )
 parser.add_argument("-sc", "--second-channel", default=False, action="store_true")
 parser.add_argument("-mc", "--multi-channel", default=False, action="store_true")
@@ -248,10 +248,10 @@ if not args.eval:
                 task_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
             elif args.context_waypoint or args.context_resnet_waypoint:
                 task_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map_waypoint or args.context_resnet_map_waypoint:
+            elif args.context_map_trajectory or args.context_resnet_map_trajectory:
                 task_yaml_data[
                     idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_WAYPOINT_SENSOR']"
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_TRAJECTORY_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             task_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    BIN_POINTGOAL:"):
@@ -454,7 +454,7 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
             if args.outdoor_nav:
                 exp_yaml_data[idx] = "    name: OutdoorPolicy"
-            if args.context_map or args.context_waypoint or args.context_map_waypoint:
+            if args.context_map or args.context_waypoint or args.context_map_trajectory:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if args.context_resnet_map or args.context_resnet_waypoint:
                 exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
@@ -625,10 +625,10 @@ else:
                 eval_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
             elif args.context_waypoint or args.context_resnet_waypoint:
                 eval_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map_waypoint or args.context_resnet_map_waypoint:
+            elif args.context_map_trajectory or args.context_resnet_map_trajectory:
                 eval_yaml_data[
                     idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_WAYPOINT_SENSOR']"
+                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_TRAJECTORY_SENSOR']"
         elif i.startswith("    PROJECT_GOAL:"):
             eval_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    BIN_POINTGOAL:"):
@@ -756,12 +756,12 @@ else:
                 eval_exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
             if args.outdoor_nav:
                 eval_exp_yaml_data[idx] = "    name: OutdoorPolicy"
-            if args.context_map or args.context_waypoint or args.context_map_waypoint:
+            if args.context_map or args.context_waypoint or args.context_map_trajectory:
                 eval_exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if (
                 args.context_resnet_map
                 or args.context_resnet_waypoint
-                or args.context_resnet_map_waypoint
+                or args.context_resnet_map_trajectory
             ):
                 eval_exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
             if args.rnn_type == "TRANSFORMER":

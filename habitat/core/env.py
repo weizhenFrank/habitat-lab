@@ -53,9 +53,7 @@ class Env:
     _episode_start_time: Optional[float]
     _episode_over: bool
 
-    def __init__(
-        self, config: Config, dataset: Optional[Dataset] = None
-    ) -> None:
+    def __init__(self, config: Config, dataset: Optional[Dataset] = None) -> None:
         """Constructor
 
         :param config: config for the environment. Should contain id for
@@ -67,8 +65,7 @@ class Env:
         """
 
         assert config.is_frozen(), (
-            "Freeze the config before creating the "
-            "environment, use config.freeze()."
+            "Freeze the config before creating the " "environment, use config.freeze()."
         )
         self._config = config
         self._dataset = dataset
@@ -78,19 +75,14 @@ class Env:
                 id_dataset=config.DATASET.TYPE, config=config.DATASET
             )
         self._episodes = (
-            self._dataset.episodes
-            if self._dataset
-            else cast(List[Episode], [])
+            self._dataset.episodes if self._dataset else cast(List[Episode], [])
         )
         self._current_episode = None
         iter_option_dict = {
-            k.lower(): v
-            for k, v in config.ENVIRONMENT.ITERATOR_OPTIONS.items()
+            k.lower(): v for k, v in config.ENVIRONMENT.ITERATOR_OPTIONS.items()
         }
         iter_option_dict["seed"] = config.SEED
-        self._episode_iterator = self._dataset.get_episode_iterator(
-            **iter_option_dict
-        )
+        self._episode_iterator = self._dataset.get_episode_iterator(**iter_option_dict)
 
         # load the first scene if dataset is present
         if self._dataset:
@@ -121,9 +113,7 @@ class Env:
             }
         )
         self.action_space = self._task.action_space
-        self._max_episode_seconds = (
-            self._config.ENVIRONMENT.MAX_EPISODE_SECONDS
-        )
+        self._max_episode_seconds = self._config.ENVIRONMENT.MAX_EPISODE_SECONDS
         self._max_episode_steps = self._config.ENVIRONMENT.MAX_EPISODE_STEPS
         self._elapsed_steps = 0
         self._episode_start_time: Optional[float] = None
@@ -152,9 +142,7 @@ class Env:
 
     @episodes.setter
     def episodes(self, episodes: List[Episode]) -> None:
-        assert (
-            len(episodes) > 0
-        ), "Environment doesn't accept empty episodes list."
+        assert len(episodes) > 0, "Environment doesn't accept empty episodes list."
         self._episodes = episodes
 
     @property
@@ -236,9 +224,7 @@ class Env:
         ):
             self.episode_iterator.step_taken()
 
-    def step(
-        self, action: Union[int, str, Dict[str, Any]], **kwargs
-    ) -> Observations:
+    def step(self, action: Union[int, str, Dict[str, Any]], **kwargs) -> Observations:
         r"""Perform an action in the environment and return observations.
 
         :param action: action (belonging to :ref:`action_space`) to be
@@ -260,9 +246,7 @@ class Env:
         if isinstance(action, (str, int, np.integer)):
             action = {"action": action}
 
-        observations = self.task.step(
-            action=action, episode=self.current_episode
-        )
+        observations = self.task.step(action=action, episode=self.current_episode)
 
         self._task.measurements.update_measures(
             episode=self.current_episode, action=action, task=self.task
@@ -323,9 +307,7 @@ class RLEnv(gym.Env):
 
     _env: Env
 
-    def __init__(
-        self, config: Config, dataset: Optional[Dataset] = None
-    ) -> None:
+    def __init__(self, config: Config, dataset: Optional[Dataset] = None) -> None:
         """Constructor
 
         :param config: config to construct :ref:`Env`

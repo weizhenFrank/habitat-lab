@@ -12,7 +12,8 @@ import torch
 import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (ContextMapSensor, ContextMapWaypointSensor,
+from habitat.tasks.nav.nav import (ContextMapSensor,
+                                   ContextMapTrajectorySensor,
                                    ContextWaypointSensor,
                                    IntegratedPointGoalGPSAndCompassSensor,
                                    IntegratedPointGoalNoisyGPSAndCompassSensor)
@@ -590,7 +591,7 @@ class PointNavContextNet(PointNavBaselineNet):
             )
         if (
             "context_map" in observation_space.keys()
-            or "context_map_waypoint" in observation_space.keys()
+            or "context_map_trajectory" in observation_space.keys()
         ):
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
@@ -610,7 +611,7 @@ class PointNavContextNet(PointNavBaselineNet):
                     k = (
                         "context_map"
                         if "context_map" in observation_space.keys()
-                        else "context_map_waypoint"
+                        else "context_map_trajectory"
                     )
                     dim = 65536 if "resnet50" in self.cnn_type else 16384
                     dim = 4096 if observation_space[k].shape[0] == 100 else dim
@@ -694,7 +695,7 @@ class PointNavContextNet(PointNavBaselineNet):
         ## Map observation
         if (
             ContextMapSensor.cls_uuid in observations
-            or ContextMapWaypointSensor.cls_uuid in observations
+            or ContextMapTrajectorySensor.cls_uuid in observations
         ):
             map_ce = self.get_features(observations)
             x.append(map_ce)
@@ -717,7 +718,7 @@ class PointNavContextNet(PointNavBaselineNet):
         if ContextMapSensor.cls_uuid in observations:
             obs = observations[ContextMapSensor.cls_uuid]
         else:
-            obs = observations[ContextMapWaypointSensor.cls_uuid]
+            obs = observations[ContextMapTrajectorySensor.cls_uuid]
 
         if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
             obs = obs.permute(0, 3, 1, 2)
