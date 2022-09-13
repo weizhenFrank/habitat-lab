@@ -22,7 +22,7 @@ except ImportError:
 cv2 = try_cv2_import()
 
 
-AGENT_SPRITE = imageio.imread(
+AGENT_SPRITE = imageio.v2.imread(
     os.path.join(
         os.path.dirname(__file__),
         "assets",
@@ -32,7 +32,7 @@ AGENT_SPRITE = imageio.imread(
 )
 AGENT_SPRITE = np.ascontiguousarray(np.flipud(AGENT_SPRITE))
 
-HUMAN_SPRITE = imageio.imread(
+HUMAN_SPRITE = imageio.v2.imread(
     os.path.join(
         os.path.dirname(__file__),
         "assets",
