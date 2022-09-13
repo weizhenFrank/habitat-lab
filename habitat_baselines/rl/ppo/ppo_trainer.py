@@ -447,6 +447,7 @@ class PPOTrainer(BaseRLTrainer):
                 )
             else:
                 self.policy_action_space = self.envs.action_spaces[0]
+            # action_shape = self.policy_action_space.n
             action_shape = 1
             discrete_actions = True
 
@@ -1219,7 +1220,7 @@ class PPOTrainer(BaseRLTrainer):
         )
 
         use_external_memory = (
-            True if self.config.RL.POLICY.name == "PointNavContextSMTPolicy" else False
+            True if self.config.RL.DDPPO.rnn_type == "SMT_TRANSFORMER" else False
         )
         if use_external_memory:
             test_em = ExternalMemory(
@@ -1445,7 +1446,6 @@ class PPOTrainer(BaseRLTrainer):
                             "y": col,
                         }
                     except:
-                        # print("gt wpt exception!")
                         pass
                     try:
                         pred_r_theta = self.actor_critic.net.pred_wpt.cpu().numpy()
@@ -1465,7 +1465,6 @@ class PPOTrainer(BaseRLTrainer):
                             "y": col,
                         }
                     except:
-                        print("pred wpt exception!")
                         pass
                     frame = observations_to_image(
                         {k: v[i] for k, v in batch.items()}, infos[i]
