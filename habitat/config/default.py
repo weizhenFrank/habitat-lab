@@ -88,7 +88,12 @@ ACTIONS.VELOCITY_CONTROL.MIN_ABS_ANG_SPEED = 1.0  # deg per sec
 
 ACTIONS.VELOCITY_CONTROL.TIME_STEP = 1.0  # seconds
 ACTIONS.VELOCITY_CONTROL.CONTACT_TEST = True  # seconds
-ACTIONS.VELOCITY_CONTROL.DISCRETE_ACTIONS = []
+ACTIONS.VELOCITY_CONTROL.DISCRETE_ACTIONS = [
+    [0.5, 0.0],
+    [-0.5, 0.0],
+    [0.0, 30.0],
+    [0.0, -30.0],
+]
 ACTIONS.VELOCITY_CONTROL.MUST_CALL_STOP = True
 ACTIONS.VELOCITY_CONTROL.CTRL_FREQ = 240.0
 ACTIONS.VELOCITY_CONTROL.ROBOT_URDF = "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
@@ -316,6 +321,7 @@ _C.SIMULATOR.TYPE = "Sim-v0"
 _C.SIMULATOR.ACTION_SPACE_CONFIG = "v0"
 _C.SIMULATOR.FORWARD_STEP_SIZE = 0.25  # in metres
 _C.SIMULATOR.SCENE = "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
+_C.SIMULATOR.SCENE_DATASET = "default"  # the scene dataset to load in the MetaDataMediator. Should contain SIMULATOR.SCENE
 _C.SIMULATOR.SEED = _C.SEED
 _C.SIMULATOR.TURN_ANGLE = 10  # angle to rotate left or right in degrees
 _C.SIMULATOR.TILT_ANGLE = 15  # angle to tilt the camera up or down in degrees

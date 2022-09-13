@@ -85,6 +85,12 @@ RL:
       num_decoder_layers: 1
       dropout: 0.0
       activation: 'relu'
+    TRANSFORMER:
+      dim_feedforward: 256
+      nhead: 1
+      num_encoder_layers: 2
+      dropout: 0.1
+      activation: 'relu'
 
     # Use double buffered sampling, typically helps
     # when environment time is similar or large than

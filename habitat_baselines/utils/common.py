@@ -11,8 +11,7 @@ import shutil
 import tarfile
 from collections import defaultdict
 from io import BytesIO
-from typing import (Any, DefaultDict, Dict, Iterable, List, Optional, Tuple,
-                    Union)
+from typing import Any, DefaultDict, Dict, Iterable, List, Optional, Tuple, Union
 
 import attr
 import numpy as np
@@ -34,22 +33,22 @@ cv2 = try_cv2_import()
 
 
 class CustomFixedCategorical(torch.distributions.Categorical):  # type: ignore
-    def sample(
-        self, sample_shape: Size = torch.Size()  # noqa: B008
-    ) -> Tensor:
-        return super().sample(sample_shape).unsqueeze(-1)
+    def sample(self, sample_shape: Size = torch.Size()) -> Tensor:  # noqa: B008
+        return super().sample()
 
     def log_probs(self, actions: Tensor) -> Tensor:
         return (
             super()
             .log_prob(actions.squeeze(-1))
             .view(actions.size(0), -1)
-            .sum(-1)
-            .unsqueeze(-1)
+            .sum(-1, keepdim=True)
         )
 
     def mode(self):
         return self.probs.argmax(dim=-1, keepdim=True)
+
+    def entropy(self):
+        return super().entropy().unsqueeze(-1)
 
 
 class CategoricalNet(nn.Module):
@@ -67,19 +66,11 @@ class CategoricalNet(nn.Module):
 
 
 class CustomNormal(torch.distributions.normal.Normal):
-    def sample(
-        self, sample_shape: Size = torch.Size()  # noqa: B008
-    ) -> Tensor:
+    def sample(self, sample_shape: Size = torch.Size()) -> Tensor:  # noqa: B008
         return super().rsample(sample_shape)
 
     def log_probs(self, actions):
-        ret = (
-            super()
-            .log_prob(actions)
-            .view(actions.size(0), -1)
-            .sum(-1)
-            .unsqueeze(-1)
-        )
+        ret = super().log_prob(actions).view(actions.size(0), -1).sum(-1).unsqueeze(-1)
         return ret
 
 
@@ -168,11 +159,7 @@ class ObservationBatchingCache:
         cache = torch.empty(
             num_obs, *sensor.size(), dtype=sensor.dtype, device=sensor.device
         )
-        if (
-            device is not None
-            and device.type == "cuda"
-            and cache.device.type == "cpu"
-        ):
+        if device is not None and device.type == "cuda" and cache.device.type == "cpu":
             cache = cache.pin_memory()
 
         self._pool[key] = cache
@@ -258,9 +245,7 @@ def poll_checkpoint_folder(
     assert os.path.isdir(checkpoint_folder), (
         f"invalid checkpoint folder " f"path {checkpoint_folder}"
     )
-    models_paths = list(
-        filter(os.path.isfile, glob.glob(checkpoint_folder + "/*"))
-    )
+    models_paths = list(filter(os.path.isfile, glob.glob(checkpoint_folder + "/*")))
     models_paths.sort(key=os.path.getmtime)
     ind = previous_ckpt_ind + 1
     if ind < len(models_paths):
@@ -312,9 +297,7 @@ def generate_video(
     for k, v in metrics.items():
         metric_strs.append(f"{k}={v:.2f}")
 
-    video_name = f"episode={episode_id}-ckpt={checkpoint_idx}-" + "-".join(
-        metric_strs
-    )
+    video_name = f"episode={episode_id}-ckpt={checkpoint_idx}-" + "-".join(metric_strs)
     if "disk" in video_option:
         assert video_dir is not None
         images_to_video(images, video_dir, video_name)
@@ -392,9 +375,9 @@ def image_resize_shortest_edge(
     scale = size / min(h, w)
     h = int(h * scale)
     w = int(w * scale)
-    img = torch.nn.functional.interpolate(
-        img.float(), size=(h, w), mode="area"
-    ).to(dtype=img.dtype)
+    img = torch.nn.functional.interpolate(img.float(), size=(h, w), mode="area").to(
+        dtype=img.dtype
+    )
     if channels_last:
         if len(img.shape) == 4:
             # NCHW -> NHWC

@@ -12,18 +12,20 @@ import torch
 import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (ContextMapSensor,
-                                   ContextMapTrajectorySensor,
-                                   ContextWaypointSensor,
-                                   IntegratedPointGoalGPSAndCompassSensor,
-                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
+from habitat.tasks.nav.nav import (
+    ContextMapSensor,
+    ContextMapTrajectorySensor,
+    ContextWaypointSensor,
+    IntegratedPointGoalGPSAndCompassSensor,
+    IntegratedPointGoalNoisyGPSAndCompassSensor,
+)
 from habitat_baselines.common.baseline_registry import baseline_registry
+
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import \
-    build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.rl.models.smt_state_encoder import SMTStateEncoder
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
@@ -184,6 +186,11 @@ class PointNavBaselinePolicy(Policy):
         policy_config: None = None,
         **kwargs,
     ):
+        action_dim = (
+            1
+            if policy_config.action_distribution_type == "categorical"
+            else action_space.n
+        )
         super().__init__(
             PointNavBaselineNet(  # type: ignore
                 observation_space=observation_space,
@@ -193,6 +200,7 @@ class PointNavBaselinePolicy(Policy):
                 tgt_hidden_size=tgt_hidden_size,
                 tgt_encoding=tgt_encoding,
                 use_prev_action=use_prev_action,
+                action_dim=action_dim,
                 **kwargs,
             ),
             action_space.n,
@@ -232,6 +240,11 @@ class PointNavContextPolicy(Policy):
         cnn_type: str = "cnn_2d",
         **kwargs,
     ):
+        action_dim = (
+            1
+            if policy_config.action_distribution_type == "categorical"
+            else action_space.n
+        )
         super().__init__(
             PointNavContextNet(  # type: ignore
                 observation_space=observation_space,
@@ -245,6 +258,7 @@ class PointNavContextPolicy(Policy):
                 use_waypoint_encoder=use_waypoint_encoder,
                 cnn_type=cnn_type,
                 policy_config=policy_config,
+                action_dim=action_dim,
                 **kwargs,
             ),
             action_space.n,
@@ -284,9 +298,15 @@ class PointNavContextSMTPolicy(Policy):
         use_prev_action: bool = False,
         use_waypoint_encoder: bool = False,
         policy_config: None = None,
+        ppo_config: None = None,
         cnn_type: str = "cnn_2d",
         **kwargs,
     ):
+        action_dim = (
+            1
+            if policy_config.action_distribution_type == "categorical"
+            else action_space.n
+        )
         super().__init__(
             PointNavContextSMTNet(  # type: ignore
                 observation_space=observation_space,
@@ -300,6 +320,8 @@ class PointNavContextSMTPolicy(Policy):
                 use_waypoint_encoder=use_waypoint_encoder,
                 cnn_type=cnn_type,
                 policy_config=policy_config,
+                ppo_config=ppo_config,
+                action_dim=action_dim,
                 **kwargs,
             ),
             action_space.n,
@@ -321,67 +343,15 @@ class PointNavContextSMTPolicy(Policy):
             use_waypoint_encoder=config.RL.PPO.use_waypoint_encoder,
             cnn_type=config.RL.PPO.cnn_type,
             policy_config=config.RL.POLICY,
-        )
-
-
-@baseline_registry.register_policy
-class PointNavContextPolicy(Policy):
-    def __init__(
-        self,
-        observation_space: spaces.Dict,
-        action_space,
-        hidden_size: int = 512,
-        num_recurrent_layers: int = 2,
-        rnn_type: str = "LSTM",
-        tgt_hidden_size: int = 512,
-        tgt_encoding: str = "linear_2",
-        context_hidden_size: int = 512,
-        use_prev_action: bool = False,
-        use_waypoint_encoder: bool = False,
-        policy_config: None = None,
-        cnn_type: str = "cnn_2d",
-        **kwargs,
-    ):
-        super().__init__(
-            PointNavContextNet(  # type: ignore
-                observation_space=observation_space,
-                hidden_size=hidden_size,
-                num_recurrent_layers=num_recurrent_layers,
-                rnn_type=rnn_type,
-                tgt_hidden_size=tgt_hidden_size,
-                tgt_encoding=tgt_encoding,
-                context_hidden_size=context_hidden_size,
-                use_prev_action=use_prev_action,
-                use_waypoint_encoder=use_waypoint_encoder,
-                cnn_type=cnn_type,
-                policy_config=policy_config,
-                **kwargs,
-            ),
-            action_space.n,
-            policy_config,
-        )
-
-    @classmethod
-    def from_config(cls, config: Config, observation_space: spaces.Dict, action_space):
-        return cls(
-            observation_space=observation_space,
-            action_space=action_space,
-            hidden_size=config.RL.PPO.hidden_size,
-            rnn_type=config.RL.DDPPO.rnn_type,
-            num_recurrent_layers=config.RL.DDPPO.num_recurrent_layers,
-            tgt_hidden_size=config.RL.PPO.tgt_hidden_size,
-            tgt_encoding=config.RL.PPO.tgt_encoding,
-            context_hidden_size=config.RL.PPO.context_hidden_size,
-            use_prev_action=config.RL.PPO.use_prev_action,
-            use_waypoint_encoder=config.RL.PPO.use_waypoint_encoder,
-            cnn_type=config.RL.PPO.cnn_type,
-            policy_config=config.RL.POLICY,
+            ppo_config=config.RL.PPO,
         )
 
 
 class Net(nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks):
+    def forward(
+        self, observations, rnn_hidden_states, prev_actions, masks, memory, memory_masks
+    ):
         pass
 
     @property
@@ -414,53 +384,58 @@ class PointNavBaselineNet(Net):
         tgt_hidden_size: int,
         tgt_encoding: str,
         use_prev_action: bool,
+        action_dim: int = 2,
     ):
         super().__init__()
+        self.tgt_embeding_size = 0
+        self.prev_action_embedding_size = 0
+        self._hidden_size = hidden_size
+        self.use_prev_action = use_prev_action
 
-        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observation_space.spaces:
-            self._n_input_goal = observation_space.spaces[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ].shape[0]
-        elif (
-            IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
+        if (
+            IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observation_space.spaces
+            or IntegratedPointGoalGPSAndCompassSensor.cls_uuid
             in observation_space.spaces
         ):
-            self._n_input_goal = observation_space.spaces[
-                IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
-            ].shape[0]
-
-        self._hidden_size = hidden_size
+            k = (
+                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+                if IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+                in observation_space.spaces
+                else IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+            )
+            self._n_input_goal = observation_space.spaces[k].shape[0]
+            self.tgt_embeding_size = tgt_hidden_size
+            self.tgt_encoding = tgt_encoding
+            if self.tgt_encoding == "sin_cos":
+                print("USING SIN COS")
+                self.tgt_encoder = nn.Linear(
+                    self._n_input_goal + 1, self.tgt_embeding_size
+                )
+            elif self.tgt_encoding == "linear_1":
+                print("USING LINEAR 1")
+                self.tgt_encoder = nn.Sequential(
+                    nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                    nn.ReLU(),
+                )
+            elif self.tgt_encoding == "linear_2":
+                print("USING LINEAR 2")
+                self.tgt_encoder = nn.Sequential(
+                    nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                    nn.ReLU(),
+                    nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
+                    nn.ReLU(),
+                )
+            elif self.tgt_encoding == "ans_bin":
+                self.embedding_angle = nn.Embedding(72, 8)
+                self.embedding_dist = nn.Embedding(24, 8)
+                self.tgt_embeding_size = 16
 
         self.visual_encoder = SimpleCNN(observation_space, hidden_size)
-        self.tgt_embeding_size = tgt_hidden_size
-        self.tgt_encoding = tgt_encoding
-        if self.tgt_encoding == "sin_cos":
-            print("USING SIN COS")
-            self.tgt_encoder = nn.Linear(self._n_input_goal + 1, self.tgt_embeding_size)
-        elif self.tgt_encoding == "linear_1":
-            print("USING LINEAR 1")
-            self.tgt_encoder = nn.Sequential(
-                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
-                nn.ReLU(),
-            )
-        elif self.tgt_encoding == "linear_2":
-            print("USING LINEAR 2")
-            self.tgt_encoder = nn.Sequential(
-                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
-                nn.ReLU(),
-                nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
-                nn.ReLU(),
-            )
-        elif self.tgt_encoding == "ans_bin":
-            self.embedding_angle = nn.Embedding(72, 8)
-            self.embedding_dist = nn.Embedding(24, 8)
-            self.tgt_embeding_size = 16
 
-        self.use_prev_action = use_prev_action
         if self.use_prev_action:
             print("USING PREV ACTION")
-            self.prev_action_embedding = nn.Linear(2, 32)
-        self.prev_action_embedding_size = 32 if self.use_prev_action else 0
+            self.prev_action_embedding = nn.Linear(action_dim, 32)
+            self.prev_action_embedding_size = 32
 
         nfeats = (
             self._hidden_size + self.prev_action_embedding_size + self.tgt_embeding_size
@@ -471,13 +446,6 @@ class PointNavBaselineNet(Net):
                 self._hidden_size,
                 rnn_type=rnn_type,
                 num_layers=num_recurrent_layers,
-            )
-        else:
-            pose_indices = None
-            self.state_encoder = SMTStateEncoder(
-                nfeats,
-                dim_feedforward=self._hidden_size,
-                pose_indices=pose_indices,
             )
 
         self.train()
@@ -494,31 +462,12 @@ class PointNavBaselineNet(Net):
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
 
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks):
-        x = []
-        if not self.is_blind:
-            x.append(self.visual_encoder(observations))
-        if (
-            IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations
-            or IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid in observations
-        ):
-            if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-                goal_observations = observations[
-                    IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-                ]
-            elif IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid in observations:
-                goal_observations = observations[
-                    IntegratedPointGoalNoisyGPSAndCompassSensor.cls_uuid
-                ]
-            if self.tgt_encoding == "sin_cos" and goal_observations.shape[1] == 2:
-                goal_observations = torch.stack(
-                    [
-                        goal_observations[:, 0],
-                        torch.cos(-goal_observations[:, 1]),
-                        torch.sin(-goal_observations[:, 1]),
-                    ],
-                    -1,
-                )
+    def get_goal_features(self, x, observations):
+        ## Goal vector
+        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
+            goal_observations = observations[
+                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
+            ]
             if self.tgt_encoding == "ans_bin":
                 dist_emb = self.embedding_dist(
                     goal_observations[:, 0].to(dtype=torch.int64)
@@ -528,17 +477,46 @@ class PointNavBaselineNet(Net):
                 )
                 x.append(dist_emb)
                 x.append(angle_emb)
-            else:
-                te = self.tgt_encoder(goal_observations)
-                x.append(te)
+                return x
+            if self.tgt_encoding == "sin_cos" and goal_observations.shape[1] == 2:
+                goal_observations = torch.stack(
+                    [
+                        goal_observations[:, 0],
+                        torch.cos(-goal_observations[:, 1]),
+                        torch.sin(-goal_observations[:, 1]),
+                    ],
+                    -1,
+                )
+            te = self.tgt_encoder(goal_observations)
+            x.append(te)
+        return x
 
+    def get_prev_action_features(self, x, prev_actions):
         if self.use_prev_action:
             prev_actions = self.prev_action_embedding(prev_actions.float())
             x.append(prev_actions)
+        return x
 
+    def get_features(self, observations, prev_actions):
+        x = []
+        x.append(self.visual_encoder(observations))
+        x = self.get_goal_features(x, observations)
+        x = self.get_prev_action_features(x, prev_actions)
         x_out = torch.cat(x, dim=1)
+        return x_out
+
+    def forward(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_actions,
+        masks=None,
+        memory=None,
+        memory_masks=None,
+    ):
+        x_out = self.get_features(observations, prev_actions)
         x_out, rnn_hidden_states = self.state_encoder(x_out, rnn_hidden_states, masks)
-        return x_out, rnn_hidden_states
+        return x_out, rnn_hidden_states, None
 
 
 class PointNavContextNet(PointNavBaselineNet):
@@ -558,7 +536,8 @@ class PointNavContextNet(PointNavBaselineNet):
         use_prev_action: bool,
         use_waypoint_encoder: bool,
         cnn_type: str,
-        policy_config: None,
+        policy_config: None = None,
+        action_dim: int = 2,
     ):
         super().__init__(
             observation_space=observation_space,
@@ -568,35 +547,41 @@ class PointNavContextNet(PointNavBaselineNet):
             tgt_hidden_size=tgt_hidden_size,
             tgt_encoding=tgt_encoding,
             use_prev_action=use_prev_action,
+            action_dim=action_dim,
         )
         self.cnn_type = cnn_type
         self.use_prev_action = use_prev_action
         self.use_waypoint_encoder = use_waypoint_encoder
         if self.use_prev_action:
-            self.prev_action_embedding = nn.Linear(2, 32)
+            self.prev_action_embedding = nn.Linear(action_dim, 32)
         self.prev_action_embedding_size = 32 if self.use_prev_action else 0
-        self.tgt_embeding_size = tgt_hidden_size
-        self.tgt_encoding = tgt_encoding
         self.context_hidden_size = context_hidden_size
         self.rnn_type = rnn_type
 
-        if self.tgt_encoding == "sin_cos":
-            self.tgt_encoder = nn.Linear(self._n_input_goal + 1, self.tgt_embeding_size)
-        elif self.tgt_encoding == "linear_2":
-            self.tgt_encoder = nn.Sequential(
-                nn.Linear(self._n_input_goal, self.tgt_embeding_size),
-                nn.ReLU(),
-                nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
-                nn.ReLU(),
-            )
+        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observation_space.spaces:
+            self.tgt_encoding = tgt_encoding
+            self.tgt_embeding_size = tgt_hidden_size
+
+            if self.tgt_encoding == "sin_cos":
+                self.tgt_encoder = nn.Linear(
+                    self._n_input_goal + 1, self.tgt_embeding_size
+                )
+            elif self.tgt_encoding == "linear_2":
+                self.tgt_encoder = nn.Sequential(
+                    nn.Linear(self._n_input_goal, self.tgt_embeding_size),
+                    nn.ReLU(),
+                    nn.Linear(self.tgt_embeding_size, self.tgt_embeding_size),
+                    nn.ReLU(),
+                )
         if (
-            "context_map" in observation_space.keys()
-            or "context_map_trajectory" in observation_space.keys()
+            ContextMapSensor.cls_uuid in observation_space.spaces
+            or ContextMapTrajectorySensor.cls_uuid in observation_space.spaces
         ):
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
-                from habitat_baselines.rl.ddppo.policy.resnet_policy import \
-                    ResNetEncoderContext
+                from habitat_baselines.rl.ddppo.policy.resnet_policy import (
+                    ResNetEncoderContext,
+                )
 
                 if "full" in self.cnn_type:
                     self.context_encoder = ResNetEncoderContext(
@@ -663,63 +648,11 @@ class PointNavContextNet(PointNavBaselineNet):
         )
         self.train()
 
-    def forward(
-        self,
-        observations,
-        rnn_hidden_states,
-        prev_actions,
-        masks,
-        memory=None,
-        memory_masks=None,
-    ):
-        x = []
-        ## Egocentric observations
-        ve = self.visual_encoder(observations)
-        x.append(ve)
-        ## Goal vector
-        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-            goal_observations = observations[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ]
-            if self.tgt_encoding == "sin_cos" and goal_observations.shape[1] == 2:
-                goal_observations = torch.stack(
-                    [
-                        goal_observations[:, 0],
-                        torch.cos(-goal_observations[:, 1]),
-                        torch.sin(-goal_observations[:, 1]),
-                    ],
-                    -1,
-                )
-            te = self.tgt_encoder(goal_observations)
-            x.append(te)
-        ## Map observation
-        if (
-            ContextMapSensor.cls_uuid in observations
-            or ContextMapTrajectorySensor.cls_uuid in observations
-        ):
-            map_ce = self.get_features(observations)
-            x.append(map_ce)
-        ## Waypoint observation
-        if ContextWaypointSensor.cls_uuid in observations:
-            wpt_ce = observations[ContextWaypointSensor.cls_uuid]
-            wpt_ce = self.context_encoder(wpt_ce)
-            x.append(wpt_ce)
-        ## Previous actions
-        if self.use_prev_action:
-            prev_actions = self.prev_action_embedding(prev_actions.float())
-            x.append(prev_actions)
-
-        x_out = torch.cat(x, dim=1)
-        x_out, rnn_hidden_states = self.state_encoder(x_out, rnn_hidden_states, masks)
-
-        return x_out, rnn_hidden_states, None
-
-    def get_features(self, observations):
+    def get_map_features(self, x, observations):
         if ContextMapSensor.cls_uuid in observations:
             obs = observations[ContextMapSensor.cls_uuid]
         else:
             obs = observations[ContextMapTrajectorySensor.cls_uuid]
-
         if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
             obs = obs.permute(0, 3, 1, 2)
         out = self.context_encoder(obs)
@@ -730,7 +663,43 @@ class PointNavContextNet(PointNavBaselineNet):
                 [F.sigmoid(out[:, :1]), torch.tanh(out[:, 1:])],
                 dim=1,
             )
-        return out
+        x.append(out)
+        return x
+
+    def get_features(self, observations, prev_actions):
+        x = []
+        ## Egocentric observations
+        ve = self.visual_encoder(observations)
+        x.append(ve)
+        x = self.get_goal_features(x, observations)
+        ## Map observation
+        if (
+            ContextMapSensor.cls_uuid in observations
+            or ContextMapTrajectorySensor.cls_uuid in observations
+        ):
+            x = self.get_map_features(x, observations)
+        ## Waypoint observation
+        if ContextWaypointSensor.cls_uuid in observations:
+            we = self.context_encoder(observations[ContextWaypointSensor.cls_uuid])
+            x.append(we)
+        ## Previous actions
+        x = self.get_prev_action_features(x, prev_actions)
+        x_out = torch.cat(x, dim=1)
+        return x_out
+
+    def forward(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_actions,
+        masks=None,
+        memory=None,
+        memory_masks=None,
+    ):
+        x_out = self.get_features(observations, prev_actions)
+        x_out, rnn_hidden_states = self.state_encoder(x_out, rnn_hidden_states, masks)
+
+        return x_out, rnn_hidden_states, None
 
 
 class PointNavContextSMTNet(PointNavContextNet):
@@ -750,7 +719,9 @@ class PointNavContextSMTNet(PointNavContextNet):
         use_prev_action: bool,
         use_waypoint_encoder: bool,
         cnn_type: str,
-        policy_config: None,
+        policy_config: None = None,
+        ppo_config: None = None,
+        action_dim: int = 2,
     ):
         super().__init__(
             observation_space=observation_space,
@@ -764,6 +735,7 @@ class PointNavContextSMTNet(PointNavContextNet):
             use_waypoint_encoder=use_waypoint_encoder,
             cnn_type=cnn_type,
             policy_config=policy_config,
+            action_dim=action_dim,
         )
         self.nfeats = (
             self._hidden_size
@@ -771,15 +743,31 @@ class PointNavContextSMTNet(PointNavContextNet):
             + self.tgt_embeding_size
             + self.context_hidden_size
         )
-        print("N FEATS: ", self.nfeats)
 
         pose_indices = None
         self.rnn_type = rnn_type
-        if rnn_type == "TRANSFORMER":
+        if rnn_type == "SMT_TRANSFORMER":
             self.state_encoder = SMTStateEncoder(
                 self.nfeats,
                 dim_feedforward=self._hidden_size,
                 pose_indices=pose_indices,
+            )
+        elif rnn_type == "TRANSFORMER":
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=self.nfeats,
+                nhead=ppo_config.TRANSFORMER.nhead,
+                dim_feedforward=ppo_config.TRANSFORMER.dim_feedforward,
+                dropout=ppo_config.TRANSFORMER.dropout,
+                activation=ppo_config.TRANSFORMER.activation,
+            )
+            self.state_encoder = nn.TransformerEncoder(
+                encoder_layer, num_layers=ppo_config.TRANSFORMER.num_encoder_layers
+            )
+            self.mlp = nn.Sequential(
+                nn.Linear(self.nfeats, 1024),
+                nn.LayerNorm(1024),
+                nn.ReLU(),
+                nn.Linear(1024, 512),
             )
         else:
             self.state_encoder = build_rnn_state_encoder(
@@ -813,63 +801,15 @@ class PointNavContextSMTNet(PointNavContextNet):
     ):
         x = self.get_features(observations, prev_actions)
 
-        if self.rnn_type == "TRANSFORMER":
+        if self.rnn_type == "SMT_TRANSFORMER":
             x_out = self.state_encoder(x, memory, memory_masks)
+        elif self.rnn_type == "TRANSFORMER":
+            x = x.unsqueeze(0)
+            x_out = self.state_encoder(x)
+            S, B, N = x_out.shape
+            x_out = x_out.reshape(S * B, N)
+            x_out = self.mlp(x_out)
         else:
             x_out, rnn_hidden_states = self.state_encoder(x, rnn_hidden_states, masks)
 
-        return (x_out, rnn_hidden_states, x)
-
-    def get_goal_features(self, observations):
-        ## Goal vector
-        if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
-            goal_observations = observations[
-                IntegratedPointGoalGPSAndCompassSensor.cls_uuid
-            ]
-            if self.tgt_encoding == "sin_cos" and goal_observations.shape[1] == 2:
-                goal_observations = torch.stack(
-                    [
-                        goal_observations[:, 0],
-                        torch.cos(-goal_observations[:, 1]),
-                        torch.sin(-goal_observations[:, 1]),
-                    ],
-                    -1,
-                )
-            te = self.tgt_encoder(goal_observations)
-        return te
-
-    def get_map_features(self, observations):
-        obs = observations[ContextMapSensor.cls_uuid]
-        if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
-            obs = obs.permute(0, 3, 1, 2)
-        out = self.context_encoder(obs)
-        if "resnet" in self.cnn_type:
-            out = self.context_fc(out)
-        if self.context_hidden_size == 3:
-            out = torch.cat(
-                [F.sigmoid(out[:, :1]), torch.tanh(out[:, 1:])],
-                dim=1,
-            )
-        return out
-
-    def get_features(self, observations, prev_actions):
-        x = []
-        ## Egocentric observations
-        ve = self.visual_encoder(observations)
-        x.append(ve)
-        te = self.get_goal_features(observations)
-        x.append(te)
-        ## Map observation
-        if ContextMapSensor.cls_uuid in observations:
-            map_ce = self.get_map_features(observations)
-            x.append(map_ce)
-        ## Waypoint observation
-        if ContextWaypointSensor.cls_uuid in observations:
-            wpt_ce = self.context_encoder(observations[ContextWaypointSensor.cls_uuid])
-            x.append(wpt_ce)
-        ## Previous actions
-        if self.use_prev_action:
-            prev_actions = self.prev_action_embedding(prev_actions.float())
-            x.append(prev_actions)
-        x_out = torch.cat(x, dim=1)
-        return x_out
+        return x_out, rnn_hidden_states, x
