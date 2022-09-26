@@ -93,6 +93,8 @@ _C.RL.preemption.save_state_batch_only = False
 _C.RL.POLICY = CN()
 _C.RL.POLICY.name = "PointNavResNetPolicy"
 _C.RL.POLICY.action_distribution_type = "gaussian"
+_C.RL.POLICY.in_channels = 2
+_C.RL.POLICY.use_maxpool = True
 # For gaussian action distribution:
 _C.RL.POLICY.ACTION_DIST = CN()
 _C.RL.POLICY.ACTION_DIST.use_log_std = False
@@ -198,23 +200,17 @@ _C.RL.DDPPO.force_distributed = False
 # -----------------------------------------------------------------------------
 _C.ORBSLAM2 = CN()
 _C.ORBSLAM2.SLAM_VOCAB_PATH = "habitat_baselines/slambased/data/ORBvoc.txt"
-_C.ORBSLAM2.SLAM_SETTINGS_PATH = (
-    "habitat_baselines/slambased/data/mp3d3_small1k.yaml"
-)
+_C.ORBSLAM2.SLAM_SETTINGS_PATH = "habitat_baselines/slambased/data/mp3d3_small1k.yaml"
 _C.ORBSLAM2.MAP_CELL_SIZE = 0.1
 _C.ORBSLAM2.MAP_SIZE = 40
-_C.ORBSLAM2.CAMERA_HEIGHT = get_task_config().SIMULATOR.DEPTH_SENSOR.POSITION[
-    1
-]
+_C.ORBSLAM2.CAMERA_HEIGHT = get_task_config().SIMULATOR.DEPTH_SENSOR.POSITION[1]
 _C.ORBSLAM2.BETA = 100
 _C.ORBSLAM2.H_OBSTACLE_MIN = 0.3 * _C.ORBSLAM2.CAMERA_HEIGHT
 _C.ORBSLAM2.H_OBSTACLE_MAX = 1.0 * _C.ORBSLAM2.CAMERA_HEIGHT
 _C.ORBSLAM2.D_OBSTACLE_MIN = 0.1
 _C.ORBSLAM2.D_OBSTACLE_MAX = 4.0
 _C.ORBSLAM2.PREPROCESS_MAP = True
-_C.ORBSLAM2.MIN_PTS_IN_OBSTACLE = (
-    get_task_config().SIMULATOR.DEPTH_SENSOR.WIDTH / 2.0
-)
+_C.ORBSLAM2.MIN_PTS_IN_OBSTACLE = get_task_config().SIMULATOR.DEPTH_SENSOR.WIDTH / 2.0
 _C.ORBSLAM2.ANGLE_TH = float(np.deg2rad(15))
 _C.ORBSLAM2.DIST_REACHED_TH = 0.15
 _C.ORBSLAM2.NEXT_WAYPOINT_TH = 0.5

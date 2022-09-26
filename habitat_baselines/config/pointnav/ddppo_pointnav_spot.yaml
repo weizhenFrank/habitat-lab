@@ -2,6 +2,7 @@ BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_spot.yaml"
 TOTAL_NUM_STEPS: 5e8
 
 VERBOSE: False
+USE_THREADED: False
 TRAINER_NAME: "ddppo"
 ENV_NAME: "NavRLEnv"
 SIMULATOR_GPU_ID: 0
@@ -36,6 +37,8 @@ RL:
   POLICY:
     name: "PointNavResNetPolicy"
     action_distribution_type: "gaussian"
+    in_channels: 2
+    use_maxpool: True
     ACTION_DIST:
       use_log_std: False
       clamp_std: True
