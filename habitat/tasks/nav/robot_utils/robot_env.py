@@ -5,7 +5,7 @@ from habitat_sim.physics import JointMotorSettings
 
 
 class A1:
-    def __init__(self):
+    def __init__(self, robot_spawn_offset=None):
         self.name = "A1"
         self.robot_id = None
         # Gibson mapping: FR, FL, RR, RL
@@ -25,7 +25,11 @@ class A1:
         ]  # RR
         self.feet_link_ids = [5, 9, 13, 17]
         # Spawn the URDF 0.35 meters above the navmesh upon reset
-        self.robot_spawn_offset = np.array([0.0, 0.35, 0])
+        self.robot_spawn_offset = (
+            np.array([0.0, 0.35, 0])
+            if robot_spawn_offset is None
+            else robot_spawn_offset
+        )
         self.robot_dist_to_goal = 0.24
         self.camera_spawn_offset = np.array([0.0, 0.18, -0.24])
         self.urdf_params = [12.46, 0.40, 0.62, 0.30]
@@ -179,7 +183,7 @@ class A1:
 
 
 class AlienGo(A1):
-    def __init__(self):
+    def __init__(self, robot_spawn_offset=None):
         super().__init__()
         self.name = "AlienGo"
         self._initial_joint_positions = [
@@ -199,14 +203,18 @@ class AlienGo(A1):
 
         self.feet_link_ids = [4, 8, 12, 16]  ### FL, FR, RL, RR
         # self.feet_link_ids = [12]
-        self.robot_spawn_offset = np.array([0.0, 0.475, 0])
+        self.robot_spawn_offset = (
+            np.array([0.0, 0.475, 0])
+            if robot_spawn_offset is None
+            else robot_spawn_offset
+        )
         self.robot_dist_to_goal = 0.3235
         self.camera_spawn_offset = np.array([0.0, 0.25, -0.3235])
         self.urdf_params = np.array([20.64, 0.50, 0.89, 0.34])
 
 
 class Laikago(A1):
-    def __init__(self):
+    def __init__(self, robot_spawn_offset=None):
         super().__init__()
         self.name = "Laikago"
         self._initial_joint_positions = [
@@ -223,26 +231,34 @@ class Laikago(A1):
             0.65,
             -1.2,
         ]
-        self.robot_spawn_offset = np.array([0.0, 0.475, 0])
+        self.robot_spawn_offset = (
+            np.array([0.0, 0.475, 0])
+            if robot_spawn_offset is None
+            else robot_spawn_offset
+        )
         self.robot_dist_to_goal = 0.3235
         self.camera_spawn_offset = np.array([0.0, 0.25, -0.3235])
 
 
 class Locobot(A1):
-    def __init__(self):
+    def __init__(self, robot_spawn_offset=None):
         super().__init__()
         self.name = "Locobot"
         self._initial_joint_positions = []
 
         # Spawn the URDF 0.425 meters above the navmesh upon reset
-        self.robot_spawn_offset = np.array([0.0, 0.25, 0])
+        self.robot_spawn_offset = (
+            np.array([0.0, 0.25, 0])
+            if robot_spawn_offset is None
+            else robot_spawn_offset
+        )
         self.robot_dist_to_goal = 0.2
         self.camera_spawn_offset = np.array([0.0, 0.31, -0.55])
         self.urdf_params = np.array([4.19, 0.00, 0.35, 0.35])
 
 
 class Spot(A1):
-    def __init__(self):
+    def __init__(self, robot_spawn_offset=None):
         super().__init__()
         self.name = "Spot"
         self._initial_joint_positions = [
@@ -275,7 +291,13 @@ class Spot(A1):
         #     3.14,
         # ]
 
-        self.robot_spawn_offset = np.array([0.0, 0.65, 0])
+        self.robot_spawn_offset = (
+            np.array([0.0, 0.65, 0])
+            if robot_spawn_offset is None
+            else robot_spawn_offset
+        )
+        print("ROBOT SPAWN OFFSET: ", self.robot_spawn_offset)
+        # self.robot_spawn_offset = np.array([0.0, 0.65, 0])
         self.robot_dist_to_goal = 0.325
         self.camera_spawn_offset = np.array([0.0, 0.325, -0.325])
         self.urdf_params = np.array([32.70, 0.88, 1.10, 0.50])
