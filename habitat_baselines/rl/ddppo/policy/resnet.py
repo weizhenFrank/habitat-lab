@@ -220,6 +220,10 @@ class ResNet(nn.Module):
             base_planes *= 2
 
         self.layer1 = self._make_layer(block, ngroups, base_planes, layers[0])
+        self.layer1_mp = self._make_layer(
+            block, ngroups, base_planes, layers[0], stride=2
+        )
+
         self.layer2 = self._make_layer(
             block, ngroups, base_planes * 2, layers[1], stride=2
         )
@@ -265,11 +269,15 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x) -> Tensor:
+    def forward(self, x, use_maxpool=True) -> Tensor:
         x = self.conv1(x)
-        x = self.maxpool(x)
-        x = cast(Tensor, x)
-        x = self.layer1(x)
+        if use_maxpool:
+            x = self.maxpool(x)
+            x = cast(Tensor, x)
+            x = self.layer1(x)
+        else:
+            x = cast(Tensor, x)
+            x = self.layer1_mp(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
