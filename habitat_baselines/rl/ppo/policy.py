@@ -557,6 +557,7 @@ class PointNavContextNet(PointNavBaselineNet):
         self.prev_action_embedding_size = 32 if self.use_prev_action else 0
         self.context_hidden_size = context_hidden_size
         self.rnn_type = rnn_type
+        self.use_maxpool = policy_config.use_maxpool
 
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observation_space.spaces:
             self.tgt_encoding = tgt_encoding
@@ -600,7 +601,10 @@ class PointNavContextNet(PointNavBaselineNet):
                     )
                     dim = 65536 if "resnet50" in self.cnn_type else 16384
                     dim = 4096 if observation_space[k].shape[0] == 100 else dim
-                    self.context_encoder = getattr(resnet, self.cnn_type)(2, 32, 32)
+                    in_channels = policy_config.in_channels
+                    self.context_encoder = getattr(resnet, self.cnn_type)(
+                        in_channels, 32, 32
+                    )
                 self.context_fc = nn.Sequential(
                     nn.Flatten(),
                     nn.Linear(dim, self.context_hidden_size),
@@ -655,7 +659,7 @@ class PointNavContextNet(PointNavBaselineNet):
             obs = observations[ContextMapTrajectorySensor.cls_uuid]
         if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
             obs = obs.permute(0, 3, 1, 2)
-        out = self.context_encoder(obs)
+        out = self.context_encoder(obs, use_maxpool=self.use_maxpool)
         if "resnet" in self.cnn_type:
             out = self.context_fc(out)
         if self.context_hidden_size == 3:
