@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # TODO, lots of typing errors in here
-
+import glob
 from typing import Any, Dict, List, Optional, Tuple
 
 import attr
@@ -244,6 +244,7 @@ class PointGoalSensor(Sensor):
                 rho, phi = cartesian_to_polar(
                     -direction_vector_agent[2], direction_vector_agent[0]
                 )
+                rho *= self.pointgoal_scale
                 if self.log_pointgoal:
                     return np.array([np.log(rho), -phi], dtype=np.float32)
                 if self.bin_pointgoal:
@@ -382,6 +383,7 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
     def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self.bin_pointgoal = getattr(config, "BIN_POINTGOAL", False)
+        self.pointgoal_scale = getattr(config, "POINTGOAL_SCALE", 1.0)
 
         super().__init__(sim=sim, config=config)
 
@@ -676,7 +678,92 @@ class ProximitySensor(Sensor):
 
 
 @registry.register_sensor
-class ContextWaypointSensor(Sensor):
+class ContextSensor(Sensor):
+    r"""Sensor for passing in additional context (map, waypoint, etc.)
+
+    Args:
+        sim: reference to the simulator for calculating task observations.
+        config: config for the sensor.
+    """
+    cls_uuid: str = "context_sensor"
+
+    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+        self._sim = sim
+        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
+        self.pointgoal_scale = getattr(config, "POINTGOAL_SCALE", 1.0)
+
+        super().__init__(sim=sim, config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.PATH
+
+    def _get_goal_vector(self, episode, use_log_scale=True):
+        goal = episode.goals[0]
+        goal_position = goal.position
+        agent_state = self._sim.get_agent_state()
+        agent_position = agent_state.position
+        rotation_world_agent = agent_state.rotation
+
+        return self._compute_pointgoal(
+            agent_position,
+            rotation_world_agent,
+            goal_position,
+            use_log_scale=use_log_scale,
+        )
+
+    def _compute_pointgoal(
+        self,
+        agent_position,
+        rotation_world_agent,
+        goal_position,
+        use_log_scale=True,
+    ):
+        direction_vector = goal_position - agent_position
+        direction_vector_agent = quaternion_rotate_vector(
+            rotation_world_agent.inverse(), direction_vector
+        )
+        rho, phi = cartesian_to_polar(
+            -direction_vector_agent[2], direction_vector_agent[0]
+        )
+        rho *= self.pointgoal_scale
+        if self.log_pointgoal and use_log_scale:
+            return np.array([np.log(rho), -phi], dtype=np.float32)
+        return np.array([rho, -phi], dtype=np.float32)
+
+    def get_polar_angle(self):
+        agent_state = self._sim.get_agent_state()
+        # quaternion is in x, y, z, w format
+        ref_rotation = agent_state.rotation
+
+        heading_vector = quaternion_rotate_vector(
+            ref_rotation.inverse(), np.array([0, 0, -1])
+        )
+
+        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+        z_neg_z_flip = np.pi
+        return np.array(phi) + z_neg_z_flip
+
+    def get_rotated_point(self, img, im_rot, xy, agent_rotation):
+        yx = xy[::-1]
+        a = -(agent_rotation - np.pi)
+        org_center = (np.array(img.shape[:2][::-1]) - 1) // 2
+        rot_center = (np.array(im_rot.shape[:2][::-1]) - 1) // 2
+        org = yx - org_center
+        new = np.array(
+            [
+                org[0] * np.cos(a) + org[1] * np.sin(a),
+                -org[0] * np.sin(a) + org[1] * np.cos(a),
+            ]
+        )
+        rotated_pt = new + rot_center
+        return int(rotated_pt[1]), int(rotated_pt[0])
+
+
+@registry.register_sensor
+class ContextWaypointSensor(ContextSensor):
     r"""Sensor for passing in additional context (map, waypoint, etc.)
 
     Args:
@@ -687,7 +774,6 @@ class ContextWaypointSensor(Sensor):
 
     def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
         self._sim = sim
-        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
         self.thresh = getattr(config, "THRESHOLD", 1)
         self.n_wpts = getattr(config, "N_WAYPOINTS", 1)
@@ -703,18 +789,6 @@ class ContextWaypointSensor(Sensor):
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         # 0 (white) if occupied, 1 (gray) if unoccupied
         return spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
-
-    def _compute_pointgoal(self, agent_position, rotation_world_agent, goal_position):
-        direction_vector = goal_position - agent_position
-        direction_vector_agent = quaternion_rotate_vector(
-            rotation_world_agent.inverse(), direction_vector
-        )
-        rho, phi = cartesian_to_polar(
-            -direction_vector_agent[2], direction_vector_agent[0]
-        )
-        if self.log_pointgoal:
-            return np.array([np.log(rho), wrap_heading(-phi)], dtype=np.float32)
-        return np.array([rho, wrap_heading(-phi)], dtype=np.float32)
 
     def interp_pts(self, curr_pt, next_pt, thresh):
         rho = np.linalg.norm(next_pt - curr_pt)
@@ -776,7 +850,6 @@ class ContextWaypointSensor(Sensor):
             waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
             task.is_stop_called = True
         if len(waypoint_vectors.flatten()) < 2:
-            print("waypoint_vectors: ", waypoint_vectors)
             waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
             task.is_stop_called = True
         if np.isnan(waypoint_vectors).any():
@@ -786,7 +859,7 @@ class ContextWaypointSensor(Sensor):
 
 
 @registry.register_sensor
-class ContextMapSensor(PointGoalSensor):
+class ContextMapSensor(ContextSensor):
     r"""Sensor for passing in additional context (map, waypoint, etc.)
 
     Args:
@@ -819,10 +892,16 @@ class ContextMapSensor(PointGoalSensor):
         self.separate_channel = getattr(config, "SECOND_CHANNEL", False)
         self.multi_channel = getattr(config, "MULTI_CHANNEL", False)
         self.map_type = getattr(config, "MAP_TYPE", "GRID")
+        self.pointgoal_scale = getattr(config, "POINTGOAL_SCALE", 1.0)
+        self.stacked_map_res = getattr(config, "STACKED_MAP_RES", [])
 
-        n_dim = 2 if self.separate_channel else 1
-        n_dim = 3 if self.multi_channel else n_dim
-        self.map_shape = (self._map_resolution, self._map_resolution, n_dim)
+        self.n_dim = 1
+        self.n_dim = (
+            len(self.stacked_map_res) if self.stacked_map_res != [] else self.n_dim
+        )
+        self.n_dim = self.n_dim + 1 if self.separate_channel else self.n_dim
+        self.map_shape = (self._map_resolution, self._map_resolution, self.n_dim)
+
         self._current_episode_id = None
         self._top_down_map = None
         # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
@@ -856,6 +935,7 @@ class ContextMapSensor(PointGoalSensor):
         # self.disk_radius = (5 * self._map_resolution) / 256
         # self.disk_radius = 1.0 / self.meters_per_pixel
         self.disk_radius = 2.0
+        self.mpp = 0.5
         super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -903,52 +983,6 @@ class ContextMapSensor(PointGoalSensor):
             )
             print(f"saved: {save_name}")
 
-    def _get_goal_vector(self, episode, use_log_scale=True):
-        goal = episode.goals[0]
-        goal_position = goal.position
-        agent_state = self._sim.get_agent_state()
-        agent_position = agent_state.position
-        rotation_world_agent = agent_state.rotation
-
-        return self._compute_pointgoal(
-            agent_position,
-            rotation_world_agent,
-            goal_position,
-            use_log_scale=use_log_scale,
-        )
-
-    def _compute_pointgoal(
-        self,
-        source_position,
-        source_rotation,
-        goal_position,
-        use_log_scale=True,
-    ):
-        direction_vector = goal_position - source_position
-        direction_vector_agent = quaternion_rotate_vector(
-            source_rotation.inverse(), direction_vector
-        )
-
-        rho, phi = cartesian_to_polar(
-            -direction_vector_agent[2], direction_vector_agent[0]
-        )
-        if self.log_pointgoal and use_log_scale:
-            return np.array([np.log(rho), -phi], dtype=np.float32)
-        return np.array([rho, -phi], dtype=np.float32)
-
-    def get_polar_angle(self):
-        agent_state = self._sim.get_agent_state()
-        # quaternion is in x, y, z, w format
-        ref_rotation = agent_state.rotation
-
-        heading_vector = quaternion_rotate_vector(
-            ref_rotation.inverse(), np.array([0, 0, -1])
-        )
-
-        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
-        z_neg_z_flip = np.pi
-        return np.array(phi) + z_neg_z_flip
-
     def crop_at_point(self, img, center_coord, size):
         h, w = np.array(img).shape[:2]
         a_x, a_y = center_coord
@@ -962,21 +996,6 @@ class ContextMapSensor(PointGoalSensor):
         else:
             return img[top:bottom, left:right]
 
-    def get_rotated_point(self, img, im_rot, xy, agent_rotation):
-        yx = xy[::-1]
-        a = -(agent_rotation - np.pi)
-        org_center = (np.array(img.shape[:2][::-1]) - 1) // 2
-        rot_center = (np.array(im_rot.shape[:2][::-1]) - 1) // 2
-        org = yx - org_center
-        new = np.array(
-            [
-                org[0] * np.cos(a) + org[1] * np.sin(a),
-                -org[0] * np.sin(a) + org[1] * np.cos(a),
-            ]
-        )
-        rotated_pt = new + rot_center
-        return int(rotated_pt[1]), int(rotated_pt[0])
-
     def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
@@ -985,12 +1004,24 @@ class ContextMapSensor(PointGoalSensor):
         # start = time.time()
         episode_uniq_id = f"{episode.scene_id} {episode.episode_id}"
         if episode_uniq_id != self._current_episode_id:
-            self._top_down_map = maps.get_topdown_map_from_sim(
-                self._sim,
-                map_resolution=self._map_resolution,
-                draw_border=False,
-                meters_per_pixel=self.meters_per_pixel,
-            )
+            print("SELF.METERS PER PIXEL: ", self.meters_per_pixel)
+            if self.meters_per_pixel < 0:
+                self._top_down_map = maps.get_topdown_map_from_sim(
+                    self._sim,
+                    map_resolution=self._map_resolution,
+                    draw_border=False,
+                )
+                self.mpp = maps.calculate_meters_per_pixel(
+                    self._map_resolution, pathfinder=self._sim.pathfinder
+                )
+            else:
+                self._top_down_map = maps.get_topdown_map_from_sim(
+                    self._sim,
+                    map_resolution=self._map_resolution,
+                    draw_border=False,
+                    meters_per_pixel=self.meters_per_pixel,
+                )
+                self.mpp = self.meters_per_pixel
             # self.save_map(self._top_down_map, "topdown_map")
             self._current_episode_id = episode_uniq_id
             # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
@@ -1100,11 +1131,14 @@ class ContextMapSensor(PointGoalSensor):
             # don't use log scale b/c we're adding it to the map
             r, theta = self._get_goal_vector(episode, use_log_scale=False)
 
-            r_limit = (self._map_resolution // 2) * self.meters_per_pixel
-            goal_r = np.clip(r, -r_limit, r_limit)
+            r_limit = (self._map_resolution // 2) * self.mpp * self.pointgoal_scale
+            goal_r = np.clip(
+                r, -r_limit / np.cos(np.deg2rad(45)), r_limit / np.cos(np.deg2rad(45))
+            )
 
-            x = (goal_r / self.meters_per_pixel) * np.cos(theta)
-            y = (goal_r / self.meters_per_pixel) * np.sin(theta)
+            x = (goal_r / (self.mpp * self.pointgoal_scale)) * np.cos(theta)
+            y = (goal_r / (self.mpp * self.pointgoal_scale)) * np.sin(theta)
+
             mid = self._map_resolution // 2
             row, col = np.clip(
                 int(mid - x),
@@ -1140,7 +1174,7 @@ class ContextMapSensor(PointGoalSensor):
 
 
 @registry.register_sensor
-class ContextMapTrajectorySensor(PointGoalSensor):
+class ContextMapTrajectorySensor(ContextMapSensor):
     r"""Sensor for passing in additional context (map, waypoint, etc.)
 
     Args:
@@ -1151,26 +1185,10 @@ class ContextMapTrajectorySensor(PointGoalSensor):
 
     def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
         self._sim = sim
-        self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
-        self._rotate_map = getattr(config, "ROTATE_MAP", False)
-        self.meters_per_pixel = getattr(
-            config, "METERS_PER_PIXEL", 0.5
-        )  # cm per pixel; decreasing this makes map bigger, need more pixels to get 25m radius around robot
-
-        self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
-        self.save_map_debug = getattr(config, "SAVE_MAP", False)
-        self.use_topdown_map = getattr(config, "USE_TOPDOWN_MAP", False)
-        self.map_shape = (self._map_resolution, self._map_resolution, 2)
-        self.disk_radius = 1.0 / self.meters_per_pixel
-        self._current_episode_id = None
-        self._top_down_map = None
-        self.blank_top_down_map = None
-
-        self.ep_id = 0
-        self.ctr = 0
-
-        print("INIT MAP TRAJECTORY")
         super().__init__(sim=sim, config=config)
+
+        self.use_topdown_map = getattr(config, "USE_TOPDOWN_MAP", False)
+        self.blank_top_down_map = None
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
@@ -1187,49 +1205,25 @@ class ContextMapTrajectorySensor(PointGoalSensor):
             if top_down_map.ndim > 2:
                 td_map = top_down_map[:, :, 0]
                 agent_map = top_down_map[:, :, 1]
+                agent_color_map = maps.colorize_topdown_map(agent_map)
+            else:
+                td_map = top_down_map
 
             color_map = maps.colorize_topdown_map(td_map)
-            agent_color_map = maps.colorize_topdown_map(agent_map)
 
-            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
-            agent_save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/AGENT_{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            save_name = (
+                f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}.png"
+            )
+            # agent_save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/AGENT_{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
             cv2.imwrite(
                 f"{save_name}",
                 color_map,
             )
-            cv2.imwrite(
-                f"{agent_save_name}",
-                agent_color_map,
-            )
+            # cv2.imwrite(
+            #     f"{agent_save_name}",
+            #     agent_color_map,
+            # )
             print(f"saved: {save_name}")
-
-    def _get_goal_vector(self, episode, use_log_scale=True):
-        goal = episode.goals[0]
-        goal_position = goal.position
-        agent_state = self._sim.get_agent_state()
-        agent_position = agent_state.position
-        rotation_world_agent = agent_state.rotation
-
-        return self._compute_pointgoal(
-            agent_position,
-            rotation_world_agent,
-            goal_position,
-            use_log_scale=use_log_scale,
-        )
-
-    def _compute_pointgoal(
-        self, agent_position, rotation_world_agent, goal_position, use_log_scale=True
-    ):
-        direction_vector = goal_position - agent_position
-        direction_vector_agent = quaternion_rotate_vector(
-            rotation_world_agent.inverse(), direction_vector
-        )
-        rho, phi = cartesian_to_polar(
-            -direction_vector_agent[2], direction_vector_agent[0]
-        )
-        if self.log_pointgoal and use_log_scale:
-            return np.array([np.log(rho), wrap_heading(-phi)], dtype=np.float32)
-        return np.array([rho, wrap_heading(-phi)], dtype=np.float32)
 
     def draw_trajectory(self, episode, top_down_map):
         agent_position = self._sim.get_agent_state().position
@@ -1249,59 +1243,16 @@ class ContextMapTrajectorySensor(PointGoalSensor):
             maps.draw_path(
                 top_down_map,
                 self._shortest_path_points,
-                2.0,
+                1.0,
                 int(self.disk_radius),
             )
             agent_position = goal.position
-
-    def get_polar_angle(self):
-        agent_state = self._sim.get_agent_state()
-        # quaternion is in x, y, z, w format
-        ref_rotation = agent_state.rotation
-
-        heading_vector = quaternion_rotate_vector(
-            ref_rotation.inverse(), np.array([0, 0, -1])
-        )
-
-        phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
-        z_neg_z_flip = np.pi
-        return np.array(phi) + z_neg_z_flip
-
-    def crop_at_point(self, img, center_coord, size):
-        h, w = np.array(img).shape[:2]
-        a_x, a_y = center_coord
-        top = max(a_x - size // 2, 0)
-        bottom = min(a_x + size // 2, h)
-        left = max(a_y - size // 2, 0)
-        right = min(a_y + size // 2, w)
-
-        if img.ndim == 3:
-            return img[top:bottom, left:right, :]
-        else:
-            return img[top:bottom, left:right]
-
-    def get_rotated_point(self, img, im_rot, xy, agent_rotation):
-        yx = xy[::-1]
-        a = -(agent_rotation - np.pi)
-        org_center = (np.array(img.shape[:2][::-1]) - 1) // 2
-        rot_center = (np.array(im_rot.shape[:2][::-1]) - 1) // 2
-        org = yx - org_center
-        new = np.array(
-            [
-                org[0] * np.cos(a) + org[1] * np.sin(a),
-                -org[0] * np.sin(a) + org[1] * np.cos(a),
-            ]
-        )
-        rotated_pt = new + rot_center
-        return int(rotated_pt[1]), int(rotated_pt[0])
 
     def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
         # get top down map
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
 
-        # get local map from gt_top_down_map
-        # start = time.time()
         episode_uniq_id = f"{episode.scene_id} {episode.episode_id}"
         if episode_uniq_id != self._current_episode_id:
             self._top_down_map = maps.get_topdown_map_from_sim(
@@ -1312,6 +1263,7 @@ class ContextMapTrajectorySensor(PointGoalSensor):
             )
 
             self._current_episode_id = episode_uniq_id
+
         self.blank_top_down_map = np.zeros_like(self._top_down_map)
         self.draw_trajectory(episode, self.blank_top_down_map)
         if self.use_topdown_map:
@@ -1386,12 +1338,21 @@ class ContextMapTrajectorySensor(PointGoalSensor):
             local_top_down_map_filled[rr, cc, 1] = 1.0
             # don't use log scale b/c we're adding it to the map
             r, theta = self._get_goal_vector(episode, use_log_scale=False)
+            r_limit = (
+                (self._map_resolution // 2)
+                * self.meters_per_pixel
+                * self.pointgoal_scale
+            )
+            goal_r = np.clip(
+                r, -r_limit / np.cos(np.deg2rad(45)), r_limit / np.cos(np.deg2rad(45))
+            )
 
-            r_limit = (self._map_resolution // 2) * self.meters_per_pixel
-            goal_r = np.clip(r, -r_limit, r_limit)
-
-            x = (goal_r / self.meters_per_pixel) * np.cos(theta)
-            y = (goal_r / self.meters_per_pixel) * np.sin(theta)
+            x = (goal_r / (self.meters_per_pixel * self.pointgoal_scale)) * np.cos(
+                theta
+            )
+            y = (goal_r / (self.meters_per_pixel * self.pointgoal_scale)) * np.sin(
+                theta
+            )
             mid = self._map_resolution // 2
             row, col = np.clip(
                 int(mid - x),
@@ -1405,7 +1366,7 @@ class ContextMapTrajectorySensor(PointGoalSensor):
 
             rr, cc = disk((row, col), self.disk_radius)
             local_top_down_map_filled[rr, cc, 1] = 1.0
-        self.save_map(local_top_down_map_filled, "local_map")
+        # self.save_map(local_top_down_map_filled, "local_map")
 
         local_map = local_top_down_map_filled.astype(np.float32)
         if np.isnan(local_map).any():
@@ -1474,6 +1435,7 @@ class SPL(Measure):
         self._episode_view_points = None
         self._sim = sim
         self._config = config
+        self.pointgoal_scale = self._config.POINTGOAL_SCALE
 
         super().__init__()
 
@@ -1501,8 +1463,9 @@ class SPL(Measure):
         ep_success = task.measurements.measures[Success.cls_uuid].get_metric()
 
         current_position = self._sim.get_agent_state().position
-        self._agent_episode_distance += self._euclidean_distance(
-            current_position, self._previous_position
+        self._agent_episode_distance += (
+            self._euclidean_distance(current_position, self._previous_position)
+            * self.pointgoal_scale
         )
 
         self._previous_position = current_position
@@ -1880,6 +1843,7 @@ class DistanceToGoal(Measure):
         self._previous_position: Optional[Tuple[float, float, float]] = None
         self._sim = sim
         self._config = config
+        self.pointgoal_scale = self._config.POINTGOAL_SCALE
         self._episode_view_points: Optional[List[Tuple[float, float, float]]] = None
 
         super().__init__(**kwargs)
@@ -1900,7 +1864,7 @@ class DistanceToGoal(Measure):
 
     def update_metric(self, episode: NavigationEpisode, *args: Any, **kwargs: Any):
         current_position = self._sim.get_agent_state().position
-
+        current_position[1] = episode.goals[0].position[1]
         if self._previous_position is None or not np.allclose(
             self._previous_position, current_position, atol=1e-4
         ):
@@ -1914,7 +1878,9 @@ class DistanceToGoal(Measure):
                     logger.error("WARNING!! Distance_to_target was zero")
                     distance_to_target = 999.99
                 if distance_to_target == np.inf:
-                    logger.error("WARNING!! Distance_to_target was inf")
+                    logger.error(
+                        f"WARNING!! Distance_to_target was inf {current_position} {episode.goals[0].position}"
+                    )
                     distance_to_target = 999.99
             elif self._config.DISTANCE_TO == "VIEW_POINTS":
                 distance_to_target = self._sim.geodesic_distance(
@@ -1926,7 +1892,7 @@ class DistanceToGoal(Measure):
                 )
 
             self._previous_position = current_position
-            self._metric = distance_to_target
+            self._metric = distance_to_target * self.pointgoal_scale
 
 
 @registry.register_measure
@@ -2090,7 +2056,11 @@ class VelocityAction(SimulatorTaskAction):
 
         # For acceleration penalty
         self.prev_ang_vel = 0.0
-        self.robot = eval(task._config.ROBOT)()
+
+        robot_spawn_offset = (
+            np.array([0.0, 0.25, 0]) if "0.1" in config.ROBOT_URDF else None
+        )
+        self.robot = eval(task._config.ROBOT)(robot_spawn_offset)
         self.ctrl_freq = config.CTRL_FREQ
 
         self.must_call_stop = config.MUST_CALL_STOP
@@ -2145,15 +2115,6 @@ class VelocityAction(SimulatorTaskAction):
             self.robot.robot_id = robot_id
         agent_pos = kwargs["episode"].start_position
         agent_rot = kwargs["episode"].start_rotation
-        # print('KWARGS START POS :', kwargs["episode"].start_position)
-        # print('KWARGS GOAL POS :', kwargs["episode"].goals[0].position)
-        # start_end_dist = kwargs["episode"].info["geodesic_distance"]
-        # rand_goal_1 = self._sim.pathfinder.get_random_navigable_point()
-        # rand_goal_2 = self._sim.pathfinder.get_random_navigable_point()
-
-        # kwargs["episode"].goals.insert(0, NavigationGoal(position=rand_goal_1, radius=0.3))
-        # kwargs["episode"].goals.insert(1, NavigationGoal(position=rand_goal_2, radius=0.3))
-        # print('KWARGS GOAL POS AFTER:', kwargs["episode"])
 
         rand_tilt = np.random.uniform(self.min_rand_pitch, self.max_rand_pitch)
 
@@ -2242,16 +2203,10 @@ class VelocityAction(SimulatorTaskAction):
             r = R.from_quat(rot_quat)
             scipy_rpy = r.as_euler("xzy", degrees=True)
 
-            # rpy = np.rad2deg(get_rpy(robot_rigid_state.rotation))
             rpy = np.rad2deg(euler_from_quaternion(robot_rigid_state.rotation))
             robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}, {:.2f}".format(
                 rot_quat[0], rot_quat[1], rot_quat[2], rot_quat[3]
             )
-            # robot_rot_text = "r: {:.2f}, {:.2f}, {:.2f}".format(
-            #     scipy_rpy[0],
-            #     scipy_rpy[1],
-            #     scipy_rpy[2],
-            # )
             dist_to_goal_text = "Dist2Goal: {:.2f}".format(
                 task.measurements.measures["distance_to_goal"].get_metric()
             )
@@ -2345,6 +2300,7 @@ class VelocityAction(SimulatorTaskAction):
             agent_mn_quat,
             agent_state.position,
         )
+
         """Integrate the rigid state to get the state after taking a step"""
         goal_rigid_state = self.vel_control.integrate_transform(
             time_step, current_rigid_state
@@ -2354,6 +2310,7 @@ class VelocityAction(SimulatorTaskAction):
         snapped_goal_rigid_state = self._sim.pathfinder.snap_point(
             goal_rigid_state.translation
         )
+
         goal_rigid_state.translation.x = snapped_goal_rigid_state.x
         goal_rigid_state.translation.y = snapped_goal_rigid_state.y
         goal_rigid_state.translation.z = snapped_goal_rigid_state.z
