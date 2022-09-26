@@ -111,7 +111,7 @@ class BaseTrainer:
                 )
             else:
                 # evaluate multiple checkpoints in order
-                prev_ckpt_ind = -1
+                prev_ckpt_ind = 0
                 while True:
                     current_ckpt = None
                     while current_ckpt is None:
