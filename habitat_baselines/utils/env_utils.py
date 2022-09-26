@@ -97,8 +97,11 @@ def construct_envs(
         proc_config.freeze()
         configs.append(proc_config)
 
-    # envs = habitat.ThreadedVectorEnv(
-    envs = habitat.VectorEnv(
+    env_class = (
+        "habitat.ThreadedVectorEnv" if proc_config.USE_THREADED else "habitat.VectorEnv"
+    )
+
+    envs = eval(env_class)(
         make_env_fn=make_env_fn,
         env_fn_args=tuple(zip(configs, env_classes)),
         workers_ignore_signals=workers_ignore_signals,
