@@ -198,6 +198,7 @@ class ResNet(nn.Module):
         block: Block,
         layers: List[int],
         cardinality: int = 1,
+        use_maxpool: bool = True,
     ) -> None:
         super(ResNet, self).__init__()
         self.conv1 = nn.Sequential(
@@ -212,17 +213,20 @@ class ResNet(nn.Module):
             nn.GroupNorm(ngroups, base_planes),
             nn.ReLU(True),
         )
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.use_maxpool = use_maxpool
         self.cardinality = cardinality
 
         self.inplanes = base_planes
         if block.resneXt:
             base_planes *= 2
 
-        self.layer1 = self._make_layer(block, ngroups, base_planes, layers[0])
-        self.layer1_mp = self._make_layer(
-            block, ngroups, base_planes, layers[0], stride=2
-        )
+        if use_maxpool:
+            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            self.layer1 = self._make_layer(block, ngroups, base_planes, layers[0])
+        else:
+            self.layer1 = self._make_layer(
+                block, ngroups, base_planes, layers[0], stride=2
+            )
 
         self.layer2 = self._make_layer(
             block, ngroups, base_planes * 2, layers[1], stride=2
@@ -269,29 +273,45 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x, use_maxpool=True) -> Tensor:
+    def forward(
+        self,
+        x,
+    ) -> Tensor:
         x = self.conv1(x)
-        if use_maxpool:
+        if self.use_maxpool:
             x = self.maxpool(x)
-            x = cast(Tensor, x)
-            x = self.layer1(x)
-        else:
-            x = cast(Tensor, x)
-            x = self.layer1_mp(x)
+        x = cast(Tensor, x)
+        x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
         return x
 
 
-def resnet18(in_channels, base_planes, ngroups):
-    model = ResNet(in_channels, base_planes, ngroups, BasicBlock, [2, 2, 2, 2])
+def resnet18(in_channels, base_planes, ngroups, use_maxpool=True):
+    model = ResNet(
+        in_channels,
+        base_planes,
+        ngroups,
+        BasicBlock,
+        [2, 2, 2, 2],
+        use_maxpool=use_maxpool,
+    )
 
     return model
 
 
-def resnet50(in_channels: int, base_planes: int, ngroups: int) -> ResNet:
-    model = ResNet(in_channels, base_planes, ngroups, Bottleneck, [3, 4, 6, 3])
+def resnet50(
+    in_channels: int, base_planes: int, ngroups: int, use_maxpool: bool = True
+) -> ResNet:
+    model = ResNet(
+        in_channels,
+        base_planes,
+        ngroups,
+        Bottleneck,
+        [3, 4, 6, 3],
+        use_maxpool=use_maxpool,
+    )
 
     return model
 
@@ -315,7 +335,7 @@ def se_resnet50(in_channels, base_planes, ngroups):
     return model
 
 
-def se_resneXt50(in_channels, base_planes, ngroups):
+def se_resneXt50(in_channels, base_planes, ngroups, use_maxpool=True):
     model = ResNet(
         in_channels,
         base_planes,
@@ -323,6 +343,7 @@ def se_resneXt50(in_channels, base_planes, ngroups):
         SEResNeXtBottleneck,
         [3, 4, 6, 3],
         cardinality=int(base_planes / 2),
+        use_maxpool=use_maxpool,
     )
 
     return model

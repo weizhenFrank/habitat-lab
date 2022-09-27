@@ -603,7 +603,7 @@ class PointNavContextNet(PointNavBaselineNet):
                     dim = 4096 if observation_space[k].shape[0] == 100 else dim
                     in_channels = policy_config.in_channels
                     self.context_encoder = getattr(resnet, self.cnn_type)(
-                        in_channels, 32, 32
+                        in_channels, 32, 32, use_maxpool=self.use_maxpool
                     )
                 self.context_fc = nn.Sequential(
                     nn.Flatten(),
@@ -659,7 +659,7 @@ class PointNavContextNet(PointNavBaselineNet):
             obs = observations[ContextMapTrajectorySensor.cls_uuid]
         if "cnn" not in self.cnn_type and "full" not in self.cnn_type:
             obs = obs.permute(0, 3, 1, 2)
-        out = self.context_encoder(obs, use_maxpool=self.use_maxpool)
+        out = self.context_encoder(obs)
         if "resnet" in self.cnn_type:
             out = self.context_fc(out)
         if self.context_hidden_size == 3:
