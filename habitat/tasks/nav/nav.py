@@ -22,21 +22,31 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import (EmbodiedTask, Measure,
-                                        SimulatorTaskAction)
+from habitat.core.embodied_task import EmbodiedTask, Measure, SimulatorTaskAction
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
-                                    ShortestPathPoint, Simulator)
+from habitat.core.simulator import (
+    AgentState,
+    RGBSensor,
+    Sensor,
+    SensorTypes,
+    ShortestPathPoint,
+    Simulator,
+)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor, HabitatSimRGBSensor)
+    HabitatSimDepthSensor,
+    HabitatSimRGBSensor,
+)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
-                                          quaternion_from_coeff,
-                                          quaternion_rotate_vector)
+from habitat.utils.geometry_utils import (
+    Cutout,
+    euler_from_quaternion,
+    quaternion_from_coeff,
+    quaternion_rotate_vector,
+)
 from habitat.utils.visualizations import fog_of_war, maps
 from skimage.draw import disk
 
@@ -50,8 +60,10 @@ except ImportError:
 
 import time
 
-from .robot_utils.raibert_controller import (Raibert_controller_turn,
-                                             Raibert_controller_turn_stable)
+from .robot_utils.raibert_controller import (
+    Raibert_controller_turn,
+    Raibert_controller_turn_stable,
+)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -64,6 +76,8 @@ import torch
 import torch.nn.functional as F
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R
+
+MAPS_DIR = "/coc/testnvme/jtruong33/google_nav/habitat-lab/topdown_maps/"
 
 
 def depth_to_surface_normals(depth, surfnorm_scalar=256):
@@ -519,7 +533,12 @@ class PoseSensor(Sensor):
         self._episode_time += 1.0
 
         return np.array(
-            [-agent_position_xyz[2], agent_position_xyz[0], agent_heading, ep_time],
+            [
+                -agent_position_xyz[2],
+                agent_position_xyz[0],
+                agent_heading,
+                ep_time,
+            ],
             dtype=np.float32,
         )
 
@@ -900,14 +919,19 @@ class ContextMapSensor(ContextSensor):
             len(self.stacked_map_res) if self.stacked_map_res != [] else self.n_dim
         )
         self.n_dim = self.n_dim + 1 if self.separate_channel else self.n_dim
-        self.map_shape = (self._map_resolution, self._map_resolution, self.n_dim)
+        self.map_shape = (
+            self._map_resolution,
+            self._map_resolution,
+            self.n_dim,
+        )
 
         self._current_episode_id = None
         self._top_down_map = None
         # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
         if self.pad_noise:
             self._pad_noise_map = np.zeros(
-                (self._map_resolution * 2, self._map_resolution * 2), dtype=np.uint8
+                (self._map_resolution * 2, self._map_resolution * 2),
+                dtype=np.uint8,
             )
 
         self.ep_id = 0
@@ -996,47 +1020,26 @@ class ContextMapSensor(ContextSensor):
         else:
             return img[top:bottom, left:right]
 
-    def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
-        self.ep_id = int(episode.episode_id)
-        self.ctr += 1
+    def get_rotated_map(self, curr_map, agent_rotation):
+        init_map = curr_map.copy()
+        rot_angle = -(agent_rotation - np.pi)
+        top_down_map_rot = scipy.ndimage.interpolation.rotate(
+            init_map, np.rad2deg(rot_angle), reshape=True
+        )
+        return top_down_map_rot
 
-        # get local map from gt_top_down_map
-        # start = time.time()
-        episode_uniq_id = f"{episode.scene_id} {episode.episode_id}"
-        if episode_uniq_id != self._current_episode_id:
-            print("SELF.METERS PER PIXEL: ", self.meters_per_pixel)
-            if self.meters_per_pixel < 0:
-                self._top_down_map = maps.get_topdown_map_from_sim(
-                    self._sim,
-                    map_resolution=self._map_resolution,
-                    draw_border=False,
-                )
-                self.mpp = maps.calculate_meters_per_pixel(
-                    self._map_resolution, pathfinder=self._sim.pathfinder
-                )
-            else:
-                self._top_down_map = maps.get_topdown_map_from_sim(
-                    self._sim,
-                    map_resolution=self._map_resolution,
-                    draw_border=False,
-                    meters_per_pixel=self.meters_per_pixel,
-                )
-                self.mpp = self.meters_per_pixel
-            # self.save_map(self._top_down_map, "topdown_map")
-            self._current_episode_id = episode_uniq_id
-            # self._fake_map = np.ones(self.map_shape, dtype=np.uint8)
-            # self._fake_map = self.occupied_cutout(self._fake_map)
-            # self._fake_map = self.unoccupied_cutout(self._fake_map)
-            if self.pad_noise:
-                self._pad_noise_map = np.zeros(
-                    (self._map_resolution * 2, self._map_resolution * 2), dtype=np.uint8
-                )
-                self._pad_noise_map = self.unoccupied_cutout(self._pad_noise_map)
+    def get_crop_map(self, curr_top_down_map, crop_x, crop_y):
+        pad_top = max(self._map_resolution // 2 - crop_x - 1, 0)
+        pad_left = max(self._map_resolution // 2 - crop_y - 1, 0)
 
-                self.save_map(self._pad_noise_map, "pad_map")
+        local_top_down_map = self.crop_at_point(
+            curr_top_down_map,
+            (crop_x, crop_y),
+            self._map_resolution,
+        )
+        return local_top_down_map, pad_top, pad_left
 
-        curr_top_down_map = self._top_down_map.copy()
-        agent_rotation = self.get_polar_angle()
+    def get_global_agent_coord(self, curr_top_down_map):
         current_position = self._sim.get_agent_state().position
         ### a_x is along height, a_y is along width
         a_x, a_y = maps.to_grid(
@@ -1045,62 +1048,126 @@ class ContextMapSensor(ContextSensor):
             curr_top_down_map.shape[:2],
             sim=self._sim,
         )
+        return a_x, a_y
 
+    def get_local_map(self, curr_top_down_map, a_x=None, a_y=None):
+        agent_rotation = self.get_polar_angle()
         if self._rotate_map:
-            rot_angle = -(agent_rotation - np.pi)
-            top_down_map_rot = scipy.ndimage.interpolation.rotate(
-                curr_top_down_map, np.rad2deg(rot_angle), reshape=True
-            )
-            if self.pad_noise:
-                noise_map = self._pad_noise_map.copy()
-
-                noise_map_rot = scipy.ndimage.interpolation.rotate(
-                    noise_map, np.rad2deg(rot_angle), reshape=True
-                )
-                nh, nw = noise_map_rot.shape[:2]
-                local_noise_map = self.crop_at_point(
-                    noise_map_rot,
-                    (nh // 2, nw // 2),
-                    self._map_resolution,
-                )
-
+            top_down_map_rot = self.get_rotated_map(curr_top_down_map, agent_rotation)
             ## rotate top down map to match agent's heading
-            a_x, a_y = self.get_rotated_point(
-                curr_top_down_map,
-                top_down_map_rot,
-                np.array([a_x, a_y]),
-                agent_rotation,
-            )
+            if a_x is not None or a_y is not None:
+                a_x, a_y = self.get_rotated_point(
+                    curr_top_down_map,
+                    top_down_map_rot,
+                    np.array([a_x, a_y]),
+                    agent_rotation,
+                )
+            else:
+                h, w = top_down_map_rot.shape[:2]
+                a_x, a_y = h // 2, w // 2
             curr_top_down_map = top_down_map_rot
-        pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
-        pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
+        return self.get_crop_map(curr_top_down_map, a_x, a_y)
 
-        local_top_down_map = self.crop_at_point(
-            curr_top_down_map,
-            (a_x, a_y),
-            self._map_resolution,
+    def get_local_agent_coord(self, local_top_down_map_filled):
+        x_limit, y_limit = local_top_down_map_filled.shape[:2]
+        mid_x = x_limit // 2
+        mid_y = y_limit // 2
+        rr, cc = disk((mid_x, mid_y), self.disk_radius)
+        return rr, cc
+
+    def get_local_goal_coord(self, local_top_down_map_filled, episode):
+        x_limit, y_limit = local_top_down_map_filled.shape[:2]
+        r, theta = self._get_goal_vector(episode, use_log_scale=False)
+
+        r_limit = (self._map_resolution // 2) * self.mpp * self.pointgoal_scale
+        goal_r = np.clip(
+            r,
+            -r_limit / np.cos(np.deg2rad(45)),
+            r_limit / np.cos(np.deg2rad(45)),
         )
-        lh, lw = local_top_down_map.shape[:2]
 
-        # if self.p > 0:
-        #     local_top_down_map_corroded = self.unoccupied_cutout(
-        #         local_top_down_map[:, :, 0]
-        #     )
-        #     local_top_down_map_corroded = self.occupied_cutout(
-        #         local_top_down_map_corroded
-        #     )
-        #     local_top_down_map[:, :, 0] = local_top_down_map_corroded
+        x = (goal_r / (self.mpp * self.pointgoal_scale)) * np.cos(theta)
+        y = (goal_r / (self.mpp * self.pointgoal_scale)) * np.sin(theta)
 
-        # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
-        local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
-        x_limit, y_limit = local_top_down_map_filled[:, :, 0].shape
-        if self.multi_channel:
-            # 0(white) if occupied, 1(gray) if unoccupied
-            local_top_down_map_filled[:, :, 0][local_top_down_map[:, :, 0] == 0] = 1
-            local_top_down_map_filled[:, :, 1] = local_top_down_map[:, :, 0]
-            rr, cc = disk((x_limit // 2, y_limit // 2), self.disk_radius)
-            local_top_down_map_filled[rr, cc, 2] = 1.0
-        elif self.separate_channel:
+        mid = self._map_resolution // 2
+        row, col = np.clip(
+            int(mid - x),
+            0 + self.disk_radius,
+            x_limit - (self.disk_radius + 1),
+        ), np.clip(
+            int(mid - y),
+            0 + self.disk_radius,
+            y_limit - (self.disk_radius + 1),
+        )
+
+        rr, cc = disk((row, col), self.disk_radius)
+        return rr, cc
+
+    def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
+        self.ep_id = int(episode.episode_id)
+        self.ctr += 1
+
+        z_height = np.round(self._sim.get_agent_state().position[1])
+        episode_uniq_id = f"{episode.scene_id}_{z_height}"
+        scene_name = os.path.basename(episode.scene_id).split(".")[0]
+        if episode_uniq_id != self._current_episode_id:
+            self._topdown_maps = []
+            for mpp in self.stacked_map_res:
+                if mpp < 0:
+                    mpp = None
+                    self.mpp = maps.calculate_meters_per_pixel(
+                        self._map_resolution, pathfinder=self._sim.pathfinder
+                    )
+                if z_height == -0.0:
+                    z_height = 0.0
+                tdm_name = f"{scene_name}_{z_height:.1f}_{self._map_resolution}_{mpp}"
+                if os.path.exists(os.path.join(MAPS_DIR, f"{tdm_name}.npy")):
+                    self._topdown_maps.append(
+                        np.load(os.path.join(MAPS_DIR, f"{tdm_name}.npy"))
+                    )
+                else:
+                    print(
+                        "PATH DOES NOT EXIT: ",
+                        os.path.join(MAPS_DIR, f"{tdm_name}.npy"),
+                    )
+                    self._topdown_maps.append(
+                        maps.get_topdown_map_from_sim(
+                            self._sim,
+                            map_resolution=self._map_resolution,
+                            draw_border=False,
+                            meters_per_pixel=mpp,
+                        )
+                    )
+            self._current_episode_id = episode_uniq_id
+
+            if self.pad_noise:
+                self._pad_noise_map = np.zeros(
+                    (self._map_resolution * 2, self._map_resolution * 2),
+                    dtype=np.uint8,
+                )
+                self._pad_noise_map = self.unoccupied_cutout(self._pad_noise_map)
+
+                self.save_map(self._pad_noise_map, "pad_map")
+
+        local_maps = []
+        for tdm in self._topdown_maps:
+            curr_top_down_map = tdm.copy()
+            a_x, a_y = self.get_global_agent_coord(curr_top_down_map)
+            local_top_down_map, pad_top, pad_left = self.get_local_map(
+                curr_top_down_map, a_x, a_y
+            )
+
+            if self.pad_noise:
+                local_noise_map, pad_top, pad_left = self.get_local_map(
+                    self._pad_noise_map
+                )
+
+            lh, lw = local_top_down_map.shape[:2]
+
+            # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
+            local_top_down_map_filled = np.zeros(
+                (self._map_resolution, self._map_resolution), dtype=np.uint8
+            )
             if self.pad_noise:
                 blank_map = np.zeros(
                     (self._map_resolution, self._map_resolution), dtype=np.uint8
@@ -1108,69 +1175,34 @@ class ContextMapSensor(ContextSensor):
                 blank_map[
                     pad_top : pad_top + lh, pad_left : pad_left + lw
                 ] = local_top_down_map
-                # self.save_map(blank_map, "blank_map")
                 local_noise_map[blank_map == 1.0] = 1.0
-                # self.save_map(local_noise_map, "noisy_map")
-
-                local_top_down_map_filled[:, :, 0] = local_noise_map
+                local_top_down_map_filled[:, :] = local_noise_map
             else:
                 local_top_down_map_filled[
-                    pad_top : pad_top + lh, pad_left : pad_left + lw, 0
+                    pad_top : pad_top + lh, pad_left : pad_left + lw
                 ] = local_top_down_map
 
-            # add a separate channel for agents
-            local_top_down_map_filled[::, 1] = np.zeros_like(
-                local_top_down_map_filled[::, 0]
-            )
-            mid_x = x_limit // 2
-            mid_y = y_limit // 2
-            rr, cc = disk((mid_x, mid_y), self.disk_radius)
-
-            local_top_down_map_filled[rr, cc, 1] = 1.0
-
-            # don't use log scale b/c we're adding it to the map
-            r, theta = self._get_goal_vector(episode, use_log_scale=False)
-
-            r_limit = (self._map_resolution // 2) * self.mpp * self.pointgoal_scale
-            goal_r = np.clip(
-                r, -r_limit / np.cos(np.deg2rad(45)), r_limit / np.cos(np.deg2rad(45))
-            )
-
-            x = (goal_r / (self.mpp * self.pointgoal_scale)) * np.cos(theta)
-            y = (goal_r / (self.mpp * self.pointgoal_scale)) * np.sin(theta)
-
-            mid = self._map_resolution // 2
-            row, col = np.clip(
-                int(mid - x),
-                0 + self.disk_radius,
-                x_limit - (self.disk_radius + 1),
-            ), np.clip(
-                int(mid - y),
-                0 + self.disk_radius,
-                y_limit - (self.disk_radius + 1),
-            )
-
-            rr, cc = disk((row, col), self.disk_radius)
-            local_top_down_map_filled[rr, cc, 1] = 1.0
-        else:
-            local_top_down_map_filled[
-                pad_top : pad_top + lh, pad_left : pad_left + lw, 0
-            ] = local_top_down_map
-            rr, cc = disk((x_limit // 2, y_limit // 2), self.disk_radius)
-            local_top_down_map_filled[rr, cc, 0] = 2.0
-        # if self.save_map_debug:
-        #     local_top_down_map_filled = self._fake_map
-
-        if self.debug == "WHITE":
-            return np.zeros_like(local_top_down_map_filled, dtype=np.float32)
-        elif self.debug == "GRAY":
-            return np.ones_like(local_top_down_map_filled, dtype=np.float32)
-        else:
-            context_map = local_top_down_map_filled.astype(np.float32)
-            if np.isnan(context_map).any():
-                context_map = np.zeros_like(context_map)
+            local_map = local_top_down_map_filled.astype(np.float32)
+            if np.isnan(local_map).any():
+                local_map = np.zeros_like(local_map)
                 task.is_stop_called = True
-            return context_map
+            local_maps.append(local_map)
+        local_maps_stacked = np.stack(np.array(local_maps), axis=2)
+        # add a separate channel for agents
+        if self.separate_channel:
+            agent_map = np.zeros((self._map_resolution, self._map_resolution))
+            ## add agent current position
+            rr, cc = self.get_local_agent_coord(agent_map)
+            agent_map[rr, cc] = 1.0
+
+            ## add goal position
+            rr, cc = self.get_local_goal_coord(agent_map, episode)
+            agent_map[rr, cc] = 1.0
+            local_maps_stacked = np.concatenate(
+                [local_maps_stacked, agent_map[:, :, None]], axis=2
+            )
+
+        return local_maps_stacked.astype(np.float32)
 
 
 @registry.register_sensor
@@ -1201,29 +1233,21 @@ class ContextMapTrajectorySensor(ContextMapSensor):
         return spaces.Box(low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32)
 
     def save_map(self, top_down_map, name, agent_coord=None):
+        print("SAVE MAP DEBUG: ", self.save_map_debug)
+        print("TOP DOWN MAP: ", top_down_map.shape, top_down_map.ndim)
         if self.save_map_debug:
+            print("TOP DOWN MAP SHAPE: ", top_down_map.shape, top_down_map.ndim)
             if top_down_map.ndim > 2:
-                td_map = top_down_map[:, :, 0]
-                agent_map = top_down_map[:, :, 1]
-                agent_color_map = maps.colorize_topdown_map(agent_map)
-            else:
-                td_map = top_down_map
-
-            color_map = maps.colorize_topdown_map(td_map)
-
-            save_name = (
-                f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}.png"
-            )
-            # agent_save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/AGENT_{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
-            cv2.imwrite(
-                f"{save_name}",
-                color_map,
-            )
-            # cv2.imwrite(
-            #     f"{agent_save_name}",
-            #     agent_color_map,
-            # )
-            print(f"saved: {save_name}")
+                for m in range(top_down_map.shape[-1]):
+                    color_map = maps.colorize_topdown_map(
+                        np.array(top_down_map[:, :, m], dtype=np.uint8)
+                    )
+                    save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_{m}.png"
+                    cv2.imwrite(
+                        f"{save_name}",
+                        color_map,
+                    )
+                    print(f"saved: {save_name}")
 
     def draw_trajectory(self, episode, top_down_map):
         agent_position = self._sim.get_agent_state().position
@@ -1235,7 +1259,7 @@ class ContextMapTrajectorySensor(ContextMapSensor):
                 maps.to_grid(
                     p[2],
                     p[0],
-                    self._top_down_map.shape[0:2],
+                    top_down_map.shape[0:2],
                     sim=self._sim,
                 )
                 for p in _shortest_path_points
@@ -1253,126 +1277,82 @@ class ContextMapTrajectorySensor(ContextMapSensor):
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
 
-        episode_uniq_id = f"{episode.scene_id} {episode.episode_id}"
-        if episode_uniq_id != self._current_episode_id:
-            self._top_down_map = maps.get_topdown_map_from_sim(
-                self._sim,
-                map_resolution=self._map_resolution,
-                draw_border=False,
-                meters_per_pixel=self.meters_per_pixel,
-            )
+        z_height = np.round(self._sim.get_agent_state().position[1])
+        episode_uniq_id = f"{episode.scene_id}_{z_height}"
+        scene_name = os.path.basename(episode.scene_id).split(".")[0]
 
+        if episode_uniq_id != self._current_episode_id:
+            self._topdown_maps = []
+            for mpp in self.stacked_map_res:
+                tdm_name = f"{scene_name}_{z_height:.1f}_{self._map_resolution}_{mpp}"
+                if os.path.exists(os.path.join(MAPS_DIR, f"{tdm_name}.npy")):
+                    self._topdown_maps.append(
+                        np.load(os.path.join(MAPS_DIR, f"{tdm_name}.npy"))
+                    )
+                else:
+                    self._topdown_maps.append(
+                        maps.get_topdown_map_from_sim(
+                            self._sim,
+                            map_resolution=self._map_resolution,
+                            draw_border=False,
+                            meters_per_pixel=mpp,
+                        )
+                    )
             self._current_episode_id = episode_uniq_id
 
-        self.blank_top_down_map = np.zeros_like(self._top_down_map)
-        self.draw_trajectory(episode, self.blank_top_down_map)
-        if self.use_topdown_map:
-            curr_topdown_map = self._top_down_map.copy()
+        local_maps = []
+        for idx, tdm in enumerate(self._topdown_maps):
+            self.blank_top_down_map = np.zeros_like(tdm)
+            self.draw_trajectory(episode, self.blank_top_down_map)
 
-        current_position = self._sim.get_agent_state().position
-        ### a_x is along height, a_y is along width
-        a_x, a_y = maps.to_grid(
-            current_position[2],
-            current_position[0],
-            self.blank_top_down_map.shape[:2],
-            sim=self._sim,
-        )
+            a_x, a_y = self.get_global_agent_coord(self.blank_top_down_map)
 
-        if self._rotate_map:
-            agent_rotation = self.get_polar_angle()
-            rot_angle = -(agent_rotation - np.pi)
-
-            top_down_map_rot = scipy.ndimage.interpolation.rotate(
-                self.blank_top_down_map, np.rad2deg(rot_angle), reshape=True
+            local_traj_map, pad_top, pad_left = self.get_local_map(
+                self.blank_top_down_map, a_x, a_y
             )
+            self.blank_top_down_map = local_traj_map
+
             if self.use_topdown_map:
-                curr_top_down_map_rot = scipy.ndimage.interpolation.rotate(
-                    curr_topdown_map, np.rad2deg(rot_angle), reshape=True
+                curr_topdown_map = tdm.copy()
+                local_top_down_map, pad_top, pad_left = self.get_local_map(
+                    curr_topdown_map, a_x, a_y
                 )
-            a_x, a_y = self.get_rotated_point(
-                self.blank_top_down_map,
-                top_down_map_rot,
-                np.array([a_x, a_y]),
-                agent_rotation,
+
+            lh, lw = self.blank_top_down_map.shape[:2]
+
+            local_top_down_map_filled = np.zeros(
+                (self._map_resolution, self._map_resolution), dtype=np.uint8
             )
-            self.blank_top_down_map = top_down_map_rot
 
-        pad_top = max(self._map_resolution // 2 - a_x - 1, 0)
-        pad_left = max(self._map_resolution // 2 - a_y - 1, 0)
-
-        local_traj_map = self.crop_at_point(
-            self.blank_top_down_map,
-            (a_x, a_y),
-            self._map_resolution,
-        )
-        lh, lw = local_traj_map.shape[:2]
-
-        local_top_down_map_filled = np.zeros(self.map_shape, dtype=np.uint8)
-        x_limit, y_limit = local_top_down_map_filled[:, :, 0].shape
-
-        if self.use_topdown_map:
-            local_top_down_map = self.crop_at_point(
-                curr_top_down_map_rot,
-                (a_x, a_y),
-                self._map_resolution,
-            )
             local_top_down_map_filled[
-                pad_top : pad_top + lh, pad_left : pad_left + lw, 0
-            ] = local_top_down_map
-            local_top_down_map_filled[
-                pad_top : pad_top + lh, pad_left : pad_left + lw, 1
+                pad_top : pad_top + lh, pad_left : pad_left + lw
             ] = local_traj_map
-        else:
-            local_top_down_map_filled[
-                pad_top : pad_top + lh, pad_left : pad_left + lw, 0
-            ] = local_traj_map
+            if self.use_topdown_map:
+                local_top_down_map_filled[
+                    pad_top : pad_top + lh, pad_left : pad_left + lw, 1
+                ] = local_top_down_map
+            local_map = local_top_down_map_filled.astype(np.float32)
+            if np.isnan(local_map).any():
+                local_map = np.zeros_like(map)
+                task.is_stop_called = True
+            color_map = maps.colorize_topdown_map(np.array(local_map, dtype=np.uint8))
+            local_maps.append(local_map)
 
-            # add a separate channel for agents
-            local_top_down_map_filled[::, 1] = np.zeros_like(
-                local_top_down_map_filled[::, 0]
-            )
-            mid_x = x_limit // 2
-            mid_y = y_limit // 2
-            rr, cc = disk((mid_x, mid_y), self.disk_radius)
+        local_maps_stacked = np.stack(np.array(local_maps), axis=2)
+        if self.separate_channel:
+            agent_map = np.zeros((self._map_resolution, self._map_resolution))
+            ## add agent current position
+            rr, cc = self.get_local_agent_coord(agent_map)
+            agent_map[rr, cc] = 1.0
 
-            local_top_down_map_filled[rr, cc, 1] = 1.0
-            # don't use log scale b/c we're adding it to the map
-            r, theta = self._get_goal_vector(episode, use_log_scale=False)
-            r_limit = (
-                (self._map_resolution // 2)
-                * self.meters_per_pixel
-                * self.pointgoal_scale
+            ## add goal position
+            rr, cc = self.get_local_goal_coord(agent_map, episode)
+            agent_map[rr, cc] = 1.0
+            local_maps_stacked = np.concatenate(
+                [local_maps_stacked, agent_map[:, :, None]], axis=2
             )
-            goal_r = np.clip(
-                r, -r_limit / np.cos(np.deg2rad(45)), r_limit / np.cos(np.deg2rad(45))
-            )
-
-            x = (goal_r / (self.meters_per_pixel * self.pointgoal_scale)) * np.cos(
-                theta
-            )
-            y = (goal_r / (self.meters_per_pixel * self.pointgoal_scale)) * np.sin(
-                theta
-            )
-            mid = self._map_resolution // 2
-            row, col = np.clip(
-                int(mid - x),
-                0 + self.disk_radius,
-                x_limit - (self.disk_radius + 1),
-            ), np.clip(
-                int(mid - y),
-                0 + self.disk_radius,
-                y_limit - (self.disk_radius + 1),
-            )
-
-            rr, cc = disk((row, col), self.disk_radius)
-            local_top_down_map_filled[rr, cc, 1] = 1.0
-        # self.save_map(local_top_down_map_filled, "local_map")
-
-        local_map = local_top_down_map_filled.astype(np.float32)
-        if np.isnan(local_map).any():
-            local_map = np.zeros_like(map)
-            task.is_stop_called = True
-        return local_map
+        # self.save_map(local_maps_stacked, f"{self.ep_id}_{self.ctr}")
+        return local_maps_stacked.astype(np.float32)
 
 
 @registry.register_measure
