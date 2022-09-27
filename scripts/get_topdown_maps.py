@@ -26,11 +26,19 @@ CONFIG_YAML = args.config_yaml
 
 
 def get_topdown_maps():
-    save_dir = "/coc/testnvme/jtruong33/google_nav/habitat-lab/topdown_maps"
+    # maps = glob.glob(os.path.join(save_dir, "*.npy"))
+    # # print(maps)
+    # for m in maps:
+    #     tdm = np.load(m)
+    #     print(tdm)
+    #     if not tdm:
+    #         print("removing: ", m)
+    #         # os.remove(m)
+
     scenes = glob.glob(
         "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/train/content/*.json.gz"
     )
-    print("scenes: ", scenes)
+    save_dir = "/coc/testnvme/jtruong33/google_nav/habitat-lab/topdown_maps"
 
     cfg = habitat.get_config(CONFIG_YAML)
     failed_scenes = []
@@ -62,14 +70,14 @@ def get_topdown_maps():
             )
             tmp_heights = list(set(np.round(z_heights)))
             z_heights_n = [find_nearest(z_heights, t) for t in tmp_heights]
+            # z_heights_n = z_heights
             if len(z_heights_n) > 0:
-                print("LOADING SCENE: ", scene_id)
-                print("Z HEIGHTS: ", z_heights)
-                print("FILTERED Z HEIGHTS: ", z_heights_n)
                 cfg.defrost()
                 if ".basis" in scene_id:
                     scene = "".join(scene_id.split(".basis"))
                 cfg.SIMULATOR.SCENE = os.path.join("data/scene_datasets", scene)
+                cfg.SIMULATOR.AGENT_0.HEIGHT = 0.6
+                cfg.SIMULATOR.AGENT_0.RADIUS = 0.03
                 cfg.freeze()
                 sim = habitat.sims.make_sim("Sim-v0", config=cfg.SIMULATOR)
 
@@ -78,7 +86,6 @@ def get_topdown_maps():
                 try:
                     for z_height in z_heights_n:
                         for mpp in stacked_map_res:
-                            print("get top down map: ", z_height, map_resolution, mpp)
                             _top_down_map = maps.get_topdown_map(
                                 sim.pathfinder,
                                 z_height,
@@ -87,7 +94,6 @@ def get_topdown_maps():
                                 mpp,
                             )
                             save_name = f"{scene_name}_{np.round(z_height):.1f}_{map_resolution}_{mpp}.npy"
-                            print("np.save: ", save_name)
                             np.save(
                                 os.path.join(save_dir, save_name),
                                 _top_down_map,
@@ -97,67 +103,6 @@ def get_topdown_maps():
                     failed_scenes.append(scene_id)
                 sim.close()
     print("failed scenes: ", failed_scenes)
-
-    # cfg = habitat.get_config(CONFIG_YAML)
-    # cfg.defrost()
-    # cfg.ENVIRONMENT.ITERATOR_OPTIONS.SHUFFLE = False
-    # cfg.ENVIRONMENT.ITERATOR_OPTIONS.CYCLE = False
-    # cfg.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_EPISODES = 1
-    # cfg.freeze()
-    #
-    # _dataset = make_dataset(id_dataset=cfg.DATASET.TYPE, config=cfg.DATASET)
-    # iter_option_dict = {
-    #     k.lower(): v for k, v in cfg.ENVIRONMENT.ITERATOR_OPTIONS.items()
-    # }
-    # _episode_iterator = _dataset.get_episode_iterator(**iter_option_dict)
-    # curr_uniq_id = None
-    # curr_scene = None
-    # ctr = 0
-    #
-    # print("pre iteration")
-    # for episode in _episode_iterator:
-    #     scene_name = os.path.basename(episode.scene_id).split(".")[0]
-    #
-    #     print("for loop")
-    #     print("ctr: ", ctr)
-    #     z_height = episode.start_position[1]
-    #     print("z height: ", z_height)
-    #
-    #     # episode_uniq_id = f"{episode.scene_id}_{z_height}"
-    #     # print("EPISODE UNIQ ID: ", episode_uniq_id)
-    #     done_scenes =
-    #     print("episode scene id: ", episode.scene_id, curr_scene)
-    #     if episode.scene_id != curr_scene:
-    #         if any("xp4FyfQ6Wr5" in aa for aa in a):
-    #             continue
-    #         cfg.defrost()
-    #         scene = episode.scene_id
-    #         if ".basis" in episode.scene_id:
-    #             scene = "".join(episode.scene_id.split(".basis"))
-    #         cfg.SIMULATOR.SCENE = scene
-    #         cfg.freeze()
-    #         print("making sim")
-    #         sim = habitat.sims.make_sim("Sim-v0", config=cfg.SIMULATOR)
-    #         print("finished making sim")
-    #         curr_scene = episode.scene_id
-    #         # curr_uniq_id = f"{episode.scene_id}_{z_height}"
-    #     stacked_map_res = [0.05, 0.1, 0.2, 0.5]
-    #     map_resolution = 100
-    #     for mpp in stacked_map_res:
-    #         print("get top down map")
-    #         _top_down_map = maps.get_topdown_map(
-    #             sim.pathfinder,
-    #             z_height,
-    #             map_resolution,
-    #             False,
-    #             mpp,
-    #         )
-    #         print("np.save")
-    #         np.save(
-    #             f"{scene_name}_{z_height:.3f}_{map_resolution}_{mpp}.npy",
-    #             _top_down_map,
-    #         )
-    #     ctr += 1
 
 
 if __name__ == "__main__":
