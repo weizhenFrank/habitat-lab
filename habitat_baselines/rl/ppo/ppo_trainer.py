@@ -24,33 +24,26 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch,
-    apply_obs_transforms_obs_space,
-    get_active_obs_transforms,
-)
-from habitat_baselines.common.rollout_storage import ExternalMemory, RolloutStorage
+    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
+    get_active_obs_transforms)
+from habitat_baselines.common.rollout_storage import (ExternalMemory,
+                                                      RolloutStorage)
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.rl.ddppo.algo import DDPPO
-from habitat_baselines.rl.ddppo.ddp_utils import (
-    EXIT,
-    add_signal_handlers,
-    get_distrib_size,
-    init_distrib_slurm,
-    is_slurm_batch_job,
-    load_resume_state,
-    rank0_only,
-    requeue_job,
-    save_resume_state,
-)
-from habitat_baselines.rl.ddppo.policy import PointNavResNetPolicy  # noqa: F401.
+from habitat_baselines.rl.ddppo.ddp_utils import (EXIT, add_signal_handlers,
+                                                  get_distrib_size,
+                                                  init_distrib_slurm,
+                                                  is_slurm_batch_job,
+                                                  load_resume_state,
+                                                  rank0_only, requeue_job,
+                                                  save_resume_state)
+from habitat_baselines.rl.ddppo.policy import \
+    PointNavResNetPolicy  # noqa: F401.
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.ppo.policy import Policy
-from habitat_baselines.utils.common import (
-    ObservationBatchingCache,
-    action_to_velocity_control,
-    batch_obs,
-    generate_video,
-)
+from habitat_baselines.utils.common import (ObservationBatchingCache,
+                                            action_to_velocity_control,
+                                            batch_obs, generate_video)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
@@ -1429,12 +1422,6 @@ class PPOTrainer(BaseRLTrainer):
 
                         gt_r = gt_r_theta[0, 0]
                         gt_theta = gt_r_theta[0, 1]
-                        print(
-                            "gt_r: ",
-                            np.exp(gt_r),
-                            "gt_theta: ",
-                            np.rad2deg(gt_theta),
-                        )
                         xx = (np.exp(gt_r) / 0.1) * np.cos(gt_theta)
                         yy = (np.exp(gt_r) / 0.1) * np.sin(gt_theta)
                         row, col = np.clip(int(128 - xx), 5, 250), np.clip(
