@@ -19,6 +19,7 @@ python scripts/get_topdown_maps.py \
 """
 parser = argparse.ArgumentParser()
 parser.add_argument("config_yaml")
+parser.add_argument("-mr", "--map_resolution", type=int, default=100)
 args = parser.parse_args()
 
 CONFIG_YAML = args.config_yaml
@@ -81,8 +82,8 @@ def get_topdown_maps():
                 cfg.freeze()
                 sim = habitat.sims.make_sim("Sim-v0", config=cfg.SIMULATOR)
 
-                stacked_map_res = [0.05, 0.1, 0.2, 0.5]
-                map_resolution = 100
+                stacked_map_res = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+                map_resolution = args.map_resolution
                 try:
                     for z_height in z_heights_n:
                         for mpp in stacked_map_res:
@@ -93,7 +94,10 @@ def get_topdown_maps():
                                 False,
                                 mpp,
                             )
-                            save_name = f"{scene_name}_{np.round(z_height):.1f}_{map_resolution}_{mpp}.npy"
+                            z_height_name = np.round(z_height)
+                            if z_height_name == -0.0:
+                                z_height_name = 0.0
+                            save_name = f"{scene_name}_{z_height_name:.1f}_{map_resolution}_{mpp}.npy"
                             np.save(
                                 os.path.join(save_dir, save_name),
                                 _top_down_map,
