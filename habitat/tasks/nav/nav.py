@@ -9,6 +9,7 @@ import glob
 from typing import Any, Dict, List, Optional, Tuple
 
 import attr
+from PIL import Image
 
 try:
     import magnum as mn
@@ -1023,10 +1024,14 @@ class ContextMapSensor(ContextSensor):
     def get_rotated_map(self, curr_map, agent_rotation):
         init_map = curr_map.copy()
         rot_angle = -(agent_rotation - np.pi)
-        top_down_map_rot = scipy.ndimage.interpolation.rotate(
-            init_map, np.rad2deg(rot_angle), reshape=True
+        top_down_map_rot = self.pil_rotate(
+            np.array(init_map), np.rad2deg(rot_angle), expand=True
         )
         return top_down_map_rot
+
+    def pil_rotate(self, image, angel, expand):
+        rotated_pil = Image.fromarray(image).rotate(angel, Image.NEAREST, expand=expand)
+        return np.array(rotated_pil)
 
     def get_crop_map(self, curr_top_down_map, crop_x, crop_y):
         pad_top = max(self._map_resolution // 2 - crop_x - 1, 0)
@@ -1156,14 +1161,12 @@ class ContextMapSensor(ContextSensor):
             local_top_down_map, pad_top, pad_left = self.get_local_map(
                 curr_top_down_map, a_x, a_y
             )
-
             if self.pad_noise:
                 local_noise_map, pad_top, pad_left = self.get_local_map(
                     self._pad_noise_map
                 )
 
             lh, lw = local_top_down_map.shape[:2]
-
             # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
             local_top_down_map_filled = np.zeros(
                 (self._map_resolution, self._map_resolution), dtype=np.uint8
@@ -1233,10 +1236,7 @@ class ContextMapTrajectorySensor(ContextMapSensor):
         return spaces.Box(low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32)
 
     def save_map(self, top_down_map, name, agent_coord=None):
-        print("SAVE MAP DEBUG: ", self.save_map_debug)
-        print("TOP DOWN MAP: ", top_down_map.shape, top_down_map.ndim)
         if self.save_map_debug:
-            print("TOP DOWN MAP SHAPE: ", top_down_map.shape, top_down_map.ndim)
             if top_down_map.ndim > 2:
                 for m in range(top_down_map.shape[-1]):
                     color_map = maps.colorize_topdown_map(
@@ -1319,7 +1319,6 @@ class ContextMapTrajectorySensor(ContextMapSensor):
                 )
 
             lh, lw = self.blank_top_down_map.shape[:2]
-
             local_top_down_map_filled = np.zeros(
                 (self._map_resolution, self._map_resolution), dtype=np.uint8
             )
@@ -1335,7 +1334,6 @@ class ContextMapTrajectorySensor(ContextMapSensor):
             if np.isnan(local_map).any():
                 local_map = np.zeros_like(map)
                 task.is_stop_called = True
-            color_map = maps.colorize_topdown_map(np.array(local_map, dtype=np.uint8))
             local_maps.append(local_map)
 
         local_maps_stacked = np.stack(np.array(local_maps), axis=2)
