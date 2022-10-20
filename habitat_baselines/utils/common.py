@@ -89,32 +89,42 @@ class CustomNormal(torch.distributions.normal.Normal):
             .unsqueeze(-1)
         )
         return ret
-
-
+        
 class GaussianNet(nn.Module):
     def __init__(
         self,
         num_inputs: int,
         num_outputs: int,
-        std_min: float = 1e-6,
-        std_max: float = 1,
+        config: None,
     ) -> None:
         super().__init__()
 
         self.mu = nn.Linear(num_inputs, num_outputs)
         self.std = nn.Linear(num_inputs, num_outputs)
-        self.std_min = std_min
-        self.std_max = std_max
+        self.use_log_std = config.use_log_std
+        self.clamp_std = config.clamp_std
+        if self.use_log_std:
+            self.std_min = config.min_log_std
+            self.std_max = config.max_log_std
+            std_init = 0.0  # initialize std value so that exp(std) ~ 1
+        else:
+            self.std_min = config.min_std
+            self.std_max = config.max_std
+            std_init = 1.0  # initialize std value so that std ~ 1
 
         nn.init.orthogonal_(self.mu.weight, gain=0.01)
         nn.init.constant_(self.mu.bias, 0)
         nn.init.orthogonal_(self.std.weight, gain=0.01)
-        nn.init.constant_(self.std.bias, 0)
+        nn.init.constant_(self.std.bias, std_init)
 
     def forward(self, x: Tensor) -> CustomNormal:
         mu = torch.tanh(self.mu(x))
-        std = torch.clamp(self.std(x), min=self.std_min, max=self.std_max)
-
+        std = self.std(x)
+        if self.clamp_std:
+            std = torch.clamp(std, min=self.std_min, max=self.std_max)
+        if self.use_log_std:
+            std = torch.exp(std)
+        # std = torch.clamp(self.std(x), min=self.std_min, max=self.std_min)
         return CustomNormal(mu, std)
 
 def linear_decay(epoch: int, total_num_updates: int) -> float:
