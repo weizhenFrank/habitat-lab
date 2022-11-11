@@ -41,6 +41,9 @@ from habitat.core.simulator import (
     VisualObservation,
 )
 from habitat.core.spaces import Space
+from habitat.core.utils import try_cv2_import
+
+cv2 = try_cv2_import()
 
 
 def overwrite_config(
@@ -162,9 +165,7 @@ class HabitatSimDepthSensor(DepthSensor, HabitatSimSensor):
         if isinstance(obs, np.ndarray):
             obs = np.clip(obs, self.config.min_depth, self.config.max_depth)
 
-            obs = np.expand_dims(
-                obs, axis=2
-            )  # make depth observation a 3D array
+            obs = np.expand_dims(obs, axis=2)  # make depth observation a 3D array
         else:
             obs = obs.clamp(self.config.min_depth, self.config.max_depth)  # type: ignore[attr-defined, unreachable]
 
@@ -208,6 +209,97 @@ class HabitatSimSemanticSensor(SemanticSensor, HabitatSimSensor):
         return obs
 
 
+@registry.register_sensor
+class SpotLeftRgbSensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_left_rgb"
+
+
+@registry.register_sensor
+class SpotRightRgbSensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_right_rgb"
+
+
+@registry.register_sensor
+class SpotGraySensor(HabitatSimRGBSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_gray"
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
+        return spaces.Box(
+            low=0,
+            high=255,
+            shape=(256, 128, 1),
+            dtype=np.float32,
+        )
+
+    def get_observation(self, sim_obs):
+        obs = sim_obs.get(self.uuid, None)
+        assert isinstance(obs, np.ndarray)
+        obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
+        obs = cv2.resize(obs, (128, 256))
+        obs = obs.reshape([*obs.shape[:2], 1])
+        return obs
+
+
+@registry.register_sensor
+class SpotLeftGraySensor(SpotGraySensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_left_gray"
+
+
+@registry.register_sensor
+class SpotRightGraySensor(SpotGraySensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_right_gray"
+
+
+@registry.register_sensor
+class SpotDepthSensor(HabitatSimDepthSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_depth"
+
+    ## Hack to get Spot cameras resized to 256,256 after concatenation
+    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
+        return spaces.Box(
+            low=self.min_depth_value,
+            high=self.max_depth_value,
+            shape=(256, 128, 1),
+            dtype=np.float32,
+        )
+
+    def get_observation(self, sim_obs):
+        obs = sim_obs.get(self.uuid, None)
+        assert isinstance(obs, np.ndarray)
+        # obs[obs > self.config.max_depth] = 0.0  # Make far pixels black
+        obs[obs > self.config.max_depth] = 255.0  # Make far pixels white
+        obs[obs == 0] = 255.0  # Make inf values white
+        obs = np.clip(obs, self.config.min_depth, self.config.max_depth)
+        obs = cv2.resize(obs, (128, 256))
+
+        obs = np.expand_dims(obs, axis=2)  # make depth observation a 3D array
+        if self.config.normalize_depth:
+            # normalize depth observation to [0, 1]
+            obs = (obs - self.config.min_depth) / (
+                self.config.max_depth - self.config.min_depth
+            )
+
+        return obs
+
+
+@registry.register_sensor
+class SpotLeftDepthSensor(SpotDepthSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_left_depth"
+
+
+@registry.register_sensor
+class SpotRightDepthSensor(SpotDepthSensor):
+    def _get_uuid(self, *args, **kwargs):
+        return "spot_right_depth"
+
+
 # TODO Sensor Hierarchy needs to be redone here. These should not subclass camera sensors
 @registry.register_sensor
 class HabitatSimEquirectangularRGBSensor(HabitatSimRGBSensor):
@@ -239,9 +331,7 @@ class HabitatSimFisheyeSemanticSensor(HabitatSimSemanticSensor):
     _get_default_spec = habitat_sim.FisheyeSensorDoubleSphereSpec
 
 
-def check_sim_obs(
-    obs: Union[np.ndarray, "Tensor", None], sensor: Sensor
-) -> None:
+def check_sim_obs(obs: Union[np.ndarray, "Tensor", None], sensor: Sensor) -> None:
     assert obs is not None, (
         "Observation corresponding to {} not present in "
         "simulator's observations".format(sensor.uuid)
@@ -301,9 +391,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             # Ignore key as it gets propogated to sensor below
             ignore_keys={"gpu_gpu"},
         )
-        sim_config.scene_dataset_config_file = (
-            self.habitat_config.scene_dataset
-        )
+        sim_config.scene_dataset_config_file = self.habitat_config.scene_dataset
         sim_config.scene_id = self.habitat_config.scene
         agent_config = habitat_sim.AgentConfiguration()
         overwrite_config(
@@ -338,23 +426,17 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
                     "sensor_model_type": lambda v: getattr(
                         habitat_sim.FisheyeSensorModelType, v
                     ),
-                    "sensor_subtype": lambda v: getattr(
-                        habitat_sim.SensorSubType, v
-                    ),
+                    "sensor_subtype": lambda v: getattr(habitat_sim.SensorSubType, v),
                 },
             )
             sim_sensor_cfg.uuid = sensor.uuid
-            sim_sensor_cfg.resolution = list(
-                sensor.observation_space.shape[:2]
-            )
+            sim_sensor_cfg.resolution = list(sensor.observation_space.shape[:2])
 
             # TODO(maksymets): Add configure method to Sensor API to avoid
             # accessing child attributes through parent interface
             # We know that the Sensor has to be one of these Sensors
             sim_sensor_cfg.sensor_type = sensor.sim_sensor_type
-            sim_sensor_cfg.gpu2gpu_transfer = (
-                self.habitat_config.habitat_sim_v0.gpu_gpu
-            )
+            sim_sensor_cfg.gpu2gpu_transfer = self.habitat_config.habitat_sim_v0.gpu_gpu
             sensor_specifications.append(sim_sensor_cfg)
 
         agent_config.sensor_specifications = sensor_specifications
@@ -439,9 +521,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
     def geodesic_distance(
         self,
         position_a: Union[Sequence[float], np.ndarray],
-        position_b: Union[
-            Sequence[float], Sequence[Sequence[float]], np.ndarray
-        ],
+        position_b: Union[Sequence[float], Sequence[Sequence[float]], np.ndarray],
         episode: Optional[Episode] = None,
     ) -> float:
         if episode is None or episode._shortest_path_cache is None:
@@ -449,9 +529,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             if isinstance(position_b[0], (Sequence, np.ndarray)):
                 path.requested_ends = np.array(position_b, dtype=np.float32)
             else:
-                path.requested_ends = np.array(
-                    [np.array(position_b, dtype=np.float32)]
-                )
+                path.requested_ends = np.array([np.array(position_b, dtype=np.float32)])
         else:
             path = episode._shortest_path_cache
 
@@ -596,9 +674,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         if position is None or rotation is None:
             success = True
         else:
-            success = self.set_agent_state(
-                position, rotation, reset_sensors=False
-            )
+            success = self.set_agent_state(position, rotation, reset_sensors=False)
 
         if success:
             sim_obs = self.get_sensor_observations()
@@ -619,9 +695,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
     def distance_to_closest_obstacle(
         self, position: np.ndarray, max_search_radius: float = 2.0
     ) -> float:
-        return self.pathfinder.distance_to_closest_obstacle(
-            position, max_search_radius
-        )
+        return self.pathfinder.distance_to_closest_obstacle(position, max_search_radius)
 
     def island_radius(self, position: Sequence[float]) -> float:
         return self.pathfinder.island_radius(position)
