@@ -40,13 +40,9 @@ class PointNavDatasetV1(Dataset):
         r"""Return list of scene ids for which dataset has separate files with
         episodes.
         """
-        dataset_dir = os.path.dirname(
-            config.data_path.format(split=config.split)
-        )
+        dataset_dir = os.path.abspath(config.data_path.format(split=config.split))
         if not cls.check_config_paths_exist(config):
-            raise FileNotFoundError(
-                f"Could not find dataset file `{dataset_dir}`"
-            )
+            raise FileNotFoundError(f"Could not find dataset file `{dataset_dir}`")
 
         cfg = config.clone()
         with read_write(cfg):
@@ -99,9 +95,7 @@ class PointNavDatasetV1(Dataset):
         # Read separate file for each scene
         dataset_dir = os.path.dirname(datasetfile_path)
         has_individual_scene_files = os.path.exists(
-            self.content_scenes_path.split("{scene}")[0].format(
-                data_path=dataset_dir
-            )
+            self.content_scenes_path.split("{scene}")[0].format(data_path=dataset_dir)
         )
         if has_individual_scene_files:
             scenes = config.content_scenes
@@ -115,6 +109,14 @@ class PointNavDatasetV1(Dataset):
                 scene_filename = self.content_scenes_path.format(
                     data_path=dataset_dir, scene=scene
                 )
+                if "basis" in scene and not os.path.exists(scene_filename):
+                    scene = scene.split(".basis")[0]
+                    scene_filename = self.content_scenes_path.format(
+                        data_path=dataset_dir, scene=scene
+                    )
+                scene_filename = self.content_scenes_path.format(
+                    data_path=dataset_dir, scene=scene
+                )
                 with gzip.open(scene_filename, "rt") as f:
                     self.from_json(f.read(), scenes_dir=config.scenes_dir)
 
@@ -123,9 +125,7 @@ class PointNavDatasetV1(Dataset):
                 filter(self.build_content_scenes_filter(config), self.episodes)
             )
 
-    def from_json(
-        self, json_str: str, scenes_dir: Optional[str] = None
-    ) -> None:
+    def from_json(self, json_str: str, scenes_dir: Optional[str] = None) -> None:
         deserialized = json.loads(json_str)
         if CONTENT_SCENES_PATH_FIELD in deserialized:
             self.content_scenes_path = deserialized[CONTENT_SCENES_PATH_FIELD]
