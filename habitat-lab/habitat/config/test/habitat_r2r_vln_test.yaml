@@ -9,7 +9,7 @@ habitat:
     rgb_sensor:
       width: 256
       height: 256
-      hfov: 90
+      hfov: 90.0
       type: HabitatSimRGBSensor
     depth_sensor:
       width: 256
