@@ -80,7 +80,9 @@ _C.habitat.task.constraint_violation_drops_object = False
 _C.habitat.task.force_regenerate = (
     False  # Forced to regenerate the starts even if they are already cached.
 )
-_C.habitat.task.should_save_to_cache = True  # Saves the generated starts to a cache if they are not already generated.
+_C.habitat.task.should_save_to_cache = (
+    True  # Saves the generated starts to a cache if they are not already generated.
+)
 _C.habitat.task.must_look_at_targ = True
 _C.habitat.task.object_in_hand_sample_prob = 0.167
 _C.habitat.task.gfx_replay_dir = "data/replays"
@@ -144,9 +146,7 @@ _C.habitat.task.actions.velocity_control.ang_vel_range = [
     -10.0,
     10.0,
 ]  # deg per sec
-_C.habitat.task.actions.velocity_control.min_abs_lin_speed = (
-    0.025  # meters per sec
-)
+_C.habitat.task.actions.velocity_control.min_abs_lin_speed = 0.025  # meters per sec
 _C.habitat.task.actions.velocity_control.min_abs_ang_speed = 1.0  # deg per sec
 _C.habitat.task.actions.velocity_control.time_step = 1.0  # seconds
 # -----------------------------------------------------------------------------
@@ -212,9 +212,7 @@ _C.habitat.task.pointgoal_sensor.dimensionality = 2
 _C.habitat.task.pointgoal_with_gps_compass_sensor = (
     _C.habitat.task.pointgoal_sensor.clone()
 )
-_C.habitat.task.pointgoal_with_gps_compass_sensor.type = (
-    "PointGoalWithGPSCompassSensor"
-)
+_C.habitat.task.pointgoal_with_gps_compass_sensor.type = "PointGoalWithGPSCompassSensor"
 # -----------------------------------------------------------------------------
 # OBJECTGOAL SENSOR
 # -----------------------------------------------------------------------------
@@ -236,9 +234,7 @@ _C.habitat.task.instance_imagegoal_sensor.type = "InstanceImageGoalSensor"
 # INSTANCE IMAGEGOAL HFOV SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.task.instance_imagegoal_hfov_sensor = CN()
-_C.habitat.task.instance_imagegoal_hfov_sensor.type = (
-    "InstanceImageGoalHFOVSensor"
-)
+_C.habitat.task.instance_imagegoal_hfov_sensor.type = "InstanceImageGoalHFOVSensor"
 # -----------------------------------------------------------------------------
 # HEADING SENSOR
 # -----------------------------------------------------------------------------
@@ -281,9 +277,7 @@ _C.habitat.task.is_holding_sensor.type = "IsHoldingSensor"
 # RELATIVE RESTING POSISITON SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.task.relative_resting_pos_sensor = CN()
-_C.habitat.task.relative_resting_pos_sensor.type = (
-    "RelativeRestingPositionSensor"
-)
+_C.habitat.task.relative_resting_pos_sensor.type = "RelativeRestingPositionSensor"
 # -----------------------------------------------------------------------------
 # JOINT VELOCITY SENSOR
 # -----------------------------------------------------------------------------
@@ -346,9 +340,7 @@ _C.habitat.task.goal_sensor.dimensionality = 3
 # TARGET START OR GOAL SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.task.target_start_point_goal_sensor = CN()
-_C.habitat.task.target_start_point_goal_sensor.type = (
-    "TargetOrGoalStartPointGoalSensor"
-)
+_C.habitat.task.target_start_point_goal_sensor.type = "TargetOrGoalStartPointGoalSensor"
 # -----------------------------------------------------------------------------
 # COMPOSITE SENSOR
 # -----------------------------------------------------------------------------
@@ -358,16 +350,12 @@ _C.habitat.task.global_predicate_sensor.type = "GlobalPredicatesSensor"
 # TARGET START GPS/COMPASS SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.task.target_start_gps_compass_sensor = CN()
-_C.habitat.task.target_start_gps_compass_sensor.type = (
-    "TargetStartGpsCompassSensor"
-)
+_C.habitat.task.target_start_gps_compass_sensor.type = "TargetStartGpsCompassSensor"
 # -----------------------------------------------------------------------------
 # TARGET GOAL GPS/COMPASS SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.task.target_goal_gps_compass_sensor = CN()
-_C.habitat.task.target_goal_gps_compass_sensor.type = (
-    "TargetGoalGpsCompassSensor"
-)
+_C.habitat.task.target_goal_gps_compass_sensor.type = "TargetGoalGpsCompassSensor"
 # -----------------------------------------------------------------------------
 # NAV TO SKILL ID SENSOR
 # -----------------------------------------------------------------------------
@@ -457,13 +445,9 @@ _C.habitat.task.robot_colls.type = "RobotCollisions"
 _C.habitat.task.object_to_goal_distance = CN()
 _C.habitat.task.object_to_goal_distance.type = "ObjectToGoalDistance"
 _C.habitat.task.end_effector_to_object_distance = CN()
-_C.habitat.task.end_effector_to_object_distance.type = (
-    "EndEffectorToObjectDistance"
-)
+_C.habitat.task.end_effector_to_object_distance.type = "EndEffectorToObjectDistance"
 _C.habitat.task.end_effector_to_rest_distance = CN()
-_C.habitat.task.end_effector_to_rest_distance.type = (
-    "EndEffectorToRestDistance"
-)
+_C.habitat.task.end_effector_to_rest_distance.type = "EndEffectorToRestDistance"
 
 _C.habitat.task.art_obj_at_desired_state = CN()
 _C.habitat.task.art_obj_at_desired_state.type = "ArtObjAtDesiredState"
@@ -560,9 +544,7 @@ _C.habitat.task.did_pick_object.type = "DidPickObjectMeasure"
 # DID VIOLATE HOLD CONSTRAINT MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.habitat.task.did_violate_hold_constraint = CN()
-_C.habitat.task.did_violate_hold_constraint.type = (
-    "DidViolateHoldConstraintMeasure"
-)
+_C.habitat.task.did_violate_hold_constraint.type = "DidViolateHoldConstraintMeasure"
 # -----------------------------------------------------------------------------
 # MOVE OBJECTS REWARD
 # -----------------------------------------------------------------------------
@@ -636,9 +618,7 @@ _C.habitat.task.composite_reward.success_reward = 10.0
 _C.habitat.task.does_want_terminate = CN()
 _C.habitat.task.does_want_terminate.type = "DoesWantTerminate"
 _C.habitat.task.composite_bad_called_terminate = CN()
-_C.habitat.task.composite_bad_called_terminate.type = (
-    "CompositeBadCalledTerminate"
-)
+_C.habitat.task.composite_bad_called_terminate.type = "CompositeBadCalledTerminate"
 # -----------------------------------------------------------------------------
 # # EQA task
 # -----------------------------------------------------------------------------
@@ -675,6 +655,11 @@ _C.habitat.task.distance_to_goal.distance_to = "POINT"
 _C.habitat.task.distance_to_goal_reward = CN()
 _C.habitat.task.distance_to_goal_reward.type = "DistanceToGoalReward"
 # -----------------------------------------------------------------------------
+# # episode_distance MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.habitat.task.episode_distance = CN()
+_C.habitat.task.episode_distance.type = "EpisodeDistance"
+# -----------------------------------------------------------------------------
 # # answer_accuracy MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.habitat.task.answer_accuracy = CN()
@@ -693,26 +678,18 @@ _C.habitat.simulator.auto_sleep = False
 _C.habitat.simulator.step_physics = True
 _C.habitat.simulator.update_robot = True
 _C.habitat.simulator.concur_render = False
-_C.habitat.simulator.needs_markers = (
-    True  # If markers should be updated at every step.
-)
+_C.habitat.simulator.needs_markers = True  # If markers should be updated at every step.
 _C.habitat.simulator.update_robot = (
     True  # If the robot camera positions should be updated at every step.
 )
-_C.habitat.simulator.scene = (
-    "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
-)
+_C.habitat.simulator.scene = "data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"
 _C.habitat.simulator.scene_dataset = "default"  # the scene dataset to load in the MetaDataMediator. Should contain simulator.scene
 _C.habitat.simulator.additional_object_paths = (
     []
 )  # a list of directory or config paths to search in addition to the dataset for object configs. Should match the generated episodes for the task.
 _C.habitat.simulator.seed = _C.habitat.seed
-_C.habitat.simulator.turn_angle = (
-    10  # angle to rotate left or right in degrees
-)
-_C.habitat.simulator.tilt_angle = (
-    15  # angle to tilt the camera up or down in degrees
-)
+_C.habitat.simulator.turn_angle = 10  # angle to rotate left or right in degrees
+_C.habitat.simulator.tilt_angle = 15  # angle to tilt the camera up or down in degrees
 _C.habitat.simulator.default_agent_id = 0
 _C.habitat.simulator.debug_render = False
 _C.habitat.simulator.debug_render_robot = False
@@ -741,7 +718,7 @@ simulator_sensor.orientation = [0.0, 0.0, 0.0]  # Euler's angles
 # CAMERA SENSOR
 # -----------------------------------------------------------------------------
 camera_sim_sensor = simulator_sensor.clone()
-camera_sim_sensor.hfov = 90  # horizontal field of view in degrees
+camera_sim_sensor.hfov = 90.0  # horizontal field of view in degrees
 camera_sim_sensor.sensor_subtype = "PINHOLE"
 
 simulator_depth_sensor = simulator_sensor.clone()
@@ -761,6 +738,16 @@ _C.habitat.simulator.depth_sensor = camera_sim_sensor.clone()
 _C.habitat.simulator.depth_sensor.merge_from_other_cfg(simulator_depth_sensor)
 _C.habitat.simulator.depth_sensor.type = "HabitatSimDepthSensor"
 # -----------------------------------------------------------------------------
+# LEFT DEPTH SENSOR
+# -----------------------------------------------------------------------------
+_C.habitat.simulator.spot_left_depth_sensor = simulator_depth_sensor.clone()
+_C.habitat.simulator.spot_left_depth_sensor.type = "SpotLeftDepthSensor"
+# -----------------------------------------------------------------------------
+# RIGHT DEPTH SENSOR
+# -----------------------------------------------------------------------------
+_C.habitat.simulator.spot_right_depth_sensor = simulator_depth_sensor.clone()
+_C.habitat.simulator.spot_right_depth_sensor.type = "SpotRightDepthSensor"
+# -----------------------------------------------------------------------------
 # SEMANTIC SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.simulator.semantic_sensor = camera_sim_sensor.clone()
@@ -769,19 +756,13 @@ _C.habitat.simulator.semantic_sensor.type = "HabitatSimSemanticSensor"
 # EQUIRECT RGB SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.simulator.equirect_rgb_sensor = simulator_sensor.clone()
-_C.habitat.simulator.equirect_rgb_sensor.type = (
-    "HabitatSimEquirectangularRGBSensor"
-)
+_C.habitat.simulator.equirect_rgb_sensor.type = "HabitatSimEquirectangularRGBSensor"
 # -----------------------------------------------------------------------------
 # EQUIRECT DEPTH SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.simulator.equirect_depth_sensor = simulator_sensor.clone()
-_C.habitat.simulator.equirect_depth_sensor.merge_from_other_cfg(
-    simulator_depth_sensor
-)
-_C.habitat.simulator.equirect_depth_sensor.type = (
-    "HabitatSimEquirectangularDepthSensor"
-)
+_C.habitat.simulator.equirect_depth_sensor.merge_from_other_cfg(simulator_depth_sensor)
+_C.habitat.simulator.equirect_depth_sensor.type = "HabitatSimEquirectangularDepthSensor"
 # -----------------------------------------------------------------------------
 # EQUIRECT SEMANTIC SENSOR
 # -----------------------------------------------------------------------------
@@ -802,9 +783,7 @@ _C.habitat.simulator.head_rgb_sensor.uuid = "robot_head_rgb"
 # -----------------------------------------------------------------------------
 # robot HEAD DEPTH SENSOR
 # -----------------------------------------------------------------------------
-_C.habitat.simulator.head_depth_sensor = (
-    _C.habitat.simulator.depth_sensor.clone()
-)
+_C.habitat.simulator.head_depth_sensor = _C.habitat.simulator.depth_sensor.clone()
 _C.habitat.simulator.head_depth_sensor.uuid = "robot_head_depth"
 # -----------------------------------------------------------------------------
 # ARM RGB SENSOR
@@ -814,9 +793,7 @@ _C.habitat.simulator.arm_rgb_sensor.uuid = "robot_arm_rgb"
 # -----------------------------------------------------------------------------
 # ARM DEPTH SENSOR
 # -----------------------------------------------------------------------------
-_C.habitat.simulator.arm_depth_sensor = (
-    _C.habitat.simulator.depth_sensor.clone()
-)
+_C.habitat.simulator.arm_depth_sensor = _C.habitat.simulator.depth_sensor.clone()
 _C.habitat.simulator.arm_depth_sensor.uuid = "robot_arm_depth"
 # -----------------------------------------------------------------------------
 # 3rd RGB SENSOR
@@ -826,9 +803,7 @@ _C.habitat.simulator.third_rgb_sensor.uuid = "robot_third_rgb"
 # -----------------------------------------------------------------------------
 # 3rd DEPTH SENSOR
 # -----------------------------------------------------------------------------
-_C.habitat.simulator.third_depth_sensor = (
-    _C.habitat.simulator.depth_sensor.clone()
-)
+_C.habitat.simulator.third_depth_sensor = _C.habitat.simulator.depth_sensor.clone()
 _C.habitat.simulator.third_depth_sensor.uuid = "robot_third_rgb"
 
 # The default value (alpha, xi) is set to match the lens "GoPro" found in Table 3 of this paper:
@@ -851,17 +826,13 @@ _C.habitat.simulator.fisheye_rgb_sensor.type = "HabitatSimFisheyeRGBSensor"
 # FISHEYE DEPTH SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.simulator.fisheye_depth_sensor = fisheye_sim_sensor.clone()
-_C.habitat.simulator.fisheye_depth_sensor.merge_from_other_cfg(
-    simulator_depth_sensor
-)
+_C.habitat.simulator.fisheye_depth_sensor.merge_from_other_cfg(simulator_depth_sensor)
 _C.habitat.simulator.fisheye_depth_sensor.type = "HabitatSimFisheyeDepthSensor"
 # -----------------------------------------------------------------------------
 # FISHEYE SEMANTIC SENSOR
 # -----------------------------------------------------------------------------
 _C.habitat.simulator.fisheye_semantic_sensor = fisheye_sim_sensor.clone()
-_C.habitat.simulator.fisheye_semantic_sensor.type = (
-    "HabitatSimFisheyeSemanticSensor"
-)
+_C.habitat.simulator.fisheye_semantic_sensor.type = "HabitatSimFisheyeSemanticSensor"
 # -----------------------------------------------------------------------------
 # agent
 # -----------------------------------------------------------------------------
@@ -873,9 +844,7 @@ _C.habitat.simulator.agent_0.is_set_start_state = False
 _C.habitat.simulator.agent_0.start_position = [0, 0, 0]
 _C.habitat.simulator.agent_0.start_rotation = [0, 0, 0, 1]
 _C.habitat.simulator.agent_0.joint_start_noise = 0.0
-_C.habitat.simulator.agent_0.robot_urdf = (
-    "data/robots/hab_fetch/robots/hab_fetch.urdf"
-)
+_C.habitat.simulator.agent_0.robot_urdf = "data/robots/hab_fetch/robots/hab_fetch.urdf"
 _C.habitat.simulator.agent_0.robot_type = "FetchRobot"
 _C.habitat.simulator.agent_0.ik_arm_urdf = (
     "data/robots/hab_fetch/robots/fetch_onlyarm.urdf"
@@ -901,9 +870,7 @@ _C.habitat.simulator.habitat_sim_v0.physics_config_file = (
     "./data/default.physics_config.json"
 )
 # Possibly unstable optimization for extra performance with concurrent rendering
-_C.habitat.simulator.habitat_sim_v0.leave_context_with_background_renderer = (
-    False
-)
+_C.habitat.simulator.habitat_sim_v0.leave_context_with_background_renderer = False
 _C.habitat.simulator.habitat_sim_v0.enable_gfx_replay_save = False
 # -----------------------------------------------------------------------------
 # pyrobot
