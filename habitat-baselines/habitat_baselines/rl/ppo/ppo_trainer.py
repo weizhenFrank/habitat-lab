@@ -20,8 +20,9 @@ from torch.optim.lr_scheduler import LambdaLR
 
 from habitat import Config, VectorEnv, logger
 from habitat.config import read_write
-from habitat.tasks.rearrange.rearrange_sensors import GfxReplayMeasure
-from habitat.tasks.rearrange.utils import write_gfx_replay
+
+# from habitat.tasks.rearrange.rearrange_sensors import GfxReplayMeasure
+# from habitat.tasks.rearrange.utils import write_gfx_replay
 from habitat.utils import profiling_wrapper
 from habitat.utils.render_wrapper import overlay_frame
 from habitat.utils.visualizations.utils import observations_to_image
@@ -53,9 +54,10 @@ from habitat_baselines.rl.ddppo.policy import (  # noqa: F401.
     PointNavResNetNet,
     PointNavResNetPolicy,
 )
-from habitat_baselines.rl.hrl.hierarchical_policy import (  # noqa: F401.
-    HierarchicalPolicy,
-)
+
+# from habitat_baselines.rl.hrl.hierarchical_policy import (  # noqa: F401.
+#     HierarchicalPolicy,
+# )
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.ppo.policy import NetPolicy
 from habitat_baselines.utils.common import (
@@ -323,9 +325,9 @@ class PPOTrainer(BaseRLTrainer):
 
         if self._static_encoder:
             with inference_mode():
-                batch[
-                    PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY
-                ] = self._encoder(batch)
+                batch[PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY] = self._encoder(
+                    batch
+                )
 
         self.rollouts.buffers["observations"][0] = batch  # type: ignore
 
@@ -364,15 +366,11 @@ class PPOTrainer(BaseRLTrainer):
 
         torch.save(
             checkpoint,
-            os.path.join(
-                self.config.habitat_baselines.checkpoint_folder, file_name
-            ),
+            os.path.join(self.config.habitat_baselines.checkpoint_folder, file_name),
         )
         torch.save(
             checkpoint,
-            os.path.join(
-                self.config.habitat_baselines.checkpoint_folder, "latest.pth"
-            ),
+            os.path.join(self.config.habitat_baselines.checkpoint_folder, "latest.pth"),
         )
 
     def load_checkpoint(self, checkpoint_path: str, *args, **kwargs) -> Dict:
@@ -391,9 +389,7 @@ class PPOTrainer(BaseRLTrainer):
     METRICS_BLACKLIST = {"top_down_map", "collisions.is_collision"}
 
     @classmethod
-    def _extract_scalars_from_info(
-        cls, info: Dict[str, Any]
-    ) -> Dict[str, float]:
+    def _extract_scalars_from_info(cls, info: Dict[str, Any]) -> Dict[str, float]:
         result = {}
         for k, v in info.items():
             if not isinstance(k, str) or k in cls.METRICS_BLACKLIST:
@@ -403,9 +399,7 @@ class PPOTrainer(BaseRLTrainer):
                 result.update(
                     {
                         k + "." + subk: subv
-                        for subk, subv in cls._extract_scalars_from_info(
-                            v
-                        ).items()
+                        for subk, subv in cls._extract_scalars_from_info(v).items()
                         if isinstance(subk, str)
                         and k + "." + subk not in cls.METRICS_BLACKLIST
                     }
@@ -501,9 +495,7 @@ class PPOTrainer(BaseRLTrainer):
             for index_env in range(env_slice.start, env_slice.stop)
         ]
 
-        observations, rewards_l, dones, infos = [
-            list(x) for x in zip(*outputs)
-        ]
+        observations, rewards_l, dones, infos = [list(x) for x in zip(*outputs)]
 
         self.env_time += time.time() - t_step_env
 
@@ -545,9 +537,9 @@ class PPOTrainer(BaseRLTrainer):
 
         if self._static_encoder:
             with inference_mode():
-                batch[
-                    PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY
-                ] = self._encoder(batch)
+                batch[PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY] = self._encoder(
+                    batch
+                )
 
         self.rollouts.insert(
             next_observations=batch,
@@ -572,9 +564,7 @@ class PPOTrainer(BaseRLTrainer):
         ppo_cfg = self.config.habitat_baselines.rl.ppo
         t_update_model = time.time()
         with inference_mode():
-            step_batch = self.rollouts.buffers[
-                self.rollouts.current_rollout_step_idx
-            ]
+            step_batch = self.rollouts.buffers[self.rollouts.current_rollout_step_idx]
 
             next_value = self.actor_critic.get_value(
                 step_batch["observations"],
@@ -599,9 +589,7 @@ class PPOTrainer(BaseRLTrainer):
         self, losses: Dict[str, float], count_steps_delta: int
     ) -> Dict[str, float]:
         stats_ordering = sorted(self.running_episode_stats.keys())
-        stats = torch.stack(
-            [self.running_episode_stats[k] for k in stats_ordering], 0
-        )
+        stats = torch.stack([self.running_episode_stats[k] for k in stats_ordering], 0)
 
         stats = self._all_reduce(stats)
 
@@ -619,9 +607,7 @@ class PPOTrainer(BaseRLTrainer):
             count_steps_delta = int(stats[-1].item())
             stats /= torch.distributed.get_world_size()
 
-            losses = {
-                k: stats[i].item() for i, k in enumerate(loss_name_ordering)
-            }
+            losses = {k: stats[i].item() for i, k in enumerate(loss_name_ordering)}
 
         if self._is_distributed and rank0_only():
             self.num_rollouts_done_store.set("num_done", "0")
@@ -631,15 +617,9 @@ class PPOTrainer(BaseRLTrainer):
         return losses
 
     @rank0_only
-    def _training_log(
-        self, writer, losses: Dict[str, float], prev_time: int = 0
-    ):
+    def _training_log(self, writer, losses: Dict[str, float], prev_time: int = 0):
         deltas = {
-            k: (
-                (v[-1] - v[0]).sum().item()
-                if len(v) > 1
-                else v[0].sum().item()
-            )
+            k: ((v[-1] - v[0]).sum().item() if len(v) > 1 else v[0].sum().item())
             for k, v in self.window_episode_stats.items()
         }
         deltas["count"] = max(deltas["count"], 1.0)
@@ -667,10 +647,7 @@ class PPOTrainer(BaseRLTrainer):
         writer.add_scalar("perf/fps", fps, self.num_steps_done)
 
         # log stats
-        if (
-            self.num_updates_done % self.config.habitat_baselines.log_interval
-            == 0
-        ):
+        if self.num_updates_done % self.config.habitat_baselines.log_interval == 0:
             logger.info(
                 "update: {}\tfps: {:.3f}\t".format(
                     self.num_updates_done,
@@ -745,16 +722,12 @@ class PPOTrainer(BaseRLTrainer):
             self.pth_time = requeue_stats["pth_time"]
             self.num_steps_done = requeue_stats["num_steps_done"]
             self.num_updates_done = requeue_stats["num_updates_done"]
-            self._last_checkpoint_percent = requeue_stats[
-                "_last_checkpoint_percent"
-            ]
+            self._last_checkpoint_percent = requeue_stats["_last_checkpoint_percent"]
             count_checkpoints = requeue_stats["count_checkpoints"]
             prev_time = requeue_stats["prev_time"]
 
             self.running_episode_stats = requeue_stats["running_episode_stats"]
-            self.window_episode_stats.update(
-                requeue_stats["window_episode_stats"]
-            )
+            self.window_episode_stats.update(requeue_stats["window_episode_stats"])
 
         ppo_cfg = self.config.habitat_baselines.rl.ppo
 
@@ -833,9 +806,7 @@ class PPOTrainer(BaseRLTrainer):
 
                         if not is_last_step:
                             if (buffer_index + 1) == self._nbuffers:
-                                profiling_wrapper.range_push(
-                                    "_collect_rollout_step"
-                                )
+                                profiling_wrapper.range_push("_collect_rollout_step")
 
                             self._compute_actions_and_step_envs(buffer_index)
 
@@ -896,9 +867,7 @@ class PPOTrainer(BaseRLTrainer):
 
         # Map location CPU is almost always better than mapping to a CUDA device.
         if self.config.habitat_baselines.eval.should_load_ckpt:
-            ckpt_dict = self.load_checkpoint(
-                checkpoint_path, map_location="cpu"
-            )
+            ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
             step_id = ckpt_dict["extra_state"]["step"]
             print(step_id)
         else:
@@ -959,9 +928,7 @@ class PPOTrainer(BaseRLTrainer):
         batch = batch_obs(observations, device=self.device)
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)  # type: ignore
 
-        current_episode_reward = torch.zeros(
-            self.envs.num_envs, 1, device="cpu"
-        )
+        current_episode_reward = torch.zeros(self.envs.num_envs, 1, device="cpu")
 
         test_recurrent_hidden_states = torch.zeros(
             self.config.habitat_baselines.num_environments,
@@ -992,9 +959,7 @@ class PPOTrainer(BaseRLTrainer):
         if len(self.config.habitat_baselines.video_option) > 0:
             os.makedirs(self.config.habitat_baselines.video_dir, exist_ok=True)
 
-        number_of_eval_episodes = (
-            self.config.habitat_baselines.test_episode_count
-        )
+        number_of_eval_episodes = self.config.habitat_baselines.test_episode_count
         evals_per_ep = self.config.habitat_baselines.eval.evals_per_ep
         if number_of_eval_episodes == -1:
             number_of_eval_episodes = sum(self.envs.number_of_episodes)
@@ -1023,12 +988,7 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes_info = self.envs.current_episodes()
 
             with inference_mode():
-                (
-                    _,
-                    actions,
-                    _,
-                    test_recurrent_hidden_states,
-                ) = self.actor_critic.act(
+                (_, actions, _, test_recurrent_hidden_states,) = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
                     prev_actions,
@@ -1055,9 +1015,7 @@ class PPOTrainer(BaseRLTrainer):
 
             outputs = self.envs.step(step_data)
 
-            observations, rewards_l, dones, infos = [
-                list(x) for x in zip(*outputs)
-            ]
+            observations, rewards_l, dones, infos = [list(x) for x in zip(*outputs)]
             batch = batch_obs(  # type: ignore
                 observations,
                 device=self.device,
@@ -1107,12 +1065,8 @@ class PPOTrainer(BaseRLTrainer):
                 # episode ended
                 if not not_done_masks[i].item():
                     pbar.update()
-                    episode_stats = {
-                        "reward": current_episode_reward[i].item()
-                    }
-                    episode_stats.update(
-                        self._extract_scalars_from_info(infos[i])
-                    )
+                    episode_stats = {"reward": current_episode_reward[i].item()}
+                    episode_stats.update(self._extract_scalars_from_info(infos[i]))
                     current_episode_reward[i] = 0
                     k = (
                         current_episodes_info[i].scene_id,
