@@ -1,0 +1,89 @@
+habitat:
+  seed: 100
+  environment:
+    max_episode_steps: 500
+  simulator:
+    agent_0:
+      sensors: ['spot_left_depth_sensor', 'spot_right_depth_sensor']
+    habitat_sim_v0:
+      gpu_device_id: 0
+    rgb_sensor:
+      width: 256
+      height: 256
+      hfov: 70
+      orientation: [ -0.7, 0.0, 0.0 ]
+      positon: [ 0.0, 1.5, 1.0 ]
+      ## Camera next to Spot
+      #orientation: [ -0.7, 1.57, 0.0 ]
+      #positon: [ 1.0, 1.2, 0.0 ]
+    spot_left_depth_sensor:
+      width: 120
+      height: 212
+      hfov: 58.286  # horizontal field of view in degrees
+      orientation: [ -0.4415683, -0.57648225, 0.270526 ]  # Euler's angles (pitch yaw roll)
+      position: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]
+      max_depth: 3.5
+      min_depth: 0.0
+      normalize_depth: True
+    spot_right_depth_sensor:
+      width: 120
+      height: 212
+      hfov: 58.286  # horizontal field of view in degrees
+      orientation: [ -0.4415683, 0.57648225, -0.270526 ]  # Euler's angles (pitch yaw roll)
+      position: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]
+      max_depth: 3.5
+      min_depth: 0.0
+      normalize_depth: True
+  task:
+    type: Nav-v0
+    end_on_success: True
+    reward_measure: "distance_to_goal_reward"
+    success_measure: "spl"
+
+    robot: "Spot"
+    success_distance: 0.375
+
+    sensors: ['pointgoal_with_gps_compass_sensor']
+    pointgoal_with_gps_compass_sensor:
+      goal_format: "POLAR"
+      dimensionality: 2
+      log_pointgoal: True
+    goal_sensor_uuid: pointgoal_with_gps_compass
+
+    context_map_sensor:
+      save_map: False
+      log_pointgoal: False
+      rotate_map: False
+      second_channel: False
+      multi_channel: False
+      pad_noise: False
+      draw_trajectory: False
+      crop: True
+      pointgoal_scale: 1.0
+      map_resolution: 100
+      map_mpp: [ ]
+
+    possible_actions: [ "velocity_control" ]
+      actions:
+        velocity_control:
+          time_step: 0.5
+          ctrl_freq: 240.0
+          must_call_stop: False
+          min_abs_hor_speed: 0.0035
+          min_abs_lin_speed: 0.0035
+          min_abs_ang_speed: 1.0
+          lin_vel_range: [ -0.5, 0.5 ]  # meters per sec
+          ang_vel_range: [ -30.0, 30.0 ]  # deg per sec
+          hor_vel_range: [ 0.0, 0.0 ] # meters per sec
+          min_rand_pitch: 0.0
+          max_rand_pitch: 0.0
+          robot_urdf: "/coc/testnvme/jtruong33/data/urdf_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid_rot_fix.urdf"
+          contact_test: True
+
+    measurements: ['distance_to_goal', 'episode_distance', 'success', 'spl', 'distance_to_goal_reward', 'collisions']
+    success:
+      success_distance: 0.375
+  dataset:
+    type: PointNav-v1
+    split: train
+    data_path: /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson/pointnav_spot_0.3/{split}/{split}.json.gz
