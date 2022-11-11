@@ -765,12 +765,13 @@ class SimulatorSensorConfig(HabitatBaseConfig):
 
 @dataclass
 class SimulatorCameraSensorConfig(SimulatorSensorConfig):
-    hfov: int = 90  # horizontal field of view in degrees
+    hfov: float = 90.0  # horizontal field of view in degrees
     sensor_subtype: str = "PINHOLE"
 
 
 @dataclass
 class SimulatorDepthSensorConfig(SimulatorSensorConfig):
+    hfov: float = 90.0  # horizontal field of view in degrees
     min_depth: float = 0.0
     max_depth: float = 10.0
     normalize_depth: bool = True
@@ -784,6 +785,16 @@ class HabitatSimRGBSensorConfig(SimulatorCameraSensorConfig):
 @dataclass
 class HabitatSimDepthSensorConfig(SimulatorDepthSensorConfig):
     type: str = "HabitatSimDepthSensor"
+
+
+@dataclass
+class SpotLeftDepthSensorConfig(SimulatorDepthSensorConfig):
+    type: str = "SpotLeftDepthSensor"
+
+
+@dataclass
+class SpotRightDepthSensorConfig(SimulatorDepthSensorConfig):
+    type: str = "SpotRightDepthSensor"
 
 
 @dataclass
@@ -1018,8 +1029,7 @@ class DatasetConfig(HabitatBaseConfig):
     scenes_dir: str = "data/scene_datasets"
     content_scenes: List[str] = field(default_factory=lambda: ["*"])
     data_path: str = (
-        "data/datasets/pointnav/"
-        "habitat-test-scenes/v1/{split}/{split}.json.gz"
+        "data/datasets/pointnav/" "habitat-test-scenes/v1/{split}/{split}.json.gz"
     )
 
 
