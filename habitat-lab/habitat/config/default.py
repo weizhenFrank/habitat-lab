@@ -863,9 +863,9 @@ _C.habitat.simulator.habitat_sim_v0.gpu_device_id = 0
 # for the caveats that results in
 _C.habitat.simulator.habitat_sim_v0.gpu_gpu = False
 # Whether or not the agent slides on collisions
-_C.habitat.simulator.habitat_sim_v0.allow_sliding = True
+_C.habitat.simulator.habitat_sim_v0.allow_sliding = False
 _C.habitat.simulator.habitat_sim_v0.frustum_culling = True
-_C.habitat.simulator.habitat_sim_v0.enable_physics = False
+_C.habitat.simulator.habitat_sim_v0.enable_physics = True
 _C.habitat.simulator.habitat_sim_v0.physics_config_file = (
     "./data/default.physics_config.json"
 )
