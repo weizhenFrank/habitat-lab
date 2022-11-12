@@ -46,9 +46,11 @@ class ActionSpace(gym.spaces.Dict):
     """
 
     def __init__(self, spaces: Union[List, Dict]):
-        if isinstance(spaces, dict):
+        if isinstance(spaces, OrderedDict):
+            self.spaces = spaces
+        elif isinstance(spaces, dict):
             self.spaces = OrderedDict(sorted(spaces.items()))
-        if isinstance(spaces, list):
+        elif isinstance(spaces, list):
             self.spaces = OrderedDict(spaces)
         self.actions_select = gym.spaces.Discrete(len(self.spaces))
 
@@ -100,9 +102,7 @@ class ListSpace(Space):
         self.min_seq_length = min_seq_length
         self.max_seq_length = max_seq_length
         self.space = space
-        self.length_select = gym.spaces.Discrete(
-            max_seq_length - min_seq_length
-        )
+        self.length_select = gym.spaces.Discrete(max_seq_length - min_seq_length)
 
     def sample(self):
         seq_length = self.length_select.sample() + self.min_seq_length
