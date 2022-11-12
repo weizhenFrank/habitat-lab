@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # TODO, lots of typing errors in here
-
+from collections import OrderedDict
 from typing import Any, List, Optional, Sequence, Tuple
 
 import attr
@@ -1178,18 +1178,20 @@ class VelocityAction(SimulatorTaskAction):
 
     @property
     def action_space(self):
-        action_dict = {
-            "linear_velocity": spaces.Box(
-                low=np.array([self.min_lin_vel]),
-                high=np.array([self.max_lin_vel]),
-                dtype=np.float32,
-            ),
-            "angular_velocity": spaces.Box(
-                low=np.array([self.min_ang_vel]),
-                high=np.array([self.max_ang_vel]),
-                dtype=np.float32,
-            ),
-        }
+        action_dict = OrderedDict(
+            {
+                "linear_velocity": spaces.Box(
+                    low=np.array([self.min_lin_vel]),
+                    high=np.array([self.max_lin_vel]),
+                    dtype=np.float32,
+                ),
+                "angular_velocity": spaces.Box(
+                    low=np.array([self.min_ang_vel]),
+                    high=np.array([self.max_ang_vel]),
+                    dtype=np.float32,
+                ),
+            }
+        )
 
         if self.has_hor_vel:
             action_dict["horizontal_velocity"] = spaces.Box(
@@ -1205,25 +1207,17 @@ class VelocityAction(SimulatorTaskAction):
 
         self.prev_ang_vel = 0.0
 
-        print("robot id: ", self.robot.robot_id)
         if self.robot.robot_id is not None:
-            print("IS NOT NONE")
             ao_mgr = self._sim.get_articulated_object_manager()
             ao_mgr.remove_object_by_id(self.robot.robot_id.object_id)
             self.robot.robot_id = None
-        else:
-            print("IS NONE")
+        if self.robot.robot_id is None:
             # If robot was never spawned or was removed with previous scene
             ao_mgr = self._sim.get_articulated_object_manager()
-            print("ago_mgr: ", ao_mgr)
             robot_id = ao_mgr.add_articulated_object_from_urdf(
                 self.robot_urdf, fixed_base=False
             )
-            print("robot_id: ", robot_id)
-            print("self.robot_urdf: ", self.robot_urdf)
             self.robot.robot_id = robot_id
-        print("robot id 2: ", self.robot.robot_id, self.robot.robot_id.object_id)
-
         agent_pos = kwargs["episode"].start_position
         agent_rot = kwargs["episode"].start_rotation
 
