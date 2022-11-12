@@ -96,7 +96,8 @@ class BaseTrainer:
 
         self._add_preemption_signal_handlers()
 
-        resume_state = load_resume_state(self.config, filename_key="eval")
+        # resume_state = load_resume_state(self.config, filename_key="eval")
+        resume_state = None
         if resume_state is not None:
             # If we have a resume state saved, that means
             # we are resuming an evaluation session that got
