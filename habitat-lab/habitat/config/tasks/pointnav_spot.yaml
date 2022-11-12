@@ -1,13 +1,17 @@
 habitat:
   seed: 100
-  use_threaded: False
   environment:
     max_episode_steps: 500
   simulator:
     agent_0:
       sensors: ['spot_left_depth_sensor', 'spot_right_depth_sensor']
+      height: 0.60
+      radius: 0.30
     habitat_sim_v0:
       gpu_device_id: 0
+      allow_sliding: False
+      enable_physics: True
+      physics_config_file: /coc/testnvme/jtruong33/data/default.physics_config.json
     rgb_sensor:
       width: 256
       height: 256
