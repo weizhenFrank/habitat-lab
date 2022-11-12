@@ -24,7 +24,6 @@ def construct_envs(
 
     :return: VectorEnv object created according to specification.
     """
-
     num_environments = config.habitat_baselines.num_environments
     configs = []
     dataset = make_dataset(config.habitat.dataset.type)
@@ -47,8 +46,7 @@ def construct_envs(
         msg = f"There are less scenes ({len(scenes)}) than environments ({num_environments}). "
         if enforce_scenes_greater_eq_environments:
             logger.warn(
-                msg
-                + "Reducing the number of environments to be the number of scenes."
+                msg + "Reducing the number of environments to be the number of scenes."
             )
             num_environments = len(scenes)
             scene_splits = [[s] for s in scenes]
@@ -78,14 +76,15 @@ def construct_envs(
                 config.habitat_baselines.simulator_gpu_id
             )
 
-            task_config.simulator.agent_0.sensors = (
-                config.habitat_baselines.sensors
-            )
+            task_config.simulator.agent_0.sensors = config.habitat_baselines.sensors
 
         configs.append(proc_config)
 
     vector_env_cls: Type[Any]
-    if int(os.environ.get("HABITAT_ENV_DEBUG", 0)):
+    if (
+        int(os.environ.get("HABITAT_ENV_DEBUG", 0))
+        or config.habitat_baselines.use_threaded
+    ):
         logger.warn(
             "Using the debug Vector environment interface. Expect slower performance."
         )
