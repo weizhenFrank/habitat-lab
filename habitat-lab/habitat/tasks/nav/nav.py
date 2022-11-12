@@ -156,6 +156,8 @@ class PointGoalSensor(Sensor):
         self._dimensionality = getattr(config, "dimensionality", 2)
         assert self._dimensionality in [2, 3]
 
+        self.log_pointgoal = getattr(config, "log_pointgoal", False)
+
         super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -185,6 +187,8 @@ class PointGoalSensor(Sensor):
                 rho, phi = cartesian_to_polar(
                     -direction_vector_agent[2], direction_vector_agent[0]
                 )
+                if self.log_pointgoal:
+                    return np.array([np.log(rho), -phi], dtype=np.float32)
                 return np.array([rho, -phi], dtype=np.float32)
             else:
                 _, phi = cartesian_to_polar(
