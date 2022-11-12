@@ -127,6 +127,14 @@ class ResNetEncoder(nn.Module):
         self._n_input_channels = sum(
             observation_space.spaces[k].shape[2] for k in self.visual_keys
         )
+        self.using_two_depth_cameras = False
+
+        if (
+            "spot_left_depth" in self.visual_keys
+            and "spot_right_depth" in self.visual_keys
+        ):
+            self._n_input_channels = 1
+            self.using_two_depth_cameras = True
 
         if self._n_input_channels > 0:
             self.running_mean_and_var: nn.Module = RunningMeanAndVar(
@@ -137,7 +145,10 @@ class ResNetEncoder(nn.Module):
 
         if not self.is_blind:
             spatial_size_h = observation_space.spaces[self.visual_keys[0]].shape[0] // 2
-            spatial_size_w = observation_space.spaces[self.visual_keys[0]].shape[1] // 2
+            spatial_size_w = observation_space.spaces[self.visual_keys[0]].shape[1]
+            if not self.using_two_depth_cameras:
+                spatial_size_w = spatial_size_w // 2
+
             self.backbone = make_backbone(self._n_input_channels, baseplanes, ngroups)
 
             final_spatial_h = int(
@@ -184,7 +195,21 @@ class ResNetEncoder(nn.Module):
             return None
 
         cnn_input = []
-        for k in self.visual_keys:
+        spot_keys = ["spot_right_depth", "spot_left_depth"]
+        other_keys = list(set(self.visual_keys) - set(spot_keys))
+        if spot_keys[0] in self.visual_keys and spot_keys[1] in self.visual_keys:
+            obs_k = torch.cat(
+                [
+                    # Spot is cross-eyed; right is on the left on the FOV
+                    observations["spot_right_depth"],
+                    observations["spot_left_depth"],
+                ],
+                dim=2,
+            )
+            # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
+            obs_k = obs_k.permute(0, 3, 1, 2)
+            cnn_input.append(obs_k)
+        for k in other_keys:
             obs_k = observations[k]
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             obs_k = obs_k.permute(0, 3, 1, 2)
@@ -234,7 +259,6 @@ class PointNavResNetNet(Net):
         else:
             num_actions = get_num_actions(action_space)
             self.prev_action_embedding = nn.Linear(num_actions, self._n_prev_action)
-        self._n_prev_action = 32
         rnn_input_size = self._n_prev_action  # test
 
         # Only fuse the 1D state inputs. Other inputs are processed by the
@@ -517,7 +541,6 @@ class PointNavResNetNet(Net):
             prev_actions = self.prev_action_embedding(masks * prev_actions.float())
 
         x.append(prev_actions)
-
         out = torch.cat(x, dim=1)
         out, rnn_hidden_states = self.state_encoder(
             out, rnn_hidden_states, masks, rnn_build_seq_info
