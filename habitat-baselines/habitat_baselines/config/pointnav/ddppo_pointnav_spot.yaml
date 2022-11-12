@@ -19,6 +19,7 @@ habitat_baselines:
   # Force PyTorch to be single threaded as
   # this improves performance considerably
   force_torch_single_threaded: True
+  use_threaded: False
 
   rl:
     success_reward: 10.0
@@ -33,6 +34,7 @@ habitat_baselines:
 
     policy:
       name: "PointNavResNetPolicy"
+      action_distribution_type: "gaussian"
 
     ppo:
       # ppo params
