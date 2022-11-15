@@ -212,10 +212,11 @@ def load_resume_state(
     if not osp.exists(filename):
         return None
 
-    if rank0_only():
-        logger.info(f"Loading resume state: {filename}")
+    # if rank0_only():
+        # logger.info(f"Loading resume state: {filename}")
 
-    return torch.load(filename, map_location="cpu")
+    # return torch.load(filename, map_location="cpu")
+    return None
 
 
 def requeue_job():
