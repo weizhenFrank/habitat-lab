@@ -46,6 +46,10 @@ habitat:
     end_on_success: True
     reward_measure: "distance_to_goal_reward"
     success_measure: "spl"
+    success_reward: 10.0
+    slack_reward: -0.002
+    collision_penalty: 0.003
+    backwards_penalty: 0.003
 
     robot: "Spot"
     success_distance: 0.375
@@ -59,9 +63,9 @@ habitat:
 
     context_map_sensor:
       save_map: False
-      log_pointgoal: False
-      rotate_map: False
-      second_channel: False
+      log_pointgoal: True
+      rotate_map: True
+      second_channel: True
       multi_channel: False
       pad_noise: False
       draw_trajectory: False
@@ -85,7 +89,7 @@ habitat:
         max_rand_pitch: 0.0
         robot_urdf: "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid_rot_fix.urdf"
         contact_test: True
-    measurements: ['distance_to_goal', 'episode_distance', 'success', 'spl', 'distance_to_goal_reward', 'collisions']
+    measurements: ['distance_to_goal', 'episode_distance', 'success', 'spl', 'distance_to_goal_reward', 'num_steps', 'collisions']
     success:
       success_distance: 0.375
   dataset:
