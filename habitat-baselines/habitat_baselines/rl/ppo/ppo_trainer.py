@@ -1091,13 +1091,44 @@ class PPOTrainer(BaseRLTrainer):
 
                         rgb_frames[i] = []
 
-                    gfx_str = infos[i].get(GfxReplayMeasure.cls_uuid, "")
-                    if gfx_str != "":
-                        write_gfx_replay(
-                            gfx_str,
-                            self.config.habitat.task,
-                            current_episodes_info[i].episode_id,
+                    txt_dir = self.config.habitat_baselines.txt_dir
+                    if txt_dir != "":
+                        if not os.path.isdir(txt_dir):
+                            os.makedirs(txt_dir)
+                        episode_steps_filename = "{}.csv".format(
+                            os.path.basename(checkpoint_path[:-4]).replace(".", "_")
                         )
+                        episode_steps_filename = os.path.join(
+                            txt_dir, episode_steps_filename
+                        )
+                        if not os.path.isfile(episode_steps_filename):
+                            episode_steps_data = "scene_id,ep_id,reward,distance_to_goal,episode_distance,success,spl,steps,collisions\n"
+                        else:
+                            with open(episode_steps_filename) as f:
+                                episode_steps_data = f.read()
+                        print("episode_stats: ", episode_stats.keys())
+                        episode_steps_data += "{},{},{},{},{},{},{},{},{}\n".format(
+                            current_episodes_info[i].scene_id,
+                            current_episodes_info[i].episode_id,
+                            episode_stats["reward"],
+                            episode_stats["distance_to_goal"],
+                            episode_stats["episode_distance"],
+                            episode_stats["success"],
+                            episode_stats["spl"],
+                            episode_stats["num_steps"],
+                            episode_stats["collisions.count"],
+                        )  # number of steps taken
+
+                        with open(episode_steps_filename, "w") as f:
+                            f.write(episode_steps_data)
+
+                    # gfx_str = infos[i].get(GfxReplayMeasure.cls_uuid, "")
+                    # if gfx_str != "":
+                    #     write_gfx_replay(
+                    #         gfx_str,
+                    #         self.config.habitat.task,
+                    #         current_episodes_info[i].episode_id,
+                    #     )
 
             not_done_masks = not_done_masks.to(device=self.device)
             (

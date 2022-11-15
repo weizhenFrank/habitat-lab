@@ -156,8 +156,6 @@ class PointGoalSensor(Sensor):
         self._dimensionality = getattr(config, "dimensionality", 2)
         assert self._dimensionality in [2, 3]
 
-        self.log_pointgoal = getattr(config, "log_pointgoal", False)
-
         super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -176,7 +174,14 @@ class PointGoalSensor(Sensor):
             dtype=np.float32,
         )
 
-    def _compute_pointgoal(self, source_position, source_rotation, goal_position):
+    def _compute_pointgoal(
+        self,
+        source_position,
+        source_rotation,
+        goal_position,
+        log_pointgoal=False,
+        pointgoal_scale=1.0,
+    ):
         direction_vector = goal_position - source_position
         direction_vector_agent = quaternion_rotate_vector(
             source_rotation.inverse(), direction_vector
@@ -187,7 +192,8 @@ class PointGoalSensor(Sensor):
                 rho, phi = cartesian_to_polar(
                     -direction_vector_agent[2], direction_vector_agent[0]
                 )
-                if self.log_pointgoal:
+                rho *= pointgoal_scale
+                if log_pointgoal:
                     return np.array([np.log(rho), -phi], dtype=np.float32)
                 return np.array([rho, -phi], dtype=np.float32)
             else:
@@ -318,6 +324,12 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
     """
     cls_uuid: str = "pointgoal_with_gps_compass"
 
+    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+        self.log_pointgoal = getattr(config, "log_pointgoal", False)
+        self.pointgoal_scale = getattr(config, "pointgoal_scale", 1.0)
+
+        super().__init__(sim=sim, config=config, *args, **kwargs)
+
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
 
@@ -328,7 +340,11 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
         goal_position = np.array(episode.goals[0].position, dtype=np.float32)
 
         return self._compute_pointgoal(
-            agent_position, rotation_world_agent, goal_position
+            agent_position,
+            rotation_world_agent,
+            goal_position,
+            log_pointgoal=self.log_pointgoal,
+            pointgoal_scale=self.pointgoal_scale,
         )
 
 
@@ -552,6 +568,7 @@ class SPL(Measure):
         self._episode_view_points: Optional[List[Tuple[float, float, float]]] = None
         self._sim = sim
         self._config = config
+        self.pointgoal_scale = self._config.pointgoal_scale
 
         super().__init__()
 
@@ -579,8 +596,9 @@ class SPL(Measure):
         ep_success = task.measurements.measures[Success.cls_uuid].get_metric()
 
         current_position = self._sim.get_agent_state().position
-        self._agent_episode_distance += self._euclidean_distance(
-            current_position, self._previous_position
+        self._agent_episode_distance += (
+            self._euclidean_distance(current_position, self._previous_position)
+            * self.pointgoal_scale
         )
 
         self._previous_position = current_position
@@ -913,6 +931,7 @@ class DistanceToGoal(Measure):
         self._previous_position: Optional[Tuple[float, float, float]] = None
         self._sim = sim
         self._config = config
+        self.pointgoal_scale = self._config.pointgoal_scale
         self._episode_view_points: Optional[List[Tuple[float, float, float]]] = None
 
         super().__init__(**kwargs)
@@ -960,7 +979,7 @@ class DistanceToGoal(Measure):
                 current_position[1],
                 current_position[2],
             )
-            self._metric = distance_to_target
+            self._metric = distance_to_target * self.pointgoal_scale
 
 
 @registry.register_measure
@@ -1019,6 +1038,25 @@ class EpisodeDistance(Measure):
 
     def update_metric(self, episode: NavigationEpisode, *args: Any, **kwargs: Any):
         pass
+
+
+@registry.register_measure
+class NumStepsMeasure(Measure):
+    """The measure calculates a distance towards the goal."""
+
+    cls_uuid: str = "num_steps"
+
+    def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
+        super().__init__(**kwargs)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def reset_metric(self, episode, task, *args: Any, **kwargs: Any):
+        self._metric = 0
+
+    def update_metric(self, episode: NavigationEpisode, *args: Any, **kwargs: Any):
+        self._metric += 1
 
 
 @registry.register_task_action
@@ -1409,8 +1447,6 @@ class VelocityAction(SimulatorTaskAction):
             agent_observations = self.check_nans_in_obs(task, agent_observations)
             return agent_observations
 
-            return
-
         angular_velocity = np.deg2rad(angular_velocity)
 
         if not self.has_hor_vel:
@@ -1518,8 +1554,6 @@ class VelocityAction(SimulatorTaskAction):
             agent_observations["moving_backwards"] = False
             agent_observations["moving_sideways"] = False
             agent_observations["ang_accel"] = 0.0
-            if kwargs.get("num_steps", -1) != -1:
-                agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
             self.put_text(
@@ -1565,8 +1599,6 @@ class VelocityAction(SimulatorTaskAction):
                 agent_observations["moving_backwards"] = False
                 agent_observations["moving_sideways"] = False
                 agent_observations["ang_accel"] = 0.0
-                if kwargs.get("num_steps", -1) != -1:
-                    agent_observations["num_steps"] = kwargs["num_steps"]
 
                 self.prev_ang_vel = 0.0
                 self.put_text(
@@ -1602,8 +1634,6 @@ class VelocityAction(SimulatorTaskAction):
         agent_observations["ang_accel"] = (
             angular_velocity - self.prev_ang_vel
         ) / self.time_step
-        if kwargs.get("num_steps", -1) != -1:
-            agent_observations["num_steps"] = kwargs["num_steps"]
 
         self.prev_ang_vel = angular_velocity
         self.put_text(

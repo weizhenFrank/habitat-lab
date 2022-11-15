@@ -39,6 +39,7 @@ parser.add_argument("-ne", "--num-environments", type=int, default=16)
 parser.add_argument("-rotm", "--rotate-map", default=False, action="store_true")
 parser.add_argument("-rpl", "--randomize-pitch-min", type=float, default=-1.0)
 parser.add_argument("-rpu", "--randomize-pitch-max", type=float, default=1.0)
+parser.add_argument("-lpg", "--log-pointgoal", default=False, action="store_true")
 
 # Evaluation
 parser.add_argument("-e", "--eval", default=False, action="store_true")
@@ -124,27 +125,35 @@ if not args.eval:
     for idx, i in enumerate(task_yaml_data):
         if i.startswith("    robot:"):
             task_yaml_data[idx] = f"    robot: '{args.robot}'"
+        elif i.startswith("    max_episode_steps:"):
+            task_yaml_data[
+                idx
+            ] = f"    max_episode_steps: {int(500 * (1.0/args.robot_scale))}"
+        elif i.startswith("      radius:"):
+            task_yaml_data[idx] = f"      radius: {0.3 * args.robot_scale}"
         elif i.startswith(
-            "      positon: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]"
+            "      position: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]"
         ):
             position = (
                 np.array([-0.03740343144695029, 0.5, -0.4164822634134684])
                 * args.robot_scale
             )
-            task_yaml_data[idx] = f"      positon: {list(position)}"
+            task_yaml_data[idx] = f"      position: {list(position)}"
         elif i.startswith(
-            "      positon: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]"
+            "      position: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]"
         ):
             position = (
                 np.array([0.03614789234067159, 0.5, -0.4164822634134684])
                 * args.robot_scale
             )
-            task_yaml_data[idx] = f"      positon: {list(position)}"
+            task_yaml_data[idx] = f"      position: {list(position)}"
         elif i.startswith("      max_depth:"):
             max_depth = 3.5 * args.robot_scale
             task_yaml_data[idx] = f"      max_depth: {max_depth:.2f}"
         elif i.startswith("        robot_urdf:"):
             task_yaml_data[idx] = f"        robot_urdf: {robot_urdf}"
+        elif i.startswith("      log_pointgoal:"):
+            task_yaml_data[idx] = f"      log_pointgoal: {args.log_pointgoal}"
         elif i.startswith("      map_resolution:"):
             task_yaml_data[idx] = f"      map_resolution: {args.map_resolution}"
             if args.rotate_map:
@@ -152,6 +161,8 @@ if not args.eval:
         elif i.startswith("        lin_vel_range:"):
             lin_vel = 0.5 * args.robot_scale
             task_yaml_data[idx] = f"        lin_vel_range: [ -{lin_vel}, {lin_vel} ]"
+        elif i.startswith("      pointgoal_scale:"):
+            task_yaml_data[idx] = f"      pointgoal_scale: {1.0/args.robot_scale}"
         elif i.startswith("        min_rand_pitch:"):
             task_yaml_data[idx] = f"        min_rand_pitch: {args.randomize_pitch_min}"
         elif i.startswith("        max_rand_pitch:"):
@@ -257,21 +268,21 @@ else:
         if i.startswith("    robot:"):
             eval_yaml_data[idx] = f"    robot: '{args.robot}'"
         elif i.startswith(
-            "      positon: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]"
+            "      position: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]"
         ):
             position = (
                 np.array([-0.03740343144695029, 0.5, -0.4164822634134684])
                 * args.robot_scale
             )
-            eval_yaml_data[idx] = f"      positon: {list(position)}"
+            eval_yaml_data[idx] = f"      position: {list(position)}"
         elif i.startswith(
-            "      positon: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]"
+            "      position: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]"
         ):
             position = (
                 np.array([0.03614789234067159, 0.5, -0.4164822634134684])
                 * args.robot_scale
             )
-            eval_yaml_data[idx] = f"      positon: {list(position)}"
+            eval_yaml_data[idx] = f"      position: {list(position)}"
         elif i.startswith("      max_depth:"):
             max_depth = 3.5 * args.robot_scale
             eval_yaml_data[idx] = f"      max_depth: {max_depth:.2f}"
@@ -281,6 +292,8 @@ else:
             eval_yaml_data[idx] = f"      map_resolution: {args.map_resolution}"
             if args.rotate_map:
                 eval_yaml_data[idx] = f"    ROTATE_MAP: True"
+        elif i.startswith("      log_pointgoal:"):
+            eval_yaml_data[idx] = f"      log_pointgoal: {args.log_pointgoal}"
         elif i.startswith("        lin_vel_range:"):
             lin_vel = 0.5 * args.robot_scale
             eval_yaml_data[idx] = f"        lin_vel_range: [ -{lin_vel}, {lin_vel} ]"

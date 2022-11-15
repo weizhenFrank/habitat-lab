@@ -141,7 +141,9 @@ def continuous_vector_action_to_hab_dict(
     action_offset = 0
     for action_name, action_length in action_name_to_lengths.items():
         action_values = action[action_offset : action_offset + action_length]
-        action_args[action_name] = action_values
+        action_args[action_name] = (
+            action_values.item() if action_length == 1 else action_values
+        )
         action_offset += action_length
 
     action_dict = {

@@ -215,6 +215,8 @@ _C.habitat.task.pointgoal_with_gps_compass_sensor = (
     _C.habitat.task.pointgoal_sensor.clone()
 )
 _C.habitat.task.pointgoal_with_gps_compass_sensor.type = "PointGoalWithGPSCompassSensor"
+_C.habitat.task.pointgoal_with_gps_compass_sensor.log_pointgoal = False
+_C.habitat.task.pointgoal_with_gps_compass_sensor.pointgoal_scale = 1.0
 # -----------------------------------------------------------------------------
 # OBJECTGOAL SENSOR
 # -----------------------------------------------------------------------------
@@ -399,6 +401,7 @@ _C.habitat.task.success.success_distance = 0.2
 # -----------------------------------------------------------------------------
 _C.habitat.task.spl = CN()
 _C.habitat.task.spl.type = "SPL"
+_C.habitat.task.spl.pointgoal_scale = 1.0
 # -----------------------------------------------------------------------------
 # SOFT-SPL MEASUREMENT
 # -----------------------------------------------------------------------------
@@ -426,7 +429,7 @@ _C.habitat.task.top_down_map.draw_goal_positions = True
 # Axes aligned bounding boxes
 _C.habitat.task.top_down_map.draw_goal_aabbs = True
 # -----------------------------------------------------------------------------
-# COLLISIONSMEASUREMENT
+# COLLISIONS MEASUREMENT
 # -----------------------------------------------------------------------------
 _C.habitat.task.collisions = CN()
 _C.habitat.task.collisions.type = "Collisions"
@@ -651,6 +654,7 @@ _C.habitat.task.instruction_sensor.type = "InstructionSensor"
 _C.habitat.task.distance_to_goal = CN()
 _C.habitat.task.distance_to_goal.type = "DistanceToGoal"
 _C.habitat.task.distance_to_goal.distance_to = "POINT"
+_C.habitat.task.distance_to_goal.pointgoal_scale = 1.0
 # -----------------------------------------------------------------------------
 # # distance_to_goal_reward MEASUREMENT
 # -----------------------------------------------------------------------------

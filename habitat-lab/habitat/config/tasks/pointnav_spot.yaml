@@ -17,7 +17,7 @@ habitat:
       height: 256
       hfov: 70.0
       orientation: [ -0.7, 0.0, 0.0 ]
-      positon: [ 0.0, 1.5, 1.0 ]
+      position: [ 0.0, 1.5, 1.0 ]
       ## Camera next to Spot
       #orientation: [ -0.7, 1.57, 0.0 ]
       #positon: [ 1.0, 1.2, 0.0 ]
@@ -58,7 +58,8 @@ habitat:
     pointgoal_with_gps_compass_sensor:
       goal_format: "POLAR"
       dimensionality: 2
-      log_pointgoal: True
+      log_pointgoal: False
+      pointgoal_scale: 1.0
     goal_sensor_uuid: pointgoal_with_gps_compass
 
     context_map_sensor:
@@ -92,6 +93,10 @@ habitat:
     measurements: ['distance_to_goal', 'episode_distance', 'success', 'spl', 'distance_to_goal_reward', 'num_steps', 'collisions']
     success:
       success_distance: 0.375
+    distance_to_goal:
+      pointgoal_scale: 1.0
+    spl:
+      pointgoal_scale: 1.0
   dataset:
     type: PointNav-v1
     split: train
