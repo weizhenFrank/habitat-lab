@@ -58,9 +58,14 @@ class RLTaskEnv(habitat.RLEnv):
 
     def get_reward(self, observations):
         current_measure = self._env.get_metrics()[self._reward_measure_name]
+
         reward = self.config.task.slack_reward
 
         reward += current_measure
+        if observations.get("moving_backwards", False):
+            reward -= self.config.task.backwards_penalty
+        if observations.get("hit_navmesh", False):
+            reward -= self.config.task.collision_penalty
 
         if self._episode_success():
             reward += self.config.task.success_reward
