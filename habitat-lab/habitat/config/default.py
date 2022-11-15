@@ -54,8 +54,10 @@ _C.habitat.environment.iterator_options.step_repetition_range = 0.2
 _C.habitat.task = CN()
 _C.habitat.task.reward_measure = None
 _C.habitat.task.success_measure = None
-_C.habitat.task.success_reward = 2.5
-_C.habitat.task.slack_reward = -0.01
+_C.habitat.task.success_reward = 10.0
+_C.habitat.task.slack_reward = -0.002
+_C.habitat.task.collision_penalty = 0.003
+_C.habitat.task.backwards_penalty = 0.003
 _C.habitat.task.end_on_success = False
 # -----------------------------------------------------------------------------
 # # NAVIGATION task
