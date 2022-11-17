@@ -58,7 +58,7 @@ TASK_YAML = "config/tasks/pointnav_spot.yaml"
 experiment_name = args.experiment_name
 
 dst_dir = os.path.join(RESULTS, experiment_name)
-eval_dst_dir = os.path.join(RESULTS, experiment_name, "eval")
+eval_dst_dir = os.path.join(RESULTS, experiment_name, "eval", "")
 
 exp_yaml_path = os.path.join(HABITAT_BASELINES, EXP_YAML)
 task_yaml_path = os.path.join(HABITAT_LAB, TASK_YAML)
@@ -70,6 +70,9 @@ exp_name = ""
 
 if args.eval:
     exp_name += "_eval"
+if args.dataset != "hm3d_gibson":
+    exp_name += f"_{args.dataset}"
+    eval_dst_dir += f"{args.dataset}"
 if args.ckpt != -1:
     exp_name += f"_ckpt_{args.ckpt}"
     eval_dst_dir += f"_ckpt_{args.ckpt}"
@@ -79,9 +82,6 @@ if args.video:
 if args.ext != "":
     exp_name += "_" + args.ext
     eval_dst_dir += "_" + args.ext
-if args.dataset != "hm3d_gibson":
-    exp_name += f"_{args.dataset}"
-    eval_dst_dir = os.path.join(eval_dst_dir, args.dataset)
 
 new_eval_task_yaml_path = (
     os.path.join(eval_dst_dir, os.path.basename(task_yaml_path)).split(".yaml")[0]
@@ -344,7 +344,7 @@ else:
         elif i.startswith("  video_dir:"):
             eval_exp_yaml_data[
                 idx
-            ] = f"  video_dir:          '{os.path.join(dst_dir, 'video_dir')}'"
+            ] = f"  video_dir:          '{os.path.join(eval_dst_dir, 'video_dir')}'"
         elif i.startswith("  eval_ckpt_path_dir:"):
             if args.ckpt == -1:
                 eval_exp_yaml_data[
