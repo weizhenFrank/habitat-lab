@@ -142,6 +142,10 @@ class PPOTrainer(BaseRLTrainer):
             observation_space, self.obs_transforms
         )
 
+        # hack to prevent training with RGB; but still be able to evaluate / generate videos with RGB
+        if "rgb" in observation_space.spaces:
+            del observation_space.spaces["rgb"]
+
         self.actor_critic = policy.from_config(
             self.config,
             observation_space,

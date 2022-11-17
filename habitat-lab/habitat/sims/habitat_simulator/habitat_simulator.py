@@ -69,6 +69,7 @@ def overwrite_config(
         else:
             return config
 
+    ignore_keys.add("positon")
     for attr, value in config_from.items():
         low_attr = attr.lower()
         if ignore_keys is None or low_attr not in ignore_keys:

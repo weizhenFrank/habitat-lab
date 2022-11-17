@@ -215,7 +215,10 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
         generated image of a single frame.
     """
     render_obs_images: List[np.ndarray] = []
-    for sensor_name in observation:
+    sensor_order = ["rgb", "spot_right_depth", "spot_left_depth"]
+    observation_sensors = OrderedDict({k: observation[k] for k in sensor_order})
+
+    for sensor_name in observation_sensors:
         if len(observation[sensor_name].shape) > 1:
             obs_k = observation[sensor_name]
             if not isinstance(obs_k, np.ndarray):
@@ -241,9 +244,9 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
     if "collisions" in info and info["collisions"]["is_collision"]:
         render_frame = draw_collision(render_frame)
 
-    if "top_down_map" in info:
+    if "top_down_map.map" in info:
         top_down_map = maps.colorize_draw_agent_and_fit_to_height(
-            info["top_down_map"], render_frame.shape[0]
+            info, render_frame.shape[0]
         )
         render_frame = np.concatenate((render_frame, top_down_map), axis=1)
     return render_frame

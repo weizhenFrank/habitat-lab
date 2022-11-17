@@ -410,15 +410,16 @@ def colorize_draw_agent_and_fit_to_height(
     :param topdown_map_info: The output of the TopDownMap measure
     :param output_height: The desired output height
     """
-    top_down_map = topdown_map_info["map"]
+    prefix = "top_down_map."
+    top_down_map = topdown_map_info[prefix + "map"]
     top_down_map = colorize_topdown_map(
-        top_down_map, topdown_map_info["fog_of_war_mask"]
+        top_down_map, topdown_map_info[prefix + "fog_of_war_mask"]
     )
-    map_agent_pos = topdown_map_info["agent_map_coord"]
+    map_agent_pos = topdown_map_info[prefix + "agent_map_coord"]
     top_down_map = draw_agent(
         image=top_down_map,
         agent_center_coord=map_agent_pos,
-        agent_rotation=topdown_map_info["agent_angle"],
+        agent_rotation=topdown_map_info[prefix + "agent_angle"],
         agent_radius_px=min(top_down_map.shape[0:2]) // 32,
     )
 

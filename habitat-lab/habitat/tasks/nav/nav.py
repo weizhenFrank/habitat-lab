@@ -844,8 +844,7 @@ class TopDownMap(Measure):
         self._previous_xy_location = (a_y, a_x)
 
         self.update_fog_of_war_mask(np.array([a_x, a_y]))
-
-        if hasattr(episode, "goal"):
+        if hasattr(episode, "goals"):
             # draw source and target parts last to avoid overlap
             self._draw_goals_view_points(episode)
             self._draw_goals_aabb(episode)

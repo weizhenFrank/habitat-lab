@@ -20,7 +20,7 @@ habitat:
       position: [ 0.0, 1.5, 1.0 ]
       ## Camera next to Spot
       #orientation: [ -0.7, 1.57, 0.0 ]
-      #positon: [ 1.0, 1.2, 0.0 ]
+      #position: [ 1.0, 1.2, 0.0 ]
     spot_left_depth_sensor:
       type: 'SpotLeftDepthSensor'
       width: 120
