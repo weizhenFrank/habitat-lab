@@ -734,26 +734,24 @@ class TopDownMap(Measure):
     def _draw_goals_view_points(self, episode):
         if self._config.draw_view_points:
             for goal in episode.goals:
-                if self._is_on_same_floor(goal.position[1]):
-                    try:
-                        if goal.view_points is not None:
-                            for view_point in goal.view_points:
-                                self._draw_point(
-                                    view_point.agent_state.position,
-                                    maps.MAP_VIEW_POINT_INDICATOR,
-                                )
-                    except AttributeError:
-                        pass
+                try:
+                    if goal.view_points is not None:
+                        for view_point in goal.view_points:
+                            self._draw_point(
+                                view_point.agent_state.position,
+                                maps.MAP_VIEW_POINT_INDICATOR,
+                            )
+                except AttributeError:
+                    pass
 
     def _draw_goals_positions(self, episode):
         if self._config.draw_goal_positions:
 
             for goal in episode.goals:
-                if self._is_on_same_floor(goal.position[1]):
-                    try:
-                        self._draw_point(goal.position, maps.MAP_TARGET_POINT_INDICATOR)
-                    except AttributeError:
-                        pass
+                try:
+                    self._draw_point(goal.position, maps.MAP_TARGET_POINT_INDICATOR)
+                except AttributeError:
+                    pass
 
     def _draw_goals_aabb(self, episode):
         if self._config.draw_goal_aabbs:
