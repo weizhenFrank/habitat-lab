@@ -95,6 +95,8 @@ _C.RL.POLICY.name = "PointNavResNetPolicy"
 _C.RL.POLICY.action_distribution_type = "gaussian"
 _C.RL.POLICY.in_channels = 2
 _C.RL.POLICY.use_maxpool = True
+_C.RL.POLICY.use_avgpool = True
+_C.RL.POLICY.normalize_visual_inputs = False
 # For gaussian action distribution:
 _C.RL.POLICY.ACTION_DIST = CN()
 _C.RL.POLICY.ACTION_DIST.use_log_std = False

@@ -10,9 +10,10 @@ from os import path as osp
 
 import habitat
 import tqdm
-from habitat.datasets.pointnav.pointnav_generator import generate_pointnav_episode
+from habitat.datasets.pointnav.pointnav_generator import \
+    generate_pointnav_episode
 
-'''
+"""
 python scripts/generate_spot_nav_episodes.py \
        /coc/testnvme/jtruong33/google_nav/habitat-lab/configs/tasks/pointnav_dataset_generator.yaml \
        /coc/testnvme/jtruong33/data/datasets/pointnav_gibson/pointnav_spot_0.5_long/train/content \
@@ -21,9 +22,9 @@ python scripts/generate_spot_nav_episodes.py \
        gibson \
        -mind 5 \
        -maxd 20
-'''
+"""
 
-'''
+"""
 python scripts/generate_spot_nav_episodes.py \
        /coc/testnvme/jtruong33/google_nav/habitat-lab/configs/tasks/pointnav_dataset_generator.yaml \
        /coc/testnvme/jtruong33/data/datasets/pointnav_hm3d/pointnav_spot_0.4_multi_floor_long/train/content \
@@ -35,8 +36,35 @@ python scripts/generate_spot_nav_episodes.py \
        -ei 799 \
        -mf \
        -ne 5 
-'''
+"""
 
+"""
+python scripts/generate_spot_nav_episodes.py \
+       /coc/testnvme/jtruong33/google_nav/habitat-lab/configs/tasks/pointnav_dataset_generator.yaml \
+       /coc/testnvme/jtruong33/data/datasets/floorplanner/pointnav_spot_0.3/train/content \
+       /coc/testnvme/jtruong33/data/scene_datasets/floorplanner/glb-arch-only \
+       floorplanner \
+       -ne 10000 \
+       -mind 5 \
+       -maxd 200 \
+       -si 0 \
+       -ei 10 \
+       -sf
+"""
+
+"""
+python scripts/generate_spot_nav_episodes.py \
+       /coc/testnvme/jtruong33/google_nav/habitat-lab/configs/tasks/pointnav_dataset_generator.yaml \
+       /coc/testnvme/jtruong33/data/datasets/blender/val/content/ \
+       /coc/testnvme/jtruong33/data/scene_datasets/blender \
+       blender \
+       -mind 20 \
+       -maxd 100 \
+       -si 0 \
+       -ei 1 \
+       -sf \
+       -ne 100
+"""
 parser = argparse.ArgumentParser()
 parser.add_argument("config_yaml")
 parser.add_argument("out_dir")
@@ -1109,6 +1137,229 @@ elif args.ty == "gibson":
         "Superior",
         "Woonsocket",
     ]
+elif args.ty == "floorplanner":
+    TRAIN = [
+        "102343992",
+        "102344049",
+        "102344094",
+        "102344115",
+        "102344193",
+        "102344250",
+        "102344280",
+        "102344307",
+        "102344328",
+        "102344349",
+        "102344403",
+        "102344439",
+        "102344457",
+        "102344469",
+        "102344529",
+        "102815835",
+        "102815859_169535055",
+        "102815859",
+        "102816009",
+        "102816036",
+        "102816051",
+        "102816066",
+        "102816114",
+        "102816150",
+        "102816201",
+        "102816216",
+        "102816600",
+        "102816615",
+        "102816627",
+        "102816729",
+        "102816756",
+        "102816852",
+        "102817053",
+        "102817119",
+        "102817140",
+        "102817200",
+        "103997403_171030405",
+        "103997424_171030444",
+        "103997445_171030492",
+        "103997460_171030507",
+        "103997478_171030525",
+        "103997478_171030528",
+        "103997541_171030615",
+        "103997562_171030642",
+        "103997586_171030666",
+        "103997586_171030669",
+        "103997613_171030702",
+        "103997718_171030855",
+        "103997730_171030885",
+        "103997781_171030978",
+        "103997799_171031002",
+        "103997865_171031116",
+        "103997895_171031182",
+        "103997919_171031233",
+        "103997940_171031257",
+        "103997970_171031287",
+        "103997994_171031320",
+        "104348010_171512832",
+        "104348028_171512877",
+        "104348037_171512898",
+        "104348064_171512940",
+        "104348082_171512994",
+        "104348103_171513021",
+        "104348133_171513054",
+        "104348160_171513093",
+        "104348181_171513120",
+        "104348202_171513150",
+        "104348328_171513363",
+        "104348361_171513414",
+        "104348394_171513453",
+        "104348463_171513588",
+        "104348478_171513603",
+        "104348511_171513654",
+        "104862345_172226274",
+        "104862384_172226319",
+        "104862396_172226349",
+        "104862417_172226382",
+        "104862474_172226496",
+        "104862501_172226556",
+        "104862513_172226580",
+        "104862534_172226625",
+        "104862558_172226664",
+        "104862573_172226682",
+        "104862579_172226694",
+        "104862609_172226751",
+        "104862639_172226823",
+        "104862669_172226853",
+        "104862681_172226874",
+        "104862687_172226883",
+        "104862726_172226952",
+        "105515151_173104068",
+        "105515160_173104077",
+        "105515175_173104107",
+        "105515184_173104128",
+        "105515211_173104173",
+        "105515211_173104179",
+        "105515211_173104185",
+        "105515235_173104215",
+        "105515265_173104248",
+        "105515286_173104287",
+        "105515301_173104305",
+        "105515307_173104317",
+        "105515322_173104332",
+        "105515337_173104347",
+        "105515364_173104374",
+        "105515379_173104395",
+        "105515403_173104449",
+        "105515430_173104494",
+        "105515448_173104512",
+        "105515490_173104566",
+        "105515505_173104584",
+        "105515523_173104614",
+        "105515541_173104641",
+        "106365897_174225969",
+        "106365897_174225972",
+        "106366104_174226320",
+        "106366104_174226329",
+        "106366104_174226332",
+        "106366134_174226362",
+        "106366185_174226443",
+        "106366233_174226506",
+        "106366263_174226557",
+        "106366293_174226605",
+        "106366302_174226617",
+        "106366323_174226647",
+        "106366335_174226662",
+        "106366353_174226695",
+        "106366371_174226743",
+        "106366386_174226770",
+        "106366410_174226806",
+        "106366413_174226809",
+        "106366434_174226881",
+        "106878840_174886947",
+        "106878858_174886965",
+        "106878867_174886977",
+        "106878915_174887025",
+        "106878945_174887058",
+        "106878975_174887088",
+        "106879005_174887124",
+        "106879023_174887148",
+        "106879044_174887172",
+        "106879080_174887211",
+        "106879104_174887235",
+        "107733945_175999674",
+        "107733960_175999701",
+        "107733978_175999737",
+        "107734017_175999794",
+        "107734080_175999881",
+        "107734110_175999914",
+        "107734119_175999932",
+        "107734119_175999935",
+        "107734119_175999938",
+        "107734158_175999998",
+        "107734176_176000019",
+        "107734227_176000091",
+        "107734254_176000121",
+        "107734287_176000160",
+        "107734338_176000244",
+        "107734410_176000355",
+        "107734449_176000403",
+        "107734479_176000442",
+        "108294417_176709879",
+        "108294465_176709960",
+        "108294492_176709993",
+        "108294558_176710095",
+        "108294573_176710113",
+        "108294600_176710152",
+        "108294624_176710203",
+        "108294684_176710278",
+        "108294765_176710386",
+        "108294783_176710410",
+        "108294798_176710428",
+        "108294816_176710461",
+        "108294846_176710506",
+        "108294870_176710551",
+        "108294897_176710602",
+        "108294915_176710620",
+        "108294927_176710650",
+        "108294939_176710668",
+        "108736635_177263256",
+        "108736656_177263304",
+        "108736677_177263328",
+        "108736689_177263340",
+        "108736704_177263361",
+        "108736722_177263382",
+        "108736737_177263406",
+        "108736779_177263484",
+        "108736800_177263517",
+        "108736824_177263559",
+        "108736851_177263586",
+        "108736872_177263607",
+        "108736884_177263634",
+    ]
+    VAL = [
+        "104862660_172226844",
+        "108294537_176710050",
+        "104862369_172226304",
+        "108736611_177263226",
+        "103997643_171030747",
+        "102344022",
+        "106366248_174226527",
+        "106878960_174887073",
+        "102817161",
+        "102344022",
+        "102816786",
+        "107734110_175999917",
+        "104348253_171513237",
+        "107734188_176000034",
+        "107734146_175999971",
+        "107733912_175999623",
+        "107734056_175999839",
+        "104862621_172226772",
+        "104348289_171513294",
+        "106366173_174226431",
+    ]
+elif args.ty == "blender":
+    # TRAIN = ["Adrian0_y"]
+    # TRAIN = ["coda_empty_large"]
+    TRAIN = ["outdoor_large_v2_solid"]
+    # TRAIN = ["outdoor_large_v2"]
+    # TRAIN = ["outdoor_large_scene_2"]
 
 split = TRAIN
 if args.unfurnished:
@@ -1141,6 +1392,12 @@ elif args.ty == "gibson":
             glob.glob(osp.abspath(osp.join(args.glb_dir, "*.glb"))),
         )
     )
+elif args.ty == "floorplanner" or args.ty == "blender":
+    split = split[args.start_idx : args.end_idx + 1]
+    SCENES = []
+    for x in split:
+        print(osp.join(args.glb_dir, x + ".glb"))
+        SCENES.append(osp.abspath(osp.join(args.glb_dir, x + ".glb")))
 SPLIT = split
 print("SCENES: ", split)
 
@@ -1170,19 +1427,20 @@ def _generate_fn(scene):
         radius = 0.45 / 2
         succ_dist = 0.20
     elif args.robot == "Spot":
-        radius = 0.8 / 2
+        radius = 0.6 / 2
         succ_dist = 0.3
 
     cfg = habitat.get_config(CONFIG_YAML)
     cfg.defrost()
     cfg.SIMULATOR.SCENE = scene
+    if args.ty == "floorplanner":
+        cfg.SIMULATOR.SCENE_DATASET = "/coc/testnvme/jtruong33/data/scene_datasets/floorplanner/hab-fp-dataset-no-doors/hab-fp.scene_dataset_config.json"
     cfg.SIMULATOR.AGENT_0.RADIUS = radius
     cfg.freeze()
 
     sim = habitat.sims.make_sim("Sim-v0", config=cfg.SIMULATOR)
 
     dset = habitat.datasets.make_dataset("PointNav-v1")
-
 
     episodes = []
     min_range = args.min_dist
@@ -1198,59 +1456,59 @@ def _generate_fn(scene):
         num_eps_per_scene /= 100
     print("num_eps_per_scene: ", num_eps_per_scene)
     rng = int((args.max_dist - args.min_dist) // dist_step_size)
-    print("range: ", rng, min_range, min_range+dist_step_size)
+    print("range: ", rng, min_range, min_range + dist_step_size)
 
-    for _ in range(rng):
-        if args.single_floor:
-            new_eps = list(
-                generate_pointnav_episode(
-                    sim,
-                    int(num_eps_per_scene),
-                    is_gen_shortest_path=False,
-                    shortest_path_max_steps=1000,
-                    geodesic_to_euclid_min_ratio=1.0,
-                    closest_dist_limit=min_range,
-                    furthest_dist_limit=min_range + dist_step_size,
-                    shortest_path_success_distance=succ_dist,
-                    robot=args.robot,
-                    multi_floor=False
-                )
-            )
-        if args.multi_floor:
-            new_eps = list(
-                generate_pointnav_episode(
-                    sim,
-                    int(num_eps_per_scene),
-                    is_gen_shortest_path=False,
-                    shortest_path_max_steps=1000,
-                    geodesic_to_euclid_min_ratio=1.0,
-                    closest_dist_limit=min_range,
-                    furthest_dist_limit=min_range + dist_step_size,
-                    shortest_path_success_distance=succ_dist,
-                    robot=args.robot,
-                    multi_floor=True
-                )
-            )
-        if len(new_eps) == 0:
-            break
-        else:
-            episodes += new_eps
-        min_range += dist_step_size
-    dset.episodes = episodes
+    # for _ in range(rng):
+    #     if args.single_floor:
+    #         new_eps = list(
+    #             generate_pointnav_episode(
+    #                 sim,
+    #                 int(num_eps_per_scene),
+    #                 is_gen_shortest_path=False,
+    #                 shortest_path_max_steps=1000,
+    #                 geodesic_to_euclid_min_ratio=1.0,
+    #                 closest_dist_limit=min_range,
+    #                 furthest_dist_limit=min_range + dist_step_size,
+    #                 shortest_path_success_distance=succ_dist,
+    #                 robot=args.robot,
+    #                 multi_floor=False,
+    #             )
+    #         )
+    #     if args.multi_floor:
+    #         new_eps = list(
+    #             generate_pointnav_episode(
+    #                 sim,
+    #                 int(num_eps_per_scene),
+    #                 is_gen_shortest_path=False,
+    #                 shortest_path_max_steps=1000,
+    #                 geodesic_to_euclid_min_ratio=1.0,
+    #                 closest_dist_limit=min_range,
+    #                 furthest_dist_limit=min_range + dist_step_size,
+    #                 shortest_path_success_distance=succ_dist,
+    #                 robot=args.robot,
+    #                 multi_floor=True,
+    #             )
+    #         )
+    #     if len(new_eps) == 0:
+    #         break
+    #     else:
+    #         episodes += new_eps
+    #     min_range += dist_step_size
+    # dset.episodes = episodes
 
-    # dset.episodes = list(
-    #     generate_pointnav_episode(
-    #         sim,
-    #         NUM_EPISODES_PER_SCENE,
-    #         is_gen_shortest_path=False,
-    #         shortest_path_max_steps=500,
-    #         geodesic_to_euclid_min_ratio=1,
-    #         closest_dist_limit=args.min_dist,
-    #         furthest_dist_limit=args.max_dist,
-    #         shortest_path_success_distance=succ_dist,
-    #         robot=args.robot,
-    #     )
-    # )
+    dset.episodes = list(
+        generate_pointnav_episode(
+            sim,
+            int(args.num_episodes),
+            is_gen_shortest_path=False,
+            shortest_path_max_steps=500,
+            geodesic_to_euclid_min_ratio=1,
+            closest_dist_limit=args.min_dist,
+            furthest_dist_limit=args.max_dist,
+            shortest_path_success_distance=succ_dist,
+            robot=args.robot,
+        )
+    )
     print("scene: ", scene)
     for ep in dset.episodes:
         if args.ty == "hm3d":

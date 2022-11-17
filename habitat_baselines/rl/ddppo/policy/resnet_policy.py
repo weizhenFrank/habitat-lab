@@ -320,6 +320,8 @@ class ResNetEncoderContext(ResNetEncoder):
         spatial_size: int = 128,
         make_backbone=None,
         normalize_visual_inputs: bool = False,
+        input_channels: int = 2,
+        use_avgpool: bool = True,
     ):
         super().__init__(
             observation_space=observation_space,
@@ -330,6 +332,8 @@ class ResNetEncoderContext(ResNetEncoder):
             normalize_visual_inputs=normalize_visual_inputs,
         )
         self._n_input_map = 1
+        self.use_avgpool = use_avgpool
+
         if normalize_visual_inputs:
             self.running_mean_and_var: nn.Module = RunningMeanAndVar(self._n_input_map)
         else:
@@ -338,7 +342,6 @@ class ResNetEncoderContext(ResNetEncoder):
         spatial_size_h = observation_space.spaces["context_map"].shape[0] // 2
         spatial_size_w = observation_space.spaces["context_map"].shape[1] // 2
 
-        input_channels = 2
         self.backbone = make_backbone(input_channels, baseplanes, ngroups)
         final_spatial_h = int(
             np.ceil(spatial_size_h * self.backbone.final_spatial_compress)
@@ -363,6 +366,10 @@ class ResNetEncoderContext(ResNetEncoder):
             nn.ReLU(True),
         )
 
+        if not self.use_avgpool:
+            final_spatial_h *= 2
+            final_spatial_w *= 2
+
         self.output_shape = (
             num_compression_channels,
             final_spatial_h,
@@ -371,10 +378,11 @@ class ResNetEncoderContext(ResNetEncoder):
 
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:  # type: ignore
         observations = observations.permute(0, 3, 1, 2)
-        x = F.avg_pool2d(observations, 2)
+        x = F.avg_pool2d(observations, 2) if self.use_avgpool else observations
         x = self.running_mean_and_var(x)
         x = self.backbone(x)
         x = self.compression(x)
+
         return x
 
 

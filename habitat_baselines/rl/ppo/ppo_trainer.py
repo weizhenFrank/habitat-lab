@@ -739,7 +739,6 @@ class PPOTrainer(BaseRLTrainer):
             self.envs.wait_step_at(index_env)
             for index_env in range(env_slice.start, env_slice.stop)
         ]
-
         observations, rewards_l, dones, infos = [list(x) for x in zip(*outputs)]
 
         self.env_time += time.time() - t_step_env
@@ -797,7 +796,6 @@ class PPOTrainer(BaseRLTrainer):
         self.rollouts.advance_rollout(buffer_index)
 
         self.pth_time += time.time() - t_update_stats
-
         return env_slice.stop - env_slice.start
 
     @profiling_wrapper.RangeContext("_collect_rollout_step")
@@ -1062,12 +1060,10 @@ class PPOTrainer(BaseRLTrainer):
                         self.should_end_early(step + 1)
                         or (step + 1) == ppo_cfg.num_steps
                     )
-
                     for buffer_index in range(self._nbuffers):
                         count_steps_delta += self._collect_environment_result(
                             buffer_index
                         )
-
                         if (buffer_index + 1) == self._nbuffers:
                             profiling_wrapper.range_pop()  # _collect_rollout_step
 
@@ -1084,7 +1080,6 @@ class PPOTrainer(BaseRLTrainer):
 
                 if self._is_distributed:
                     self.num_rollouts_done_store.add("num_done", 1)
-
                 (
                     value_loss,
                     action_loss,
@@ -1096,7 +1091,6 @@ class PPOTrainer(BaseRLTrainer):
                     # feature_pred_loss,
                     # splitnet_total_loss,
                 ) = self._update_agent()
-
                 if ppo_cfg.use_linear_lr_decay:
                     lr_scheduler.step()  # type: ignore
 

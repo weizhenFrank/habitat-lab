@@ -259,12 +259,14 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
     # draw human collision
     if "context_map" in observation or "context_map_trajectory" in observation:
         k = "context_map" if "context_map" in observation else "context_map_trajectory"
-        color_map = maps.colorize_draw_local_map_and_fit_to_height(
-            observation[k].cpu().numpy(),
-            info["top_down_map"],
-            egocentric_view.shape[0],
-        )
-        egocentric_view = np.concatenate((egocentric_view, color_map), axis=1)
+        local_map = observation[k].cpu().numpy()
+        for m in range(local_map.shape[-1]):
+            color_map = maps.colorize_draw_local_map_and_fit_to_height(
+                local_map[:, :, m],
+                info["top_down_map"],
+                egocentric_view.shape[0],
+            )
+            egocentric_view = np.concatenate((egocentric_view, color_map), axis=1)
 
     frame = egocentric_view
 

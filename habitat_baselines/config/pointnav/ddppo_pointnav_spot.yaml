@@ -39,6 +39,8 @@ RL:
     action_distribution_type: "gaussian"
     in_channels: 2
     use_maxpool: True
+    use_avgpool: True
+    normalize_visual_inputs: False
     ACTION_DIST:
       use_log_std: False
       clamp_std: True

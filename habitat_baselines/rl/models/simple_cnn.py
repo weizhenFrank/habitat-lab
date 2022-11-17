@@ -147,9 +147,7 @@ class SimpleCNN(nn.Module):
         self.count = 0
         self.debug_prefix = f"{time.time() * 1e7:.0f}"[-5:]
 
-    def _conv_output_dim(
-        self, dimension, padding, dilation, kernel_size, stride
-    ):
+    def _conv_output_dim(self, dimension, padding, dilation, kernel_size, stride):
         r"""Calculates the output height and width based on the input
         height and width to the convolution layer.
 
@@ -179,17 +177,13 @@ class SimpleCNN(nn.Module):
     def layer_init(self):
         for layer in self.cnn:  # type: ignore
             if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_normal_(
-                    layer.weight, nn.init.calculate_gain("relu")
-                )
+                nn.init.kaiming_normal_(layer.weight, nn.init.calculate_gain("relu"))
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, val=0)
 
     @property
     def is_blind(self):
-        return (
-            self._n_input_rgb + self._n_input_gray + self._n_input_depth == 0
-        )
+        return self._n_input_rgb + self._n_input_gray + self._n_input_depth == 0
 
     def forward(self, observations: Dict[str, torch.Tensor]):
         cnn_input = []
@@ -197,9 +191,7 @@ class SimpleCNN(nn.Module):
             rgb_observations = observations["rgb"]
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             rgb_observations = rgb_observations.permute(0, 3, 1, 2)
-            rgb_observations = (
-                rgb_observations.float() / 255.0
-            )  # normalize RGB
+            rgb_observations = rgb_observations.float() / 255.0  # normalize RGB
             cnn_input.append(rgb_observations)
 
         if self._n_input_depth > 0:
@@ -239,9 +231,7 @@ class SimpleCNN(nn.Module):
                     dim=2,
                 )
                 if DEBUGGING:
-                    img = (gray_observations.squeeze().cpu().numpy()).astype(
-                        np.uint8
-                    )
+                    img = (gray_observations.squeeze().cpu().numpy()).astype(np.uint8)
                     out_path = os.path.join(
                         SAVE_PTH,
                         f"gray_{self.debug_prefix}_{self.count:06}.png",
@@ -253,9 +243,7 @@ class SimpleCNN(nn.Module):
                 raise Exception("Not implemented")
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             gray_observations = gray_observations.permute(0, 3, 1, 2)
-            gray_observations = (
-                gray_observations.float() / 255.0
-            )  # normalize RGB
+            gray_observations = gray_observations.float() / 255.0  # normalize RGB
             cnn_input.append(gray_observations)
 
         cnn_inputs = torch.cat(cnn_input, dim=1)
@@ -273,9 +261,7 @@ class SimpleCNNContext(SimpleCNN):
     """
 
     def __init__(self, observation_space, output_size, cnn_type="cnn_2d"):
-        super().__init__(
-            observation_space=observation_space, output_size=output_size
-        )
+        super().__init__(observation_space=observation_space, output_size=output_size)
         # kernel size for different CNN layers
         self._cnn_layers_kernel_size = [(8, 8), (4, 4), (3, 3)]
 

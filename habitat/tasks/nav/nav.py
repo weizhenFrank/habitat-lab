@@ -398,6 +398,7 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
     def __init__(self, sim: Simulator, config: Config, *args: Any, **kwargs: Any):
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self.bin_pointgoal = getattr(config, "BIN_POINTGOAL", False)
+        self.norm_pointgoal = getattr(config, "NORM_POINTGOAL", False)
         self.pointgoal_scale = getattr(config, "POINTGOAL_SCALE", 1.0)
 
         super().__init__(sim=sim, config=config)
@@ -410,9 +411,24 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
         agent_position = agent_state.position
         rotation_world_agent = agent_state.rotation
         goal_position = np.array(episode.goals[0].position, dtype=np.float32)
+
         pg = self._compute_pointgoal(
             agent_position, rotation_world_agent, goal_position
         )
+
+        if self.norm_pointgoal:
+            source_position = np.array(episode.start_position, dtype=np.float32)
+            rotation_world_start = quaternion_from_coeff(episode.start_rotation)
+            goal_position = np.array(episode.goals[0].position, dtype=np.float32)
+
+            max_pointgoal, _ = self._compute_pointgoal(
+                source_position, rotation_world_start, goal_position
+            )
+            return np.array(
+                [pg[0] / max_pointgoal, pg[1]],
+                dtype=np.float32,
+            )
+
         return pg
 
 
@@ -905,7 +921,11 @@ class ContextMapSensor(ContextSensor):
         self.max_cutout = getattr(
             config.CUTOUT, "MAX_CUTOUT", 10.0
         )  # max number of pixels for cutout
-
+        self.crop = getattr(config, "CROP", True)
+        self.draw_agent_trajectory = getattr(config, "DRAW_TRAJECTORY", False)
+        print(
+            "DRAW AGENT TRAJECTORY 102348U0293842W09802: ", self.draw_agent_trajectory
+        )
         self.save_map_debug = getattr(config, "SAVE_MAP", False)
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self.pad_noise = getattr(config, "PAD_NOISE", False)
@@ -960,7 +980,9 @@ class ContextMapSensor(ContextSensor):
         # self.disk_radius = (5 * self._map_resolution) / 256
         # self.disk_radius = 1.0 / self.meters_per_pixel
         self.disk_radius = 2.0
-        self.mpp = 0.5
+        self.mpp = self.meters_per_pixel
+        self._previous_xy_location = None
+        self.prev_ep_id = None
         super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -972,6 +994,24 @@ class ContextMapSensor(ContextSensor):
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         # 0 (white) if occupied, 1 (gray) if unoccupied
         return spaces.Box(low=0.0, high=1.0, shape=self.map_shape, dtype=np.float32)
+
+    def draw_trajectory(self, episode, top_down_map):
+        agent_position = self._sim.get_agent_state().position
+        a_x, a_y = maps.to_grid(
+            agent_position[2],
+            agent_position[0],
+            top_down_map.shape[0:2],
+            sim=self._sim,
+        )
+        cv2.line(
+            top_down_map,
+            self._previous_xy_location,
+            (a_y, a_x),
+            1.0,
+            thickness=int(self.disk_radius),
+        )
+
+        self._previous_xy_location = (a_y, a_x)
 
     def save_map(self, top_down_map, name, agent_coord=None):
         if self.save_map_debug:
@@ -1029,9 +1069,17 @@ class ContextMapSensor(ContextSensor):
         )
         return top_down_map_rot
 
-    def pil_rotate(self, image, angel, expand):
-        rotated_pil = Image.fromarray(image).rotate(angel, Image.NEAREST, expand=expand)
-        return np.array(rotated_pil)
+    def pil_rotate(self, image, angle, expand):
+        rotated_pil = np.array(
+            Image.fromarray(image).rotate(
+                angle,
+                Image.NEAREST,
+                expand=expand
+                # , fillcolor="white"
+            )
+        )
+        # rotated_pil[rotated_pil == 255.0] = 1.0
+        return rotated_pil
 
     def get_crop_map(self, curr_top_down_map, crop_x, crop_y):
         pad_top = max(self._map_resolution // 2 - crop_x - 1, 0)
@@ -1071,7 +1119,9 @@ class ContextMapSensor(ContextSensor):
                 h, w = top_down_map_rot.shape[:2]
                 a_x, a_y = h // 2, w // 2
             curr_top_down_map = top_down_map_rot
-        return self.get_crop_map(curr_top_down_map, a_x, a_y)
+        if self.crop:
+            return self.get_crop_map(curr_top_down_map, a_x, a_y)
+        return curr_top_down_map, 0, 0
 
     def get_local_agent_coord(self, local_top_down_map_filled):
         x_limit, y_limit = local_top_down_map_filled.shape[:2]
@@ -1087,13 +1137,12 @@ class ContextMapSensor(ContextSensor):
         r_limit = (self._map_resolution // 2) * self.mpp * self.pointgoal_scale
         goal_r = np.clip(
             r,
-            -r_limit / np.cos(np.deg2rad(45)),
-            r_limit / np.cos(np.deg2rad(45)),
+            -r_limit,
+            r_limit,
         )
 
         x = (goal_r / (self.mpp * self.pointgoal_scale)) * np.cos(theta)
         y = (goal_r / (self.mpp * self.pointgoal_scale)) * np.sin(theta)
-
         mid = self._map_resolution // 2
         row, col = np.clip(
             int(mid - x),
@@ -1119,12 +1168,11 @@ class ContextMapSensor(ContextSensor):
             self._topdown_maps = []
             for mpp in self.stacked_map_res:
                 if mpp < 0:
-                    mpp = None
                     self.mpp = maps.calculate_meters_per_pixel(
                         self._map_resolution, pathfinder=self._sim.pathfinder
                     )
-                if z_height == -0.0:
-                    z_height = 0.0
+                    mpp = self.mpp
+                z_height = 0.0 if z_height == -0.0 else z_height
                 tdm_name = f"{scene_name}_{z_height:.1f}_{self._map_resolution}_{mpp}"
                 if os.path.exists(os.path.join(MAPS_DIR, f"{tdm_name}.npy")):
                     self._topdown_maps.append(
@@ -1132,7 +1180,7 @@ class ContextMapSensor(ContextSensor):
                     )
                 else:
                     print(
-                        "PATH DOES NOT EXIT: ",
+                        "PATH DOES NOT EXIST: ",
                         os.path.join(MAPS_DIR, f"{tdm_name}.npy"),
                     )
                     self._topdown_maps.append(
@@ -1144,7 +1192,14 @@ class ContextMapSensor(ContextSensor):
                         )
                     )
             self._current_episode_id = episode_uniq_id
-
+            agent_position = self._sim.get_agent_state().position
+            a_x, a_y = maps.to_grid(
+                agent_position[2],
+                agent_position[0],
+                self._topdown_maps[0].shape[0:2],
+                sim=self._sim,
+            )
+            self._previous_xy_location = (a_y, a_x)
             if self.pad_noise:
                 self._pad_noise_map = np.zeros(
                     (self._map_resolution * 2, self._map_resolution * 2),
@@ -1153,7 +1208,18 @@ class ContextMapSensor(ContextSensor):
                 self._pad_noise_map = self.unoccupied_cutout(self._pad_noise_map)
 
                 self.save_map(self._pad_noise_map, "pad_map")
-
+            self.traj_map = np.zeros((self._map_resolution, self._map_resolution))
+        if self.prev_ep_id != self.ep_id:
+            self.agent_traj_map = np.zeros_like(self._topdown_maps[0])
+            agent_position = self._sim.get_agent_state().position
+            a_x, a_y = maps.to_grid(
+                agent_position[2],
+                agent_position[0],
+                self._topdown_maps[0].shape[0:2],
+                sim=self._sim,
+            )
+            self._previous_xy_location = (a_y, a_x)
+            self.prev_ep_id = self.ep_id
         local_maps = []
         for tdm in self._topdown_maps:
             curr_top_down_map = tdm.copy()
@@ -1193,18 +1259,62 @@ class ContextMapSensor(ContextSensor):
         local_maps_stacked = np.stack(np.array(local_maps), axis=2)
         # add a separate channel for agents
         if self.separate_channel:
-            agent_map = np.zeros((self._map_resolution, self._map_resolution))
+            # agent_map = np.zeros((self._map_resolution, self._map_resolution))
             ## add agent current position
-            rr, cc = self.get_local_agent_coord(agent_map)
-            agent_map[rr, cc] = 1.0
-
-            ## add goal position
-            rr, cc = self.get_local_goal_coord(agent_map, episode)
-            agent_map[rr, cc] = 1.0
-            local_maps_stacked = np.concatenate(
-                [local_maps_stacked, agent_map[:, :, None]], axis=2
+            # rr, cc = self.get_local_agent_coord(agent_map)
+            # agent_map[rr, cc] = 1.0
+            #
+            # ## add goal position
+            # rr, cc = self.get_local_goal_coord(agent_map, episode)
+            # agent_map[rr, cc] = 1.0
+            # local_maps_stacked = np.concatenate(
+            #     [local_maps_stacked, agent_map[:, :, None]], axis=2
+            # )
+            if self.draw_agent_trajectory:
+                agent_map = self.agent_traj_map.copy()
+            else:
+                agent_map = np.zeros((self._map_resolution, self._map_resolution))
+            agent_position = self._sim.get_agent_state().position
+            a_x, a_y = maps.to_grid(
+                agent_position[2],
+                agent_position[0],
+                self._topdown_maps[0].shape[0:2],
+                sim=self._sim,
             )
+            x_max, y_max = agent_map.shape[:2]
+            rr, cc = disk((a_x, a_y), self.disk_radius)
+            agent_map[np.clip(rr, 0, x_max - 1), np.clip(cc, 0, y_max - 1)] = 1.0
 
+            goal = episode.goals[0]
+            goal_position = goal.position
+            g_x, g_y = maps.to_grid(
+                goal_position[2],
+                goal_position[0],
+                curr_top_down_map.shape[:2],
+                sim=self._sim,
+            )
+            x_max, y_max = agent_map.shape[:2]
+            rr, cc = disk((g_x, g_y), self.disk_radius)
+            agent_map[np.clip(rr, 0, x_max - 1), np.clip(cc, 0, y_max - 1)] = 1.0
+
+            if self.draw_agent_trajectory:
+                self.draw_trajectory(episode, agent_map)
+                self.agent_traj_map = agent_map
+
+            local_agent_map, pad_top, pad_left = self.get_crop_map(agent_map, a_x, a_y)
+
+            local_top_down_map_filled = np.zeros(
+                (self._map_resolution, self._map_resolution), dtype=np.uint8
+            )
+            lh, lw = local_agent_map.shape[:2]
+            local_top_down_map_filled[
+                pad_top : pad_top + lh, pad_left : pad_left + lw
+            ] = local_agent_map
+
+            local_maps_stacked = np.concatenate(
+                [local_maps_stacked, local_top_down_map_filled[:, :, None]], axis=2
+            )
+        self.prev_position = self._sim.get_agent_state().position
         return local_maps_stacked.astype(np.float32)
 
 
@@ -1618,26 +1728,23 @@ class TopDownMap(Measure):
     def _draw_goals_view_points(self, episode):
         if self._config.DRAW_VIEW_POINTS:
             for goal in episode.goals:
-                if self._is_on_same_floor(goal.position[1]):
-                    try:
-                        if goal.view_points is not None:
-                            for view_point in goal.view_points:
-                                self._draw_point(
-                                    view_point.agent_state.position,
-                                    maps.MAP_VIEW_POINT_INDICATOR,
-                                )
-                    except AttributeError:
-                        pass
+                try:
+                    if goal.view_points is not None:
+                        for view_point in goal.view_points:
+                            self._draw_point(
+                                view_point.agent_state.position,
+                                maps.MAP_VIEW_POINT_INDICATOR,
+                            )
+                except AttributeError:
+                    pass
 
     def _draw_goals_positions(self, episode):
         if self._config.DRAW_GOAL_POSITIONS:
-
             for goal in episode.goals:
-                if self._is_on_same_floor(goal.position[1]):
-                    try:
-                        self._draw_point(goal.position, maps.MAP_TARGET_POINT_INDICATOR)
-                    except AttributeError:
-                        pass
+                try:
+                    self._draw_point(goal.position, maps.MAP_TARGET_POINT_INDICATOR)
+                except AttributeError:
+                    pass
 
     def _draw_goals_aabb(self, episode):
         if self._config.DRAW_GOAL_AABBS:

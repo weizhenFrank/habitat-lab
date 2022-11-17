@@ -61,13 +61,17 @@ def is_compatible_episode(
     if (
         not multi_floor and np.abs(s[1] - t[1]) > 0.5
     ):  # check height difference to assure s and t are from same floor
+        print("not on same floor")
         return False, 0
     elif multi_floor and np.abs(s[1] - t[1]) < 0.5:
+        print("not on different floors")
         return False, 0
     d_separation = sim.geodesic_distance(s, [t])
     if d_separation == np.inf:
+        print("d_separation is inf")
         return False, 0
     if not near_dist <= d_separation <= far_dist:
+        print("not in range", near_dist, far_dist, d_separation)
         return False, 0
     distances_ratio = d_separation / euclid_dist
     # if distances_ratio < geodesic_to_euclid_ratio and (
@@ -168,7 +172,9 @@ def generate_pointnav_episode(
         ]
         z_offset = 0.28
     elif robot == "AlienGo":
-        robot_file = "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf"
+        robot_file = (
+            "/coc/testnvme/jtruong33/data/URDF_demo_assets/aliengo/urdf/aliengo.urdf"
+        )
         init_joint_positions = [
             0.1,
             0.60,
@@ -226,12 +232,10 @@ def generate_pointnav_episode(
             0.7,
             -1.3,
         ]
-        z_offset = 0.525
+        z_offset = 0.65
 
     ao_mgr = sim.get_articulated_object_manager()
-    robot_id = ao_mgr.add_articulated_object_from_urdf(
-        robot_file, fixed_base=False
-    )
+    robot_id = ao_mgr.add_articulated_object_from_urdf(robot_file, fixed_base=False)
 
     if robot != "Locobot":
         # Set Spot's joints to default walking position
@@ -269,7 +273,6 @@ def generate_pointnav_episode(
 
         for _retry in range(number_retries_per_target):
             source_position = sim.sample_navigable_point()
-
             is_compatible, dist = is_compatible_episode(
                 source_position,
                 target_position,
@@ -279,6 +282,7 @@ def generate_pointnav_episode(
                 geodesic_to_euclid_ratio=geodesic_to_euclid_min_ratio,
                 multi_floor=multi_floor,
             )
+            # is_compatible = True
             if is_compatible:
                 break
         if is_compatible:
@@ -288,9 +292,7 @@ def generate_pointnav_episode(
                 phi = np.arctan2(y, x)
                 return rho, phi
 
-            def quaternion_rotate_vector(
-                quat: np.quaternion, v: np.array
-            ) -> np.array:
+            def quaternion_rotate_vector(quat: np.quaternion, v: np.array) -> np.array:
                 r"""Rotates a vector by a quaternion
                 Args:
                     quaternion: The quaternion to rotate by
@@ -306,9 +308,7 @@ def generate_pointnav_episode(
                 heading_vector = quaternion_rotate_vector(
                     rotation.inverse(), np.array([0, 0, -1])
                 )
-                phi = cartesian_to_polar(
-                    -heading_vector[2], heading_vector[0]
-                )[1]
+                phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
                 return phi
 
             angle = np.random.uniform(0, 2 * np.pi)
@@ -317,7 +317,6 @@ def generate_pointnav_episode(
             # Move Spot model to source position and rotation
             heading = np.quaternion(source_rotation[-1], *source_rotation[:-1])
             heading = -quat_to_rad(heading) + np.pi / 2
-
             robot_rigid_state = (
                 mn.Matrix4.rotation_y(
                     mn.Rad(-heading),
@@ -325,9 +324,7 @@ def generate_pointnav_episode(
                 .__matmul__(yaw_offset)
                 .__matmul__(roll_offset)
             )
-            robot_rigid_state.translation = np.array(
-                source_position
-            ) + np.array(
+            robot_rigid_state.translation = np.array(source_position) + np.array(
                 [
                     0.0,
                     z_offset,
@@ -357,7 +354,6 @@ def generate_pointnav_episode(
                 # Throws an error when it can't find a path
                 except GreedyFollowerError:
                     continue
-
             episode = _create_episode(
                 episode_id=episode_count + episode_start_idx,
                 scene_id=sim.habitat_config.SCENE,
@@ -368,7 +364,7 @@ def generate_pointnav_episode(
                 radius=shortest_path_success_distance,
                 info={"geodesic_distance": dist},
             )
-
+            print("CREATED EPISODE")
             episode_count += 1
             print(
                 "episode count: ",

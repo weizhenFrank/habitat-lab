@@ -261,19 +261,33 @@ class Spot(A1):
     def __init__(self, robot_spawn_offset=None):
         super().__init__()
         self.name = "Spot"
+        # self._initial_joint_positions = [
+        #     0.05,
+        #     0.7,
+        #     -1.3,
+        #     -0.05,
+        #     0.7,
+        #     -1.3,
+        #     0.05,
+        #     0.7,
+        #     -1.3,
+        #     -0.05,
+        #     0.7,
+        #     -1.3,
+        # ]
         self._initial_joint_positions = [
             0.05,
-            0.7,
-            -1.3,
+            0.1,
+            3.14,
             -0.05,
-            0.7,
-            -1.3,
+            0.1,
+            3.14,
             0.05,
-            0.7,
-            -1.3,
+            0.1,
+            3.14,
             -0.05,
-            0.7,
-            -1.3,
+            0.1,
+            3.14,
         ]
         ## compact form
         # self._initial_joint_positions = [

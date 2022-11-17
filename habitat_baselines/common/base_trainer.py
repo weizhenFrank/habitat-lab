@@ -14,8 +14,7 @@ from habitat.core.env import Env, RLEnv
 from habitat.core.vector_env import VectorEnv
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.rl.ddppo.ddp_utils import SAVE_STATE, is_slurm_batch_job
-from habitat_baselines.utils.common import (get_checkpoint_id,
-                                            poll_checkpoint_folder)
+from habitat_baselines.utils.common import get_checkpoint_id, poll_checkpoint_folder
 from numpy import ndarray
 from torch import Tensor
 
@@ -111,7 +110,7 @@ class BaseTrainer:
                 )
             else:
                 # evaluate multiple checkpoints in order
-                prev_ckpt_ind = 0
+                prev_ckpt_ind = -1
                 while True:
                     current_ckpt = None
                     while current_ckpt is None:

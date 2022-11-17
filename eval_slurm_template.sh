@@ -12,6 +12,7 @@
 #SBATCH --chdir $HABITAT_REPO_PATH
 
 export CUDA_LAUNCH_BLOCKING=1
+export MKL_THREADING_LAYER=GNU
 srun $CONDA_ENV -u -m habitat_baselines.run \
     --exp-config $CONFIG_YAML \
     --run-type eval

@@ -9,11 +9,13 @@ import shutil
 import subprocess
 import sys
 
+import numpy as np
+
 automate_command = "python " + " ".join(sys.argv)
 HABITAT_LAB = "/coc/testnvme/jtruong33/google_nav/habitat-lab"
 CONDA_ENV = "/nethome/jtruong33/miniconda3/envs/habitat-outdoor/bin/python"
-RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
-# RESULTS = "/coc/testnvme/jtruong33/results/outdoor_nav_results"
+# RESULTS = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results"
+RESULTS = "/coc/testnvme/jtruong33/results/outdoor_nav_results"
 SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "slurm_template.sh")
 EVAL_SLURM_TEMPLATE = os.path.join(HABITAT_LAB, "eval_slurm_template.sh")
 
@@ -30,10 +32,16 @@ parser.add_argument("-p", "--partition", default="long")
 parser.add_argument("-s", "--sliding", default=False, action="store_true")
 parser.add_argument("-nct", "--no-contact-test", default=False, action="store_true")
 parser.add_argument("-nhv", "--no-hor-vel", default=False, action="store_true")
+parser.add_argument("-dt", "--draw-trajectory", default=False, action="store_true")
+parser.add_argument("-nap", "--no-avgpool", default=False, action="store_true")
+parser.add_argument(
+    "-nvi", "--normalize-visual-inputs", default=False, action="store_true"
+)
 parser.add_argument("-cp", "--collision-penalty", type=float, default=0.003)
 parser.add_argument("-bp", "--backwards-penalty", type=float, default=0.03)
 parser.add_argument("-ap", "--acc-penalty", type=float, default=0.0)
 parser.add_argument("-vy", "--velocity-y", type=float, default=-1.0)
+parser.add_argument("-rs", "--robot-scale", type=float, default=1.0)
 parser.add_argument("-rpl", "--randomize-pitch-min", type=float, default=0.0)
 parser.add_argument("-rpu", "--randomize-pitch-max", type=float, default=0.0)
 parser.add_argument("-pg", "--project-goal", type=float, default=-1.0)
@@ -41,6 +49,7 @@ parser.add_argument("-ts", "--time-step", type=float, default=1.0)
 parser.add_argument("-odn", "--outdoor-nav", default=False, action="store_true")
 parser.add_argument("-cm", "--context-map", default=False, action="store_true")
 parser.add_argument("-cw", "--context-waypoint", default=False, action="store_true")
+parser.add_argument("-discrete", default=False, action="store_true")
 parser.add_argument(
     "-cmt", "--context-map-trajectory", default=False, action="store_true"
 )
@@ -56,23 +65,32 @@ parser.add_argument(
 )
 parser.add_argument("-sc", "--second-channel", default=False, action="store_true")
 parser.add_argument("-mc", "--multi-channel", default=False, action="store_true")
-parser.add_argument("-csn", "--context-sensor-noise", type=float, default=0.0)
+parser.add_argument("-csn", "--context-sensor-noise", type=float, default=3.0)
 parser.add_argument("-chs", "--context-hidden-size", type=int, default=512)
 parser.add_argument("-ths", "--tgt-hidden-size", type=int, default=512)
 parser.add_argument("-cd", "--context-debug", default="")
 parser.add_argument("-ct", "--context-type", default="MAP")
 parser.add_argument("-mr", "--map-resolution", type=int, default=100)
 parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.5)
+parser.add_argument("-smpp", "--stacked-mpp", nargs="+")
 parser.add_argument("-rotm", "--rotate-map", default=False, action="store_true")
+parser.add_argument("-padn", "--pad-noise", default=False, action="store_true")
 parser.add_argument("-lpg", "--log-pointgoal", default=False, action="store_true")
+parser.add_argument("-normpg", "--norm-pointgoal", default=False, action="store_true")
 parser.add_argument("-lstd", "--log-std", default=False, action="store_true")
 parser.add_argument("-pa", "--use-prev-action", default=False, action="store_true")
 parser.add_argument("-cnnt", "--cnn-type", default="cnn_2d")
 parser.add_argument("-rnnt", "--rnn-type", default="GRU")
 parser.add_argument("-nrl", "--num_recurrent_layers", type=int, default=1)
+parser.add_argument("-nh", "--nhead", type=int, default=1)
+parser.add_argument("-nel", "--num-encoder-layers", type=int, default=2)
 parser.add_argument("-tgte", "--target_encoding", default="linear_2")
-parser.add_argument("-ft", "--finetune", default=False, action="store_true")
 parser.add_argument("-npg", "--noisy-pointgoal", default=False, action="store_true")
+parser.add_argument("-nopg", "--no-pointgoal", default=False, action="store_true")
+parser.add_argument("-tdm", "--use_topdown_map", default=False, action="store_true")
+parser.add_argument("-pte", "--pretrained_encoder", default=False, action="store_true")
+parser.add_argument("-pt", "--pretrained", default=False, action="store_true")
+parser.add_argument("-ptw", "--pretrained_weights", default="")
 parser.add_argument("--constraint", default="x")
 
 ## options for dataset are hm3d_gibson, hm3d, gibson
@@ -191,6 +209,8 @@ robot_radius_dict = {"A1": 0.2, "AlienGo": 0.22, "Locobot": 0.23, "Spot": 0.3}
 robot = args.robot
 robot_goal = robot_goal_dict[robot]
 robot_urdf = robot_urdfs_dict[robot]
+if args.robot_scale == 0.1:
+    robot_urdf = "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid_rot_fix_0.1x.urdf"
 
 succ_radius = robot_goal_dict[robot]
 robot_radius = robot_radius_dict[robot]
@@ -223,14 +243,37 @@ if not args.eval:
         if i.startswith("  CURRICULUM:"):
             task_yaml_data[idx] = f"  CURRICULUM: {args.curriculum}"
         elif i.startswith("  MAX_EPISODE_STEPS:"):
-            task_yaml_data[idx] = f"  MAX_EPISODE_STEPS: {args.max_num_steps}"
+            task_yaml_data[
+                idx
+            ] = f"  MAX_EPISODE_STEPS: {int(args.max_num_steps * (1.0/args.robot_scale))}"
         elif i.startswith("    RADIUS:"):
             if args.robot_radius == -1.0:
-                task_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+                task_yaml_data[idx] = f"    RADIUS: {robot_radius * args.robot_scale}"
             else:
-                task_yaml_data[idx] = f"    RADIUS: {args.robot_radius}"
+                task_yaml_data[
+                    idx
+                ] = f"    RADIUS: {args.robot_radius * args.robot_scale}"
         elif i.startswith("  ROBOT:"):
             task_yaml_data[idx] = f"  ROBOT: '{robot}'"
+        elif i.startswith(
+            "    POSITION: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]"
+        ):
+            position = (
+                np.array([-0.03740343144695029, 0.5, -0.4164822634134684])
+                * args.robot_scale
+            )
+            task_yaml_data[idx] = f"    POSITION: {list(position)}"
+        elif i.startswith(
+            "    POSITION: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]"
+        ):
+            position = (
+                np.array([0.03614789234067159, 0.5, -0.4164822634134684])
+                * args.robot_scale
+            )
+            task_yaml_data[idx] = f"    POSITION: {list(position)}"
+        elif i.startswith("    MAX_DEPTH:"):
+            max_depth = 3.5 * args.robot_scale
+            task_yaml_data[idx] = f"    MAX_DEPTH: {max_depth:.2f}"
         elif i.startswith("  SENSORS:"):
             pg = (
                 "POINTGOAL_WITH_NOISY_GPS_COMPASS_SENSOR"
@@ -238,37 +281,68 @@ if not args.eval:
                 else "POINTGOAL_WITH_GPS_COMPASS_SENSOR"
             )
             task_yaml_data[idx] = f"  SENSORS: ['{pg}']"
-            if (args.context_map or args.context_resnet_map) and (
-                args.context_waypoint or args.context_resnet_waypoint
+            if (
+                args.context_map
+                or args.context_resnet_map
+                or args.context_waypoint
+                or args.context_resnet_waypoint
+                or args.context_map_trajectory
+                or args.context_resnet_map_trajectory
             ):
-                task_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map or args.context_resnet_map:
-                task_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
-            elif args.context_waypoint or args.context_resnet_waypoint:
-                task_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map_trajectory or args.context_resnet_map_trajectory:
-                task_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_TRAJECTORY_SENSOR']"
+                if (args.context_map or args.context_resnet_map) and (
+                    args.context_waypoint or args.context_resnet_waypoint
+                ):
+                    task_yaml_data[
+                        idx
+                    ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
+                else:
+                    if args.context_map or args.context_resnet_map:
+                        txt = "CONTEXT_MAP_SENSOR"
+                    elif args.context_waypoint or args.context_resnet_waypoint:
+                        txt = "CONTEXT_WAYPOINT_SENSOR"
+                    elif (
+                        args.context_map_trajectory
+                        or args.context_resnet_map_trajectory
+                    ):
+                        txt = "CONTEXT_MAP_TRAJECTORY_SENSOR"
+                    if args.no_pointgoal:
+                        task_yaml_data[idx] = f"  SENSORS: ['{txt}']"
+                    else:
+                        task_yaml_data[idx] = f"  SENSORS: ['{pg}', '{txt}']"
         elif i.startswith("    PROJECT_GOAL:"):
             task_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    BIN_POINTGOAL:"):
             if args.target_encoding == "ans_bin":
                 task_yaml_data[idx] = f"    BIN_POINTGOAL: True"
+        elif i.startswith("    LOG_POINTGOAL:"):
+            if args.log_pointgoal:
+                task_yaml_data[idx] = f"    LOG_POINTGOAL: True"
+        elif i.startswith("    NORM_POINTGOAL:"):
+            if args.norm_pointgoal:
+                task_yaml_data[idx] = f"    NORM_POINTGOAL: True"
         elif i.startswith("      ROBOT_URDF:"):
             task_yaml_data[idx] = f"      ROBOT_URDF: {robot_urdf}"
         elif i.startswith("    MAP_RESOLUTION:"):
             task_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
         elif i.startswith("    METERS_PER_PIXEL:"):
-            task_yaml_data[idx] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
+            task_yaml_data[
+                idx
+            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel * args.robot_scale}"
         elif i.startswith("    ROTATE_MAP:"):
             if args.rotate_map:
                 task_yaml_data[idx] = f"    ROTATE_MAP: True"
+        elif i.startswith("    PAD_NOISE:"):
+            if args.pad_noise:
+                task_yaml_data[idx] = f"    PAD_NOISE: True"
+        elif i.startswith("    USE_TOPDOWN_MAP:"):
+            if args.use_topdown_map:
+                task_yaml_data[idx] = f"    USE_TOPDOWN_MAP: True"
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 task_yaml_data[idx] = f"    SECOND_CHANNEL: True"
+        elif i.startswith("    DRAW_TRAJECTORY:"):
+            if args.draw_trajectory:
+                task_yaml_data[idx] = f"    DRAW_TRAJECTORY: True"
         elif i.startswith("    MULTI_CHANNEL:"):
             if args.multi_channel:
                 task_yaml_data[idx] = f"    MULTI_CHANNEL: True"
@@ -297,6 +371,17 @@ if not args.eval:
                 ] = f"      HOR_VEL_RANGE: [ {-args.velocity_y, -args.velocity_y} ]"
             if args.no_hor_vel:
                 task_yaml_data[idx] = "      HOR_VEL_RANGE: [ 0.0, 0.0 ]"
+        elif i.startswith("      LIN_VEL_RANGE:"):
+            lin_vel = 0.5 * args.robot_scale
+            task_yaml_data[idx] = f"      LIN_VEL_RANGE: [ -{lin_vel}, {lin_vel} ]"
+        elif i.startswith("    POINTGOAL_SCALE:"):
+            task_yaml_data[idx] = f"    POINTGOAL_SCALE: {1.0/args.robot_scale}"
+        elif i.startswith("    STACKED_MAP_RES:"):
+            if args.stacked_mpp:
+                mpp_list = [float(i) for i in args.stacked_mpp]
+            else:
+                mpp_list = [args.meters_per_pixel * args.robot_scale]
+            task_yaml_data[idx] = f"    STACKED_MAP_RES: {mpp_list}"
         elif i.startswith("      MIN_RAND_PITCH:"):
             task_yaml_data[idx] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
         elif i.startswith("      MAX_RAND_PITCH:"):
@@ -429,9 +514,23 @@ if not args.eval:
             exp_yaml_data[
                 idx
             ] = f"TXT_DIR:            '{os.path.join(dst_dir, 'txts')}'"
+        elif i.startswith("    in_channels:"):
+            num_mpp = len(mpp_list)
+            if args.second_channel:
+                num_mpp += 1
+            exp_yaml_data[idx] = f"    in_channels: {num_mpp}"
+        elif i.startswith("    action_distribution_type:"):
+            if args.discrete:
+                exp_yaml_data[idx] = "    action_distribution_type: 'categorical'"
         elif i.startswith("      use_log_std:"):
             if args.log_std:
                 exp_yaml_data[idx] = "      use_log_std: True"
+        elif i.startswith("    use_avgpool:"):
+            if args.no_avgpool:
+                exp_yaml_data[idx] = "    use_avgpool: False"
+        elif i.startswith("    normalize_visual_inputs:"):
+            if args.normalize_visual_inputs:
+                exp_yaml_data[idx] = "    normalize_visual_inputs: True"
         elif i.startswith("    tgt_encoding:"):
             exp_yaml_data[idx] = f"    tgt_encoding: '{args.target_encoding}'"
         elif i.startswith("    use_waypoint_encoder:"):
@@ -449,6 +548,10 @@ if not args.eval:
         elif i.startswith("    num_cnns:"):
             if args.two_cnns:
                 exp_yaml_data[idx] = "    num_cnns: 2"
+        elif i.startswith("      nhead:"):
+            exp_yaml_data[idx] = f"      nhead: {args.nhead}"
+        elif i.startswith("      num_encoder_layers:"):
+            exp_yaml_data[idx] = f"      num_encoder_layers: {args.num_encoder_layers}"
         elif i.startswith("    name:"):
             if args.policy_name == "cnn":
                 exp_yaml_data[idx] = "    name: PointNavBaselinePolicy"
@@ -458,8 +561,10 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavContextPolicy"
             if args.context_resnet_map or args.context_resnet_waypoint:
                 exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
-            if args.rnn_type == "TRANSFORMER":
+            if args.rnn_type == "TRANSFORMER" or args.rnn_type == "SMT_TRANSFORMER":
                 exp_yaml_data[idx] = "    name: PointNavContextSMTPolicy"
+            if args.policy_name == "cma":
+                exp_yaml_data[idx] = "    name: PointNavContextCMAPolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
@@ -499,13 +604,15 @@ if not args.eval:
             if args.outdoor_nav:
                 exp_yaml_data[idx] = f"  USE_OUTDOOR: True"
         elif i.startswith("    pretrained_weights: "):
-            if args.finetune:
-                # ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_bp_0.03_sd_1/checkpoints/ckpt.84.pth"
-                # ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_hm3d_mf_rand_pitch_-1.0_1.0_bp_0.03_log_sd_1/checkpoints/ckpt.95.pth"
-                ft_weights = "/coc/pskynet3/jtruong33/develop/flash_results/outdoor_nav_results/spot_depth_simple_cnn_cutout_nhy_2hz_ny_rand_pitch_-1.0_1.0_bp_0.03_sd_1_16env_context_no_noise_log_agent_rot/checkpoints/ckpt.94.pth"
-                exp_yaml_data[idx] = f"    pretrained_weights: {ft_weights}"
-        elif i.startswith("    pretrained: "):
-            if args.finetune:
+            if args.pretrained_weights != "":
+                exp_yaml_data[
+                    idx
+                ] = f"    pretrained_weights: {args.pretrained_weights}"
+        elif i.startswith("    pretrained_encoder: "):
+            if args.pretrained_encoder:
+                exp_yaml_data[idx] = f"    pretrained_encoder: True"
+        elif i.startswith("    pretrained:"):
+            if args.pretrained:
                 exp_yaml_data[idx] = f"    pretrained: True"
         elif i.startswith("    rnn_type:"):
             exp_yaml_data[idx] = f"    rnn_type: {args.rnn_type}"
@@ -573,12 +680,42 @@ else:
         if i.startswith("  CURRICULUM:"):
             eval_yaml_data[idx] = f"  CURRICULUM: {args.curriculum}"
         elif i.startswith("  MAX_EPISODE_STEPS:"):
-            eval_yaml_data[idx] = f"  MAX_EPISODE_STEPS: {args.max_num_steps}"
+            eval_yaml_data[
+                idx
+            ] = f"  MAX_EPISODE_STEPS: {int(args.max_num_steps * (1.0/args.robot_scale))}"
         elif i.startswith("    RADIUS:"):
             if args.robot_radius == -1.0:
-                eval_yaml_data[idx] = f"    RADIUS: {robot_radius}"
+                eval_yaml_data[idx] = f"    RADIUS: {robot_radius * args.robot_scale}"
             else:
-                eval_yaml_data[idx] = f"    RADIUS: {args.robot_radius}"
+                eval_yaml_data[
+                    idx
+                ] = f"    RADIUS: {args.robot_radius * args.robot_scale}"
+        elif i.startswith("    POSITION: [ 0.0, 1.5, 1.0 ]"):
+            position = (
+                np.array([0.0, 0.35, 0.1])
+                if args.robot_scale == 0.1
+                else np.array([0.0, 1.5, 1.0])
+            )
+            eval_yaml_data[idx] = f"    POSITION: {position.tolist()}"
+        elif i.startswith(
+            "    POSITION: [ -0.03740343144695029, 0.5, -0.4164822634134684 ]"
+        ):
+            position = (
+                np.array([-0.03740343144695029, 0.5, -0.4164822634134684])
+                * args.robot_scale
+            )
+            eval_yaml_data[idx] = f"    POSITION: {list(position)}"
+        elif i.startswith(
+            "    POSITION: [ 0.03614789234067159, 0.5, -0.4164822634134684 ]"
+        ):
+            position = (
+                np.array([0.03614789234067159, 0.5, -0.4164822634134684])
+                * args.robot_scale
+            )
+            eval_yaml_data[idx] = f"    POSITION: {list(position)}"
+        elif i.startswith("    MAX_DEPTH:"):
+            max_depth = 3.5 * args.robot_scale
+            eval_yaml_data[idx] = f"    MAX_DEPTH: {max_depth}"
         elif i.startswith("    ALLOW_SLIDING:"):
             if args.sliding:
                 eval_yaml_data[idx] = f"    ALLOW_SLIDING: True"
@@ -587,25 +724,42 @@ else:
                 eval_yaml_data[idx] = f"      CONTACT_TEST: False"
         elif i.startswith("  ROBOT:"):
             eval_yaml_data[idx] = f"  ROBOT: '{robot}'"
+        elif i.startswith("    LOG_POINTGOAL:"):
+            if args.log_pointgoal:
+                eval_yaml_data[idx] = f"    LOG_POINTGOAL: True"
+        elif i.startswith("    NORM_POINTGOAL:"):
+            if args.norm_pointgoal:
+                eval_yaml_data[idx] = f"    NORM_POINTGOAL: True"
         elif i.startswith("      ROBOT_URDF:"):
             eval_yaml_data[idx] = f"      ROBOT_URDF: {robot_urdf}"
         elif i.startswith("    MAP_RESOLUTION:"):
             eval_yaml_data[idx] = f"    MAP_RESOLUTION: {args.map_resolution}"
         elif i.startswith("    METERS_PER_PIXEL:"):
-            eval_yaml_data[idx] = f"    METERS_PER_PIXEL: {args.meters_per_pixel}"
+            eval_yaml_data[
+                idx
+            ] = f"    METERS_PER_PIXEL: {args.meters_per_pixel * args.robot_scale}"
         elif i.startswith("    ROTATE_MAP:"):
             if args.rotate_map:
                 eval_yaml_data[idx] = f"    ROTATE_MAP: True"
+        elif i.startswith("    PAD_NOISE:"):
+            if args.pad_noise:
+                eval_yaml_data[idx] = f"    PAD_NOISE: True"
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 eval_yaml_data[idx] = f"    SECOND_CHANNEL: True"
         elif i.startswith("    MULTI_CHANNEL:"):
             if args.multi_channel:
                 eval_yaml_data[idx] = f"    MULTI_CHANNEL: True"
+        elif i.startswith("    DRAW_TRAJECTORY:"):
+            if args.draw_trajectory:
+                eval_yaml_data[idx] = f"    DRAW_TRAJECTORY: True"
         elif i.startswith("      NOISE_PERCENT:"):
             eval_yaml_data[idx] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
         elif i.startswith("    DEBUG:"):
             eval_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
+        elif i.startswith("    USE_TOPDOWN_MAP:"):
+            if args.use_topdown_map:
+                eval_yaml_data[idx] = f"    USE_TOPDOWN_MAP: True"
         elif i.startswith("    CONTEXT_TYPE:"):
             eval_yaml_data[idx] = f'    CONTEXT_TYPE: "{args.context_type}"'
         elif i.startswith("  SENSORS:"):
@@ -615,20 +769,34 @@ else:
                 else "POINTGOAL_WITH_GPS_COMPASS_SENSOR"
             )
             eval_yaml_data[idx] = f"  SENSORS: ['{pg}']"
-            if (args.context_map or args.context_resnet_map) and (
-                args.context_waypoint or args.context_resnet_waypoint
+            if (
+                args.context_map
+                or args.context_resnet_map
+                or args.context_waypoint
+                or args.context_resnet_waypoint
+                or args.context_map_trajectory
+                or args.context_resnet_map_trajectory
             ):
-                eval_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map or args.context_resnet_map:
-                eval_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR']"
-            elif args.context_waypoint or args.context_resnet_waypoint:
-                eval_yaml_data[idx] = f"  SENSORS: ['{pg}', 'CONTEXT_WAYPOINT_SENSOR']"
-            elif args.context_map_trajectory or args.context_resnet_map_trajectory:
-                eval_yaml_data[
-                    idx
-                ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_TRAJECTORY_SENSOR']"
+                if (args.context_map or args.context_resnet_map) and (
+                    args.context_waypoint or args.context_resnet_waypoint
+                ):
+                    eval_yaml_data[
+                        idx
+                    ] = f"  SENSORS: ['{pg}', 'CONTEXT_MAP_SENSOR', 'CONTEXT_WAYPOINT_SENSOR']"
+                else:
+                    if args.context_map or args.context_resnet_map:
+                        txt = "CONTEXT_MAP_SENSOR"
+                    elif args.context_waypoint or args.context_resnet_waypoint:
+                        txt = "CONTEXT_WAYPOINT_SENSOR"
+                    elif (
+                        args.context_map_trajectory
+                        or args.context_resnet_map_trajectory
+                    ):
+                        txt = "CONTEXT_MAP_TRAJECTORY_SENSOR"
+                    if args.no_pointgoal:
+                        eval_yaml_data[idx] = f"  SENSORS: ['{txt}']"
+                    else:
+                        eval_yaml_data[idx] = f"  SENSORS: ['{pg}', '{txt}']"
         elif i.startswith("    PROJECT_GOAL:"):
             eval_yaml_data[idx] = f"    PROJECT_GOAL: {args.project_goal}"
         elif i.startswith("    BIN_POINTGOAL:"):
@@ -653,6 +821,17 @@ else:
                 ] = f"      HOR_VEL_RANGE: [ {-args.velocity_y, -args.velocity_y} ]"
             if args.no_hor_vel:
                 eval_yaml_data[idx] = "      HOR_VEL_RANGE: [ 0.0, 0.0 ]"
+        elif i.startswith("      LIN_VEL_RANGE:"):
+            lin_vel = 0.5 * args.robot_scale
+            eval_yaml_data[idx] = f"      LIN_VEL_RANGE: [ -{lin_vel}, {lin_vel} ]"
+        elif i.startswith("    POINTGOAL_SCALE:"):
+            eval_yaml_data[idx] = f"    POINTGOAL_SCALE: {1.0/args.robot_scale}"
+        elif i.startswith("    STACKED_MAP_RES:"):
+            if args.stacked_mpp:
+                mpp_list = [float(i) for i in args.stacked_mpp]
+            else:
+                mpp_list = [args.meters_per_pixel * args.robot_scale]
+            eval_yaml_data[idx] = f"    STACKED_MAP_RES: {mpp_list}"
         elif i.startswith("      MIN_RAND_PITCH:"):
             eval_yaml_data[idx] = f"      MIN_RAND_PITCH: {args.randomize_pitch_min}"
         elif i.startswith("      MAX_RAND_PITCH:"):
@@ -698,6 +877,8 @@ else:
                 data_path = (
                     "/coc/testnvme/jtruong33/data/datasets/google/val_all/val.json.gz"
                 )
+            elif args.dataset == "google_boulder":
+                data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_boulder/val_boulder.json.gz"
             elif args.dataset == "ny":
                 data_path = "/coc/testnvme/nyokoyama3/fair/spot_nav/habitat-lab/data/spot_goal_headings_hm3d/{split}/{split}.json.gz"
             elif args.dataset == "ny_train":
@@ -724,6 +905,10 @@ else:
                 data_path = "/coc/testnvme/jtruong33/data/datasets/google/val_1157/content/mtv1157-1_lab.json.gz"
             elif args.dataset == "ny_mini":
                 data_path = "/coc/testnvme/jtruong33/data/datasets/pointnav_hm3d_gibson_ny/val_mini/val_mini.json.gz"
+            elif args.dataset == "blender":
+                data_path = (
+                    "/coc/testnvme/jtruong33/data/datasets/blender/val/val.json.gz"
+                )
             eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
         elif i.startswith("      noise_multiplier:"):
             eval_yaml_data[idx] = f"      noise_multiplier: {args.noise_percent}"
@@ -766,6 +951,8 @@ else:
                 eval_exp_yaml_data[idx] = "    name: PointNavResNetContextPolicy"
             if args.rnn_type == "TRANSFORMER":
                 eval_exp_yaml_data[idx] = "    name: PointNavContextSMTPolicy"
+            if args.policy_name == "cma":
+                eval_exp_yaml_data[idx] = "    name: PointNavContextCMAPolicy"
         elif i.startswith("  COLLISION_PENALTY:"):
             eval_exp_yaml_data[idx] = f"  COLLISION_PENALTY: {args.collision_penalty}"
         elif i.startswith("CHECKPOINT_FOLDER:"):
@@ -836,6 +1023,14 @@ else:
                 eval_exp_yaml_data[idx] = "    SPLIT: val"
             elif args.dataset == "ferst_20m":
                 eval_exp_yaml_data[idx] = "    SPLIT: val_20m"
+        elif i.startswith("    in_channels:"):
+            num_mpp = len(mpp_list)
+            if args.second_channel:
+                num_mpp += 1
+            eval_exp_yaml_data[idx] = f"    in_channels: {num_mpp}"
+        elif i.startswith("    action_distribution_type:"):
+            if args.discrete:
+                eval_exp_yaml_data[idx] = "    action_distribution_type: 'categorical'"
         elif i.startswith("      use_log_std:"):
             if args.log_std:
                 eval_exp_yaml_data[idx] = "      use_log_std: True"
@@ -881,12 +1076,26 @@ else:
                 elif args.visual_encoder == "resnet":
                     visual_encoder = "BaseResNetEncoder"
                 eval_exp_yaml_data[idx] = f"    visual_encoder: {visual_encoder}"
+        elif i.startswith("    pretrained_weights: "):
+            if args.pretrained_weights != "":
+                eval_exp_yaml_data[
+                    idx
+                ] = f"    pretrained_weights: {args.pretrained_weights}"
+        elif i.startswith("    pretrained_encoder: "):
+            if args.pretrained_encoder:
+                eval_exp_yaml_data[idx] = f"    pretrained_encoder: True"
         elif i.startswith("    rnn_type:"):
             eval_exp_yaml_data[idx] = f"    rnn_type: {args.rnn_type}"
         elif i.startswith("    num_recurrent_layers:"):
             eval_exp_yaml_data[
                 idx
             ] = f"    num_recurrent_layers: {args.num_recurrent_layers}"
+        elif i.startswith("      nhead:"):
+            eval_exp_yaml_data[idx] = f"      nhead: {args.nhead}"
+        elif i.startswith("      num_encoder_layers:"):
+            eval_exp_yaml_data[
+                idx
+            ] = f"      num_encoder_layers: {args.num_encoder_layers}"
 
     if os.path.isdir(tb_dir):
         response = input(
