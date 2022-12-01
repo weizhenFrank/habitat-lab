@@ -6,6 +6,7 @@
 import abc
 
 import torch
+import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
@@ -392,7 +393,7 @@ class PointNavBaselineNet(Net):
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
 
-    def get_goal_features(self, x, observations):
+    def get_goal_features(self, observations):
         ## Goal vector
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
             goal_observations = observations[
@@ -405,9 +406,7 @@ class PointNavBaselineNet(Net):
                 angle_emb = self.embedding_angle(
                     goal_observations[:, 1].to(dtype=torch.int64)
                 )
-                x.append(dist_emb)
-                x.append(angle_emb)
-                return x
+                return torch.cat([dist_emb, angle_emb], dim=1)
             if self.tgt_encoding == "sin_cos" and goal_observations.shape[1] == 2:
                 goal_observations = torch.stack(
                     [
@@ -417,21 +416,14 @@ class PointNavBaselineNet(Net):
                     ],
                     -1,
                 )
-            te = self.tgt_encoder(goal_observations)
-            x.append(te)
-        return x
-
-    def get_prev_action_features(self, x, prev_actions):
-        if self.use_prev_action:
-            prev_actions = self.prev_action_embedding(prev_actions.float())
-            x.append(prev_actions)
-        return x
+                return self.tgt_encoder(goal_observations)
 
     def get_features(self, observations, prev_actions):
         x = []
         x.append(self.visual_encoder(observations))
-        x = self.get_goal_features(x, observations)
-        x = self.get_prev_action_features(x, prev_actions)
+        x.append(self.get_goal_features(observations))
+        if self.use_prev_action:
+            x.append(self.prev_action_embedding(prev_actions.float()))
         x_out = torch.cat(x, dim=1)
         return x_out
 
@@ -582,7 +574,7 @@ class PointNavContextNet(PointNavBaselineNet):
         )
         self.train()
 
-    def get_map_features(self, x, observations):
+    def get_map_features(self, observations):
         if "context_map" in observations:
             obs = observations["context_map"]
         else:
@@ -601,8 +593,7 @@ class PointNavContextNet(PointNavBaselineNet):
                 [F.sigmoid(out[:, :1]), torch.tanh(out[:, 1:])],
                 dim=1,
             )
-        x.append(out)
-        return x
+        return out
 
     def get_features(self, observations, prev_actions):
         x = []
@@ -617,13 +608,14 @@ class PointNavContextNet(PointNavBaselineNet):
             "context_map" in observations
             or "context_map_trajectory" in observations
         ):
-            x = self.get_map_features(x, observations)
+            x.append(self.get_map_features(observations))
         ## Waypoint observation
         if "context_waypoint" in observations:
             we = self.context_encoder(observations["context_waypoint"])
             x.append(we)
         ## Previous actions
-        x = self.get_prev_action_features(x, prev_actions)
+        if self.use_prev_action:
+            x.append(self.prev_action_embedding(prev_actions.float()))
         x_out = torch.cat(x, dim=1)
         return x_out
 
@@ -815,6 +807,5 @@ class PointNavContextCMANet(PointNavContextNet):
             masks,
         )
 
-        self.ctr += 1
-        return x, rnn_states_out, None
+        return x, rnn_states_out
         
