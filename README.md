@@ -32,7 +32,6 @@ conda install -y pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 pip install -r requirements.txt
 python setup.py develop --all
 ```
-5. Install Legged-Nav
 
 ## Data
 1. Download scene datasets for HM3D and Gibson following [instructions here](https://github.com/facebookresearch/habitat-lab/blob/main/DATASETS.md). Extract the scenes to `data/scene_datasets/`
@@ -84,4 +83,15 @@ For an example, to train Spot, use:
 python -u -m habitat_baselines.run \
      --exp-config habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml \
      --run-type train
+```
+
+If you use this repo in your research, please cite the following [paper](https://arxiv.org/abs/2207.10821):
+
+```tex
+@inproceedings{truong2022kin2dyn,
+    title={Rethinking Sim2Real: Lower Fidelity Simulation Leads to Higher Sim2Real Transfer in Navigation}, 
+    author={Joanne Truong and Max Rudolph and Naoki Yokoyama and Sonia Chernova and Dhruv Batra and Akshara Rai}, 
+    booktitle={Conference on Robot Learning (CoRL)},
+    year={2022}
+}
 ```
