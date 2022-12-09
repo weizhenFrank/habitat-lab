@@ -39,16 +39,16 @@ python setup.py develop --all
 
 | Robot | Download Episodes | Extract Path |
 |-|-|-|
-| A1 | [Link](https://drive.google.com/file/d/1mbjHy09KIKyFb4atX_j38WT-4MQvO3aW/view?usp=share_link) (1 MB) | `data/pointnav_hm3d_gibson/pointnav_a1_0.2` |
-| AlienGo | [Link](https://drive.google.com/file/d/1q05VcaqMzvWPaq_sXqudWTJsUSnPjt2a/view?usp=share_link) (132 MB) | `data/pointnav_hm3d_gibson/pointnav_aliengo_0.22` |
-| Spot | [Link](https://drive.google.com/file/d/14vKI-AZmmxS5cQg1lV0ybFsuRNg4VMeL/view?usp=share_link) (132 MB) | `data/pointnav_hm3d_gibson/pointnav_spot_0.3` |
+| A1 | [Link](https://drive.google.com/file/d/1mbjHy09KIKyFb4atX_j38WT-4MQvO3aW/view?usp=share_link) | `data/pointnav_hm3d_gibson/pointnav_a1_0.2` |
+| AlienGo | [Link](https://drive.google.com/file/d/1q05VcaqMzvWPaq_sXqudWTJsUSnPjt2a/view?usp=share_link) | `data/pointnav_hm3d_gibson/pointnav_aliengo_0.22` |
+| Spot | [Link](https://drive.google.com/file/d/14vKI-AZmmxS5cQg1lV0ybFsuRNg4VMeL/view?usp=share_link) | `data/pointnav_hm3d_gibson/pointnav_spot_0.3` |
 3. Download robot URDFs
 
 | Robot | Download URDFs | Extract Path |
 |-|-|-|
-| A1 | [Link](https://drive.google.com/file/d/1xpqcpBaFf1ld415mYOHfDCoA-oMdLGVr/view?usp=share_link) (1 MB) | `data/URDF_demo_assets/a1` |
-| AlienGo | [Link](https://drive.google.com/file/d/1PuS0pJmFqBD-BuxvOQRVTgWScq5vWH06/view?usp=share_link) (132 MB) | `data/URDF_demo_assets/aliengo` |
-| Spot | [Link](https://drive.google.com/file/d/1uLiR5JcFEaQ1xNAezoSdv48Zj6QORVZY/view?usp=share_link) (132 MB) | `data/URDF_demo_assets/spot` |
+| A1 | [Link](https://drive.google.com/file/d/1xpqcpBaFf1ld415mYOHfDCoA-oMdLGVr/view?usp=share_link) | `data/URDF_demo_assets/a1` |
+| AlienGo | [Link](https://drive.google.com/file/d/1PuS0pJmFqBD-BuxvOQRVTgWScq5vWH06/view?usp=share_link) | `data/URDF_demo_assets/aliengo` |
+| Spot | [Link](https://drive.google.com/file/d/1uLiR5JcFEaQ1xNAezoSdv48Zj6QORVZY/view?usp=share_link) | `data/URDF_demo_assets/spot` |
 4. Please double check that your directory structure is as follows:
 ```graphql
 data
