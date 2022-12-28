@@ -23,31 +23,21 @@ from gym import spaces
 from gym.spaces.box import Box
 from habitat.config import Config
 from habitat.core.dataset import Dataset, Episode
-from habitat.core.embodied_task import EmbodiedTask, Measure, SimulatorTaskAction
+from habitat.core.embodied_task import (EmbodiedTask, Measure,
+                                        SimulatorTaskAction)
 from habitat.core.logging import logger
 from habitat.core.registry import registry
-from habitat.core.simulator import (
-    AgentState,
-    RGBSensor,
-    Sensor,
-    SensorTypes,
-    ShortestPathPoint,
-    Simulator,
-)
+from habitat.core.simulator import (AgentState, RGBSensor, Sensor, SensorTypes,
+                                    ShortestPathPoint, Simulator)
 from habitat.core.spaces import ActionSpace
 from habitat.core.utils import not_none_validator, try_cv2_import
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from habitat.sims.habitat_simulator.habitat_simulator import (
-    HabitatSimDepthSensor,
-    HabitatSimRGBSensor,
-)
+    HabitatSimDepthSensor, HabitatSimRGBSensor)
 from habitat.tasks.utils import cartesian_to_polar
-from habitat.utils.geometry_utils import (
-    Cutout,
-    euler_from_quaternion,
-    quaternion_from_coeff,
-    quaternion_rotate_vector,
-)
+from habitat.utils.geometry_utils import (Cutout, euler_from_quaternion,
+                                          quaternion_from_coeff,
+                                          quaternion_rotate_vector)
 from habitat.utils.visualizations import fog_of_war, maps
 from skimage.draw import disk
 
@@ -61,10 +51,8 @@ except ImportError:
 
 import time
 
-from .robot_utils.raibert_controller import (
-    Raibert_controller_turn,
-    Raibert_controller_turn_stable,
-)
+from .robot_utils.raibert_controller import (Raibert_controller_turn,
+                                             Raibert_controller_turn_stable)
 from .robot_utils.robot_env import *
 from .robot_utils.utils import *
 
@@ -1394,12 +1382,22 @@ class ContextMapTrajectorySensor(ContextMapSensor):
         if episode_uniq_id != self._current_episode_id:
             self._topdown_maps = []
             for mpp in self.stacked_map_res:
+                if mpp < 0:
+                    self.mpp = maps.calculate_meters_per_pixel(
+                        self._map_resolution, pathfinder=self._sim.pathfinder
+                    )
+                    mpp = self.mpp
+                z_height = 0.0 if z_height == -0.0 else z_height
                 tdm_name = f"{scene_name}_{z_height:.1f}_{self._map_resolution}_{mpp}"
                 if os.path.exists(os.path.join(MAPS_DIR, f"{tdm_name}.npy")):
                     self._topdown_maps.append(
                         np.load(os.path.join(MAPS_DIR, f"{tdm_name}.npy"))
                     )
                 else:
+                    print(
+                        "PATH DOES NOT EXIST: ",
+                        os.path.join(MAPS_DIR, f"{tdm_name}.npy"),
+                    )
                     self._topdown_maps.append(
                         maps.get_topdown_map_from_sim(
                             self._sim,
