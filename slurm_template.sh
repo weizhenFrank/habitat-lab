@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node $GPUS
 #SBATCH --partition $PARTITION
 #SBATCH --cpus-per-task=7
-#SBATCH --exclude flexo
+#SBATCH --exclude calculon,alexa,cortana,bmo
 # CONSTRAINT
 
 #SBATCH --chdir $HABITAT_REPO_PATH

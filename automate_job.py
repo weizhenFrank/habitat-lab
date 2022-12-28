@@ -125,6 +125,7 @@ parser.add_argument("-v", "--video", default=False, action="store_true")
 
 parser.add_argument("-d", "--debug", default=False, action="store_true")
 parser.add_argument("-x", default=False, action="store_true")
+parser.add_argument("--exclude", default="")
 parser.add_argument("--ext", default="")
 args = parser.parse_args()
 
@@ -645,6 +646,9 @@ if not args.eval:
         slurm_data = slurm_data.replace("# CONSTRAINT", "#SBATCH --constraint rtx_6000")
     elif args.constraint == "a40":
         slurm_data = slurm_data.replace("# CONSTRAINT", "#SBATCH --constraint a40")
+    if args.exclude != "":
+        orig = "#SBATCH --exclude calculon,alexa,cortana,bmo"
+        slurm_data = slurm_data.replace(orig, orig + f",{args.exclude}")
     slurm_path = os.path.join(dst_dir, experiment_name + ".sh")
     with open(slurm_path, "w") as f:
         f.write(slurm_data)
