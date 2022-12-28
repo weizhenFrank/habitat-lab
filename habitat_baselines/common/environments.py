@@ -47,9 +47,7 @@ class NavRLEnv(habitat.RLEnv):
     def reset(self):
         self._previous_action = None
         observations = super().reset()
-        self._previous_measure = self._env.get_metrics()[
-            self._reward_measure_name
-        ]
+        self._previous_measure = self._env.get_metrics()[self._reward_measure_name]
         return observations
 
     def step(self, *args, **kwargs):
@@ -113,33 +111,22 @@ class NavRLEnv(habitat.RLEnv):
         else:
             reward += (self._previous_measure - current_measure) * max(
                 0,
-                (
-                    1
-                    - observations["num_steps"]
-                    / self._rl_config.FULL_GEODESIC_DECAY
-                ),
+                (1 - observations["num_steps"] / self._rl_config.FULL_GEODESIC_DECAY),
             )
 
         sim = self._env._sim
         if "PROXIMITY_PENALTY" in self._rl_config:
             agent_pos = sim.get_agent_state().position
-            if sim.social_nav:
-                for p in sim.people:
-                    distance = np.sqrt(
-                        (p.current_position[0] - agent_pos[0]) ** 2
-                        + (p.current_position[2] - agent_pos[2]) ** 2
+            distance = np.array(
+                [
+                    sim.distance_to_closest_obstacle(
+                        agent_pos, self._rl_config.get("PENALTY_RADIUS", 1.5)
                     )
-                    if distance < self._rl_config.get("PENALTY_RADIUS", 1.5):
-                        reward -= self._rl_config.PROXIMITY_PENALTY
-                        break
-            elif sim.interactive_nav:
-                for p in sim.object_positions:
-                    distance = np.sqrt(
-                        (p[0] - agent_pos[0]) ** 2 + (p[2] - agent_pos[2]) ** 2
-                    )
-                    if distance < self._rl_config.get("PENALTY_RADIUS", 1.5):
-                        reward -= self._rl_config.PROXIMITY_PENALTY
-                        break
+                ],
+                dtype=np.float32,
+            )
+            if distance < self._rl_config.get("PENALTY_RADIUS", 0.5):
+                reward -= self._rl_config.PROXIMITY_PENALTY
 
         self._previous_measure = current_measure
 

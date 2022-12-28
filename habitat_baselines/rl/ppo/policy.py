@@ -13,20 +13,18 @@ import torch
 import torch.nn.functional as F
 from gym import spaces
 from habitat.config import Config
-from habitat.tasks.nav.nav import (
-    ContextMapSensor,
-    ContextMapTrajectorySensor,
-    ContextWaypointSensor,
-    IntegratedPointGoalGPSAndCompassSensor,
-    IntegratedPointGoalNoisyGPSAndCompassSensor,
-)
+from habitat.tasks.nav.nav import (ContextMapSensor,
+                                   ContextMapTrajectorySensor,
+                                   ContextWaypointSensor,
+                                   IntegratedPointGoalGPSAndCompassSensor,
+                                   IntegratedPointGoalNoisyGPSAndCompassSensor)
 from habitat_baselines.common.baseline_registry import baseline_registry
-
 # from habitat_baselines.rl.ddppo.policy import resnet
 # from habitat_baselines.rl.ddppo.policy.resnet_policy import (
 #     ResNetEncoderContext,
 # )
-from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN, SimpleCNNContext
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from skimage.draw import disk
@@ -346,6 +344,67 @@ class PointNavContextCMAPolicy(Policy):
         )
 
 
+@baseline_registry.register_policy
+class PointNavContextDoublePolicy(Policy):
+    def __init__(
+        self,
+        observation_space: spaces.Dict,
+        action_space,
+        hidden_size: int = 512,
+        num_recurrent_layers: int = 2,
+        rnn_type: str = "LSTM",
+        tgt_hidden_size: int = 512,
+        tgt_encoding: str = "linear_2",
+        context_hidden_size: int = 512,
+        use_prev_action: bool = False,
+        use_waypoint_encoder: bool = False,
+        policy_config: None = None,
+        cnn_type: str = "cnn_2d",
+        **kwargs,
+    ):
+        action_dim = (
+            1
+            if policy_config.action_distribution_type == "categorical"
+            else action_space.n
+        )
+        super().__init__(
+            PointNavContextDoubleNet(  # type: ignore
+                observation_space=observation_space,
+                hidden_size=hidden_size,
+                num_recurrent_layers=num_recurrent_layers,
+                rnn_type=rnn_type,
+                tgt_hidden_size=tgt_hidden_size,
+                tgt_encoding=tgt_encoding,
+                context_hidden_size=context_hidden_size,
+                use_prev_action=use_prev_action,
+                use_waypoint_encoder=use_waypoint_encoder,
+                cnn_type=cnn_type,
+                policy_config=policy_config,
+                action_dim=action_dim,
+                **kwargs,
+            ),
+            action_space.n,
+            policy_config,
+        )
+
+    @classmethod
+    def from_config(cls, config: Config, observation_space: spaces.Dict, action_space):
+        return cls(
+            observation_space=observation_space,
+            action_space=action_space,
+            hidden_size=config.RL.PPO.hidden_size,
+            rnn_type=config.RL.DDPPO.rnn_type,
+            num_recurrent_layers=config.RL.DDPPO.num_recurrent_layers,
+            tgt_hidden_size=config.RL.PPO.tgt_hidden_size,
+            tgt_encoding=config.RL.PPO.tgt_encoding,
+            context_hidden_size=config.RL.PPO.context_hidden_size,
+            use_prev_action=config.RL.PPO.use_prev_action,
+            use_waypoint_encoder=config.RL.PPO.use_waypoint_encoder,
+            cnn_type=config.RL.PPO.cnn_type,
+            policy_config=config.RL.POLICY,
+        )
+
+
 class Net(nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def forward(
@@ -572,9 +631,8 @@ class PointNavContextNet(PointNavBaselineNet):
         ):
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
-                from habitat_baselines.rl.ddppo.policy.resnet_policy import (
-                    ResNetEncoderContext,
-                )
+                from habitat_baselines.rl.ddppo.policy.resnet_policy import \
+                    ResNetEncoderContext
 
                 in_channels = policy_config.in_channels
                 if "full" in self.cnn_type:
@@ -863,14 +921,160 @@ class PointNavContextCMANet(PointNavContextNet):
         text_state_q = self.state_q(state)
         text_state_k = self.text_k(map_embedding)
         text_mask = (map_embedding == 0.0).all(dim=1)
-        map_embedding = self._attn(text_state_q, text_state_k, map_embedding, text_mask)
+        map_att = self._attn(text_state_q, text_state_k, map_embedding, text_mask)
 
         half_h = self._hidden_size // 2
         dp = self.dep_kv(torch.unsqueeze(dep_embedding, 2))
         dep_k, dep_v = torch.split(dp, half_h, dim=1)
 
-        text_q = self.text_q(map_embedding)
-        dep_embedding = self._attn(text_q, dep_k, dep_v)
+        text_q = self.text_q(map_att)
+        dep_att = self._attn(text_q, dep_k, dep_v)
+
+        x = torch.cat(
+            [
+                state,
+                map_att,
+                dep_att,
+                goal_embedding,
+                prev_action_embedding,
+            ],
+            dim=1,
+        )
+        x = self.second_state_compress(x)
+
+        (
+            x,
+            rnn_states_out[:, s1_layers : s1_layers + s2_layers],
+        ) = self.second_state_encoder(
+            x,
+            rnn_hidden_states[:, s1_layers : s1_layers + s2_layers],
+            masks,
+        )
+
+        self.ctr += 1
+        return x, rnn_states_out, None
+
+
+class PointNavContextDoubleNet(PointNavContextNet):
+    r"""Network which passes the input image through CNN and concatenates
+    goal vector with CNN's output and passes that through RNN. + Map
+    """
+
+    def __init__(
+        self,
+        observation_space: spaces.Dict,
+        hidden_size: int,
+        num_recurrent_layers: int,
+        rnn_type: str,
+        tgt_hidden_size: int,
+        tgt_encoding: str,
+        context_hidden_size: int,
+        use_prev_action: bool,
+        use_waypoint_encoder: bool,
+        cnn_type: str,
+        policy_config: None = None,
+        action_dim: int = 2,
+    ):
+        super().__init__(
+            observation_space=observation_space,
+            hidden_size=hidden_size,
+            num_recurrent_layers=num_recurrent_layers,
+            rnn_type=rnn_type,
+            tgt_hidden_size=tgt_hidden_size,
+            tgt_encoding=tgt_encoding,
+            context_hidden_size=context_hidden_size,
+            use_prev_action=use_prev_action,
+            use_waypoint_encoder=use_waypoint_encoder,
+            cnn_type=cnn_type,
+            policy_config=policy_config,
+            action_dim=action_dim,
+        )
+        nfeats = self._hidden_size + self.tgt_embeding_size
+        nfeats2 = (
+            self._hidden_size  # output from 1st GRU
+            + self._hidden_size
+            + self.tgt_embeding_size  # 32
+            + self.context_hidden_size  # 256
+        )
+        if self.use_prev_action:
+            nfeats += self.prev_action_embedding_size
+            nfeats2 += self.prev_action_embedding_size  # 32
+        if rnn_type == "LSTM" or rnn_type == "GRU":
+            self.state_encoder = build_rnn_state_encoder(
+                nfeats,
+                self._hidden_size,
+                rnn_type=rnn_type,
+                num_layers=num_recurrent_layers,
+            )
+            self.second_state_encoder = build_rnn_state_encoder(
+                self._hidden_size,
+                self._hidden_size,
+                rnn_type=rnn_type,
+                num_layers=num_recurrent_layers,
+            )
+
+        self.second_state_compress = nn.Sequential(
+            nn.Linear(
+                nfeats2,
+                self._hidden_size,
+            ),
+            nn.ReLU(True),
+        )
+
+        self.register_buffer("_scale", torch.tensor(1.0 / ((hidden_size // 2) ** 0.5)))
+
+    def get_features(self, observations, prev_actions):
+        x = []
+        ## Egocentric observations
+        x.append(self.visual_encoder(observations))
+        x.append(self.get_goal_features(observations))
+        ## Map observation
+        if (
+            ContextMapSensor.cls_uuid in observations
+            or ContextMapTrajectorySensor.cls_uuid in observations
+        ):
+            x.append(self.get_map_features(observations))
+        ## Previous actions
+        if self.use_prev_action:
+            x.append(self.prev_action_embedding(prev_actions.float()))
+        x_out = torch.cat(x, dim=1)
+        return x_out
+
+    @property
+    def num_recurrent_layers(self):
+        return (
+            self.state_encoder.num_recurrent_layers
+            + self.second_state_encoder.num_recurrent_layers
+        )
+
+    def forward(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_actions,
+        masks=None,
+        memory=None,
+        memory_masks=None,
+    ):
+        s1_layers = self.state_encoder.num_recurrent_layers
+        s2_layers = self.second_state_encoder.num_recurrent_layers
+
+        dep_embedding = self.visual_encoder(observations)
+        map_embedding = self.get_map_features(observations)
+        goal_embedding = self.get_goal_features(observations)
+
+        if self.use_prev_action:
+            prev_action_embedding = self.prev_action_embedding(prev_actions.float())
+            state_inputs = [dep_embedding, goal_embedding, prev_action_embedding]
+        else:
+            state_inputs = [dep_embedding, goal_embedding]
+        state_in = torch.cat(state_inputs, dim=1)
+        rnn_states_out = rnn_hidden_states.detach().clone()
+        (state, rnn_states_out[:, 0:s1_layers],) = self.state_encoder(
+            state_in,
+            rnn_hidden_states[:, 0:s1_layers],
+            masks,
+        )
 
         x = torch.cat(
             [

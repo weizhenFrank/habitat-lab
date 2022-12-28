@@ -11,7 +11,8 @@ import shutil
 import tarfile
 from collections import defaultdict
 from io import BytesIO
-from typing import Any, DefaultDict, Dict, Iterable, List, Optional, Tuple, Union
+from typing import (Any, DefaultDict, Dict, Iterable, List, Optional, Tuple,
+                    Union)
 
 import attr
 import numpy as np
@@ -274,6 +275,7 @@ def generate_video(
     metrics: Dict[str, float],
     tb_writer: TensorboardWriter,
     fps: int = 10,
+    scene_id: Optional[str] = None,
 ) -> None:
     r"""Generate video according to specified information.
 
@@ -298,6 +300,8 @@ def generate_video(
         metric_strs.append(f"{k}={v:.2f}")
 
     video_name = f"episode={episode_id}-ckpt={checkpoint_idx}-" + "-".join(metric_strs)
+    if scene_id is not None:
+        video_name = f"scene={scene_id}-" + video_name
     if "disk" in video_option:
         assert video_dir is not None
         images_to_video(images, video_dir, video_name)

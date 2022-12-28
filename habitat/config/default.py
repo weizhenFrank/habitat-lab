@@ -99,6 +99,8 @@ ACTIONS.VELOCITY_CONTROL.CTRL_FREQ = 240.0
 ACTIONS.VELOCITY_CONTROL.ROBOT_URDF = "/coc/testnvme/jtruong33/data/URDF_demo_assets/spot_hybrid_urdf/habitat_spot_urdf/urdf/spot_hybrid.urdf"
 ACTIONS.VELOCITY_CONTROL.MIN_RAND_PITCH = 0.0
 ACTIONS.VELOCITY_CONTROL.MAX_RAND_PITCH = 0.0
+ACTIONS.VELOCITY_CONTROL.MIN_RAND_ROLL = 0.0
+ACTIONS.VELOCITY_CONTROL.MAX_RAND_ROLL = 0.0
 
 # DYNAMIC VELOCITY ACTION
 ACTIONS.DYNAMIC_VELOCITY_CONTROL = CN()
@@ -219,6 +221,13 @@ _C.TASK.SUCCESS.SUCCESS_DISTANCE = 0.2
 _C.TASK.SPL = CN()
 _C.TASK.SPL.TYPE = "SPL"
 _C.TASK.SPL.POINTGOAL_SCALE = 1.0
+# -----------------------------------------------------------------------------
+# SCT MEASUREMENT
+# -----------------------------------------------------------------------------
+_C.TASK.SCT = CN()
+_C.TASK.SCT.TYPE = "SCT"
+_C.TASK.SCT.POINTGOAL_SCALE = 1.0
+_C.TASK.SCT.TIME_STEP = 0.5
 # -----------------------------------------------------------------------------
 # SOFT-SPL MEASUREMENT
 # -----------------------------------------------------------------------------

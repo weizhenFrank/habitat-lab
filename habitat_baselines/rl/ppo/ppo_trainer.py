@@ -24,26 +24,33 @@ from habitat_baselines.common.base_trainer import BaseRLTrainer
 from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.obs_transformers import (
-    apply_obs_transforms_batch, apply_obs_transforms_obs_space,
-    get_active_obs_transforms)
-from habitat_baselines.common.rollout_storage import (ExternalMemory,
-                                                      RolloutStorage)
+    apply_obs_transforms_batch,
+    apply_obs_transforms_obs_space,
+    get_active_obs_transforms,
+)
+from habitat_baselines.common.rollout_storage import ExternalMemory, RolloutStorage
 from habitat_baselines.common.tensorboard_utils import TensorboardWriter
 from habitat_baselines.rl.ddppo.algo import DDPPO
-from habitat_baselines.rl.ddppo.ddp_utils import (EXIT, add_signal_handlers,
-                                                  get_distrib_size,
-                                                  init_distrib_slurm,
-                                                  is_slurm_batch_job,
-                                                  load_resume_state,
-                                                  rank0_only, requeue_job,
-                                                  save_resume_state)
-from habitat_baselines.rl.ddppo.policy import \
-    PointNavResNetPolicy  # noqa: F401.
+from habitat_baselines.rl.ddppo.ddp_utils import (
+    EXIT,
+    add_signal_handlers,
+    get_distrib_size,
+    init_distrib_slurm,
+    is_slurm_batch_job,
+    load_resume_state,
+    rank0_only,
+    requeue_job,
+    save_resume_state,
+)
+from habitat_baselines.rl.ddppo.policy import PointNavResNetPolicy  # noqa: F401.
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.ppo.policy import Policy
-from habitat_baselines.utils.common import (ObservationBatchingCache,
-                                            action_to_velocity_control,
-                                            batch_obs, generate_video)
+from habitat_baselines.utils.common import (
+    ObservationBatchingCache,
+    action_to_velocity_control,
+    batch_obs,
+    generate_video,
+)
 from habitat_baselines.utils.env_utils import construct_envs
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
@@ -1366,30 +1373,38 @@ class PPOTrainer(BaseRLTrainer):
                         )
                         if not os.path.isfile(episode_steps_filename):
                             episode_steps_data = "id,reward,distance_to_goal,episode_distance,success,spl,steps\n"
+                            if "sct" in episode_stats:
+                                episode_steps_data = "id,reward,distance_to_goal,episode_distance,success,spl,steps,sct\n"
                         else:
                             with open(episode_steps_filename) as f:
                                 episode_steps_data = f.read()
-                        episode_steps_data += "{},{},{},{},{},{},{}\n".format(
-                            current_episodes[i].episode_id,
-                            episode_stats["reward"],
-                            episode_stats["distance_to_goal"],
-                            episode_stats["episode_distance"],
-                            episode_stats["success"],
-                            episode_stats["spl"],
-                            episode_stats["num_steps"],
-                        )  # number of steps taken
-                        # lines = episode_steps_data.split("\n")
-                        # if len(lines) >= number_of_eval_episodes:
-                        #     episode_steps_data = (
-                        #         lines[0]
-                        #         + "\n".join(
-                        #             sorted(
-                        #                 lines[1:-1],
-                        #                 key=lambda x: int(x.split(",")[0]),
-                        #             )
-                        #         )
-                        #         + "\n"
-                        #     )
+                        if "sct" in episode_stats:
+                            episode_steps_data += "{},{},{},{},{},{},{},{},{}\n".format(
+                                current_episodes[i]
+                                .scene_id.split("/")[-1]
+                                .split(".")[0],
+                                current_episodes[i].episode_id,
+                                episode_stats["reward"],
+                                episode_stats["distance_to_goal"],
+                                episode_stats["episode_distance"],
+                                episode_stats["success"],
+                                episode_stats["spl"],
+                                episode_stats["num_steps"],
+                                episode_stats["sct"],
+                            )  # number of steps taken
+                        else:
+                            episode_steps_data += "{},{},{},{},{},{},{},{}\n".format(
+                                current_episodes[i]
+                                .scene_id.split("/")[-1]
+                                .split(".")[0],
+                                current_episodes[i].episode_id,
+                                episode_stats["reward"],
+                                episode_stats["distance_to_goal"],
+                                episode_stats["episode_distance"],
+                                episode_stats["success"],
+                                episode_stats["spl"],
+                                episode_stats["num_steps"],
+                            )  # number of steps taken
                         with open(episode_steps_filename, "w") as f:
                             f.write(episode_steps_data)
 
@@ -1403,6 +1418,9 @@ class PPOTrainer(BaseRLTrainer):
                             metrics=self._extract_scalars_from_info(infos[i]),
                             tb_writer=writer,
                             fps=30,
+                            scene_id=current_episodes[i]
+                            .scene_id.split("/")[-1]
+                            .split(".")[0],
                         )
 
                     rgb_frames[i] = []
