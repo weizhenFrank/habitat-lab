@@ -11,12 +11,13 @@ from gym import spaces
 from habitat.config import Config
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
-from habitat_baselines.rl.models.rnn_state_encoder import \
-    build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from torch import nn as nn
 from vit_pytorch import SimpleViT, ViT
+
+DEBUG = True
 
 
 class Policy(nn.Module, metaclass=abc.ABCMeta):
@@ -122,7 +123,7 @@ class PointNavBaselinePolicy(Policy):
         use_prev_action: bool = False,
         policy_config: None = None,
         **kwargs,
-    ):  
+    ):
         action_dim = (
             1
             if policy_config.action_distribution_type == "categorical"
@@ -158,6 +159,7 @@ class PointNavBaselinePolicy(Policy):
             use_prev_action=config.RL.PPO.use_prev_action,
             policy_config=config.RL.POLICY,
         )
+
 
 @baseline_registry.register_policy
 class PointNavContextPolicy(Policy):
@@ -219,6 +221,7 @@ class PointNavContextPolicy(Policy):
             policy_config=config.RL.POLICY,
         )
 
+
 @baseline_registry.register_policy
 class PointNavContextCMAPolicy(Policy):
     def __init__(
@@ -278,7 +281,8 @@ class PointNavContextCMAPolicy(Policy):
             cnn_type=config.RL.PPO.cnn_type,
             policy_config=config.RL.POLICY,
         )
-        
+
+
 class Net(nn.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def forward(self, observations, rnn_hidden_states, prev_actions, masks):
@@ -370,7 +374,9 @@ class PointNavBaselineNet(Net):
         nfeats = (
             self._hidden_size + self.prev_action_embedding_size + self.tgt_embeding_size
         )
-        print(self._hidden_size + self.prev_action_embedding_size + self.tgt_embeding_size)
+        print(
+            self._hidden_size + self.prev_action_embedding_size + self.tgt_embeding_size
+        )
         if rnn_type == "LSTM" or rnn_type == "GRU":
             self.state_encoder = build_rnn_state_encoder(
                 nfeats,
@@ -420,8 +426,12 @@ class PointNavBaselineNet(Net):
 
     def get_features(self, observations, prev_actions):
         x = []
-        x.append(self.visual_encoder(observations))
-        x.append(self.get_goal_features(observations))
+        visual_feats = self.visual_encoder(observations)
+        x.append(visual_feats)
+
+        goal_feats = self.get_goal_features(observations)
+        x.append(goal_feats)
+
         if self.use_prev_action:
             x.append(self.prev_action_embedding(prev_actions.float()))
         x_out = torch.cat(x, dim=1)
@@ -439,6 +449,7 @@ class PointNavBaselineNet(Net):
         x_out = self.get_features(observations, prev_actions)
         x_out, rnn_hidden_states = self.state_encoder(x_out, rnn_hidden_states, masks)
         return x_out, rnn_hidden_states
+
 
 class PointNavContextNet(PointNavBaselineNet):
     r"""Network which passes the input image through CNN and concatenates
@@ -598,24 +609,34 @@ class PointNavContextNet(PointNavBaselineNet):
     def get_features(self, observations, prev_actions):
         x = []
         ## Egocentric observations
-        ve = self.visual_encoder(observations)
+        visual_feats = self.visual_encoder(observations)
+        x.append(visual_feats)
 
-        x.append(ve)
-        x = self.get_goal_features(x, observations)
+        goal_feats = self.get_goal_features(observations)
+        x.append(goal_feats)
 
         ## Map observation
-        if (
-            "context_map" in observations
-            or "context_map_trajectory" in observations
-        ):
-            x.append(self.get_map_features(observations))
+        if "context_map" in observations or "context_map_trajectory" in observations:
+            context_feats = self.get_map_features(observations)
+            if DEBUG:
+                print("context_feats", context_feats)
+            x.append(context_feats)
         ## Waypoint observation
         if "context_waypoint" in observations:
-            we = self.context_encoder(observations["context_waypoint"])
-            x.append(we)
+            wpt_feats = self.context_encoder(observations["context_waypoint"])
+            if DEBUG:
+                print("wpt_feats: ", wpt_feats)
+            x.append(wpt_feats)
         ## Previous actions
         if self.use_prev_action:
-            x.append(self.prev_action_embedding(prev_actions.float()))
+            prev_action_embedding = self.prev_action_embedding(prev_actions.float())
+            if DEBUG:
+                print("prev_action_embedding: ", prev_action_embedding)
+            x.append(prev_action_embedding)
+        if DEBUG:
+            print("visual_feats: ", visual_feats)
+            print("goal_feats: ", goal_feats)
+            print("observations: ", observations)
         x_out = torch.cat(x, dim=1)
         return x_out
 
@@ -632,6 +653,7 @@ class PointNavContextNet(PointNavBaselineNet):
         x_out, rnn_hidden_states = self.state_encoder(x_out, rnn_hidden_states, masks)
 
         return x_out, rnn_hidden_states
+
 
 class PointNavContextCMANet(PointNavContextNet):
     r"""Network which passes the input image through CNN and concatenates
@@ -716,14 +738,14 @@ class PointNavContextCMANet(PointNavContextNet):
         x.append(self.visual_encoder(observations))
         x.append(self.get_goal_features(observations))
         ## Map observation
-        if (
-            ContextMapSensor.cls_uuid in observations
-            or ContextMapTrajectorySensor.cls_uuid in observations
-        ):
-            x.append(self.get_map_features(observations))
+        if "context_map" in observations or "context_map_trajectory" in observations:
+            map_feats = self.get_map_features(observations)
+            x.append(map_feats)
+
         ## Previous actions
         if self.use_prev_action:
-            x.append(self.prev_action_embedding(prev_actions.float()))
+            prev_action_embedding = self.prev_action_embedding(prev_actions.float())
+            x.append(prev_action_embedding)
         x_out = torch.cat(x, dim=1)
         return x_out
 
@@ -808,4 +830,3 @@ class PointNavContextCMANet(PointNavContextNet):
         )
 
         return x, rnn_states_out
-        
