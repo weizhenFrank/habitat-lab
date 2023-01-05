@@ -422,7 +422,7 @@ class PointNavBaselineNet(Net):
                     ],
                     -1,
                 )
-                return self.tgt_encoder(goal_observations)
+            return self.tgt_encoder(goal_observations)
 
     def get_features(self, observations, prev_actions):
         x = []
@@ -558,7 +558,7 @@ class PointNavContextNet(PointNavBaselineNet):
                 self.context_encoder = SimpleCNNContext(
                     observation_space, hidden_size, self.cnn_type
                 )
-        elif "context_waypoint" in observation_space.keys():
+        elif "context_waypoint" in observation_space.spaces:
             self.context_encoder = nn.Sequential(
                 nn.Linear(2, 512),
                 nn.ReLU(),
@@ -618,25 +618,15 @@ class PointNavContextNet(PointNavBaselineNet):
         ## Map observation
         if "context_map" in observations or "context_map_trajectory" in observations:
             context_feats = self.get_map_features(observations)
-            if DEBUG:
-                print("context_feats", context_feats)
             x.append(context_feats)
         ## Waypoint observation
         if "context_waypoint" in observations:
             wpt_feats = self.context_encoder(observations["context_waypoint"])
-            if DEBUG:
-                print("wpt_feats: ", wpt_feats)
             x.append(wpt_feats)
         ## Previous actions
         if self.use_prev_action:
             prev_action_embedding = self.prev_action_embedding(prev_actions.float())
-            if DEBUG:
-                print("prev_action_embedding: ", prev_action_embedding)
             x.append(prev_action_embedding)
-        if DEBUG:
-            print("visual_feats: ", visual_feats)
-            print("goal_feats: ", goal_feats)
-            print("observations: ", observations)
         x_out = torch.cat(x, dim=1)
         return x_out
 
