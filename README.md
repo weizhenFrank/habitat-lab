@@ -72,6 +72,8 @@ The `run.py` script controls training and evaluation for all models and datasets
 * Modify the [experiment yaml](https://github.com/joannetruong/habitat-lab/blob/kin2dyn/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml) for your specific robot
 * Modify the [task yaml](https://github.com/joannetruong/habitat-lab/blob/kin2dyn/configs/tasks/pointnav_quadruped.yaml) for your specific robot. 
     * To train the robot dynamically, set [POSSIBLE_ACTIONS: ["DYNAMIC_VELOCITY_CONTROL"]](https://github.com/joannetruong/habitat-lab/blob/733eb78dfc5a660a1994b14ca52b0e9852bd717b/configs/tasks/pointnav_quadruped.yaml#L41)
+* Modify the [paths](https://github.com/joannetruong/habitat-lab/blob/d5a1a0b109d96cc7e2898401685af7d52b210b63/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml#L10) for saving tensorboard results, checkpoints, videos, etc.
+* To generate videos, set [VIDEO_OPTION: ['disk']](https://github.com/joannetruong/habitat-lab/blob/d5a1a0b109d96cc7e2898401685af7d52b210b63/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml#L9)
 ```bash
 python -u -m habitat_baselines.run \
      --exp-config {experiment_yaml_path} \
@@ -85,6 +87,27 @@ python -u -m habitat_baselines.run \
      --run-type train
 ```
 
+## Pre-trained PointGoal Navigation Weights
+To use pre-trained weights, modify the path [here](https://github.com/joannetruong/habitat-lab/blob/d5a1a0b109d96cc7e2898401685af7d52b210b63/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml#L12) to the extract path of the weights.
+### Rethinking Sim2real
+| Robot | Control-Type | Actuation Noise | Download Weights | Extract Path |
+|-|-|-|-|-|
+| A1 | Kinematic | - | [Link](https://drive.google.com/file/d/1yAjVvrWMcyIvCl6elsdZnQtMleOeUUgF/view?usp=share_link) | `results/a1/a1_kinematic.pth` |
+| A1 | Dynamic | - | [Link](https://drive.google.com/file/d/1v8QVz0T87kKa4-UbjcovPPYzjS6Zocrd/view?usp=share_link) | `results/a1/a1_dynamic.pth` |
+| AlienGo | Kinematic | - | [Link](https://drive.google.com/file/d/1mCP7axTr6Adl3FsDAftqwHB5ZNt9o2LF/view?usp=share_link) | `results/aliengo/aliengo_kinematic.pth` |
+| AlienGo | Dynamic | - | [Link](https://drive.google.com/file/d/1_DSlqYloo-Y3MR5jl-muQFZg5vD2CjZ7/view?usp=share_link) | `results/aliengo/aliengo_dynamic.pth` |
+| Spot | Kinematic | - | [Link](https://drive.google.com/file/d/1br8hGMuI56xuZRFZHFSHAfIEF49PezyF/view?usp=share_link) | `results/spot/spot_kinematic.pth` |
+| Spot | Dynamic | - | [Link](https://drive.google.com/file/d/1p7y8AXuMF8hhxfp_YE0jOPJBbNmzi4Tp/view?usp=share_link) | `results/spot/spot_dynamic.pth` |
+| Spot | Kinematic | Decoupled Noise | [Link](https://drive.google.com/file/d/1dMLKo03SkG6p-9ZT_pKeNp1IuEIzHkGa/view?usp=share_link) | `results/spot/spot_kinematic_decoupled_noise.pth` |
+| Spot | Kinematic | Coupled Noise | [Link](https://drive.google.com/file/d/1svcz91276irH5B7Pl4Ry_sF97F5u9bTA/view?usp=share_link) | `results/spot/spot_kinematic_coupled_noise.pth` |
+
+### ViNL
+Weights used in [ViNL: Visual Locomotion and Navigation Over Obstacles](https://arxiv.org/abs/2210.14791)
+| Robot | Train Camera Noise | Download Episodes | Extract Path |
+|-|-|-|-|
+| AlienGo | +/- 30 deg pitch & roll | [Link](https://drive.google.com/file/d/1JQIGQr__EahwrYgzKOIgGCM2Ig9vgADC/view?usp=share_link) | `results/aliengo/aliengo_vinl.pth` |
+
+## Citation
 If you use this repo in your research, please cite the following [paper](https://arxiv.org/abs/2207.10821):
 
 ```tex
@@ -92,6 +115,17 @@ If you use this repo in your research, please cite the following [paper](https:/
     title={Rethinking Sim2Real: Lower Fidelity Simulation Leads to Higher Sim2Real Transfer in Navigation}, 
     author={Joanne Truong and Max Rudolph and Naoki Yokoyama and Sonia Chernova and Dhruv Batra and Akshara Rai}, 
     booktitle={Conference on Robot Learning (CoRL)},
+    year={2022}
+}
+```
+
+If you use the pre-trained ViNL weights, please also cite the following [paper](https://arxiv.org/abs/2210.14791):
+
+```tex
+@inproceedings{kareer2022vinl,
+    title={ViNL: Visual Navigation and Locomotion Over Obstacles}, 
+    author={Simar Kareer and Naoki Yokoyama and Dhruv Batra and Sehoon Ha and Joanne Truong}, 
+    journal={arXiv preprint arXiv:2210.14791},
     year={2022}
 }
 ```
