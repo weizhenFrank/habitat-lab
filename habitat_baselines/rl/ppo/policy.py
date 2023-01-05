@@ -11,7 +11,8 @@ from gym import spaces
 from habitat.config import Config
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
-from habitat_baselines.rl.models.rnn_state_encoder import build_rnn_state_encoder
+from habitat_baselines.rl.models.rnn_state_encoder import \
+    build_rnn_state_encoder
 from habitat_baselines.rl.models.simple_cnn import SimpleCNN
 from habitat_baselines.utils.common import CategoricalNet, GaussianNet
 from torch import nn as nn
@@ -512,9 +513,8 @@ class PointNavContextNet(PointNavBaselineNet):
         ):
             if "resnet" in self.cnn_type:
                 from habitat_baselines.rl.ddppo.policy import resnet
-                from habitat_baselines.rl.ddppo.policy.resnet_policy import (
-                    ResNetEncoderContext,
-                )
+                from habitat_baselines.rl.ddppo.policy.resnet_policy import \
+                    ResNetEncoderContext
 
                 if "full" in self.cnn_type:
                     self.context_encoder = ResNetEncoderContext(
