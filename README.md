@@ -108,7 +108,7 @@ To use pre-trained weights, modify the path [here](https://github.com/joannetruo
 
 ### ViNL
 Weights used in [ViNL: Visual Locomotion and Navigation Over Obstacles](https://arxiv.org/abs/2210.14791)
-| Robot | Train Camera Noise | Download Episodes | Extract Path |
+| Robot | Train Camera Noise | Download Weights | Extract Path |
 |-|-|-|-|
 | AlienGo | +/- 30 deg pitch & roll | [Link](https://drive.google.com/file/d/1JQIGQr__EahwrYgzKOIgGCM2Ig9vgADC/view?usp=share_link) | `results/aliengo/aliengo_vinl.pth` |
 
