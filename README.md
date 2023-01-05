@@ -87,7 +87,7 @@ python -u -m habitat_baselines.run \
      --run-type train
 ```
 When training, you should see a [directory (the path you specified here)](https://github.com/joannetruong/habitat-lab/blob/d5a1a0b109d96cc7e2898401685af7d52b210b63/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml#L10) populate with:
-* *.err file containing current training progress
+* `*.err` file containing current training progress
 * `tb` directory containing tensorboard plots of training success, SPL, reward, etc. 
 * `checkpoints` directory containing current policy weights
 
