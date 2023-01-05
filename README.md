@@ -86,9 +86,14 @@ python -u -m habitat_baselines.run \
      --exp-config habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml \
      --run-type train
 ```
+When training, you should see a [directory (the path you specified here)](https://github.com/joannetruong/habitat-lab/blob/d5a1a0b109d96cc7e2898401685af7d52b210b63/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml#L10) populate with:
+* *.err file containing current training progress
+* `tb` directory containing tensorboard plots of training success, SPL, reward, etc. 
+* `checkpoints` directory containing current policy weights
 
 ## Pre-trained PointGoal Navigation Weights
 To use pre-trained weights, modify the path [here](https://github.com/joannetruong/habitat-lab/blob/d5a1a0b109d96cc7e2898401685af7d52b210b63/habitat_baselines/config/pointnav/ddppo_pointnav_quadruped.yaml#L12) to the extract path of the weights.
+
 ### Rethinking Sim2real
 | Robot | Control-Type | Actuation Noise | Download Weights | Extract Path |
 |-|-|-|-|-|
