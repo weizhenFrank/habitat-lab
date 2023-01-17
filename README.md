@@ -130,7 +130,7 @@ If you use the pre-trained ViNL weights, please also cite the following [paper](
 @inproceedings{kareer2022vinl,
     title={ViNL: Visual Navigation and Locomotion Over Obstacles}, 
     author={Simar Kareer and Naoki Yokoyama and Dhruv Batra and Sehoon Ha and Joanne Truong}, 
-    journal={arXiv preprint arXiv:2210.14791},
-    year={2022}
+    booktitle={International Conference on Robotics and Automation (ICRA)},
+    year={2023}
 }
 ```
