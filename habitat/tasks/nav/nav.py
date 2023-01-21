@@ -64,6 +64,7 @@ import scipy.ndimage
 import torch
 import torch.nn.functional as F
 from scipy.interpolate import interp1d
+from scipy.ndimage.interpolation import shift
 from scipy.spatial.transform import Rotation as R
 
 MAPS_DIR = "/coc/testnvme/jtruong33/google_nav/habitat-lab/topdown_maps/"
@@ -876,7 +877,7 @@ class ContextWaypointSensor(ContextSensor):
         if len(waypoint_vectors.flatten()) < 2:
             waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
             task.is_stop_called = True
-        if np.isnan(waypoint_vectors).any():
+        if np.isnan(waypoint_vectors).any() or np.isinf(waypoint_vectors).any():
             waypoint_vectors = np.zeros_like(waypoint_vectors)
             task.is_stop_called = True
         return waypoint_vectors.flatten()
@@ -911,9 +912,6 @@ class ContextMapSensor(ContextSensor):
         )  # max number of pixels for cutout
         self.crop = getattr(config, "CROP", True)
         self.draw_agent_trajectory = getattr(config, "DRAW_TRAJECTORY", False)
-        print(
-            "DRAW AGENT TRAJECTORY 102348U0293842W09802: ", self.draw_agent_trajectory
-        )
         self.save_map_debug = getattr(config, "SAVE_MAP", False)
         self.log_pointgoal = getattr(config, "LOG_POINTGOAL", False)
         self.pad_noise = getattr(config, "PAD_NOISE", False)
@@ -922,6 +920,12 @@ class ContextMapSensor(ContextSensor):
         self.map_type = getattr(config, "MAP_TYPE", "GRID")
         self.pointgoal_scale = getattr(config, "POINTGOAL_SCALE", 1.0)
         self.stacked_map_res = getattr(config, "STACKED_MAP_RES", [])
+
+        self.use_shift_noise = getattr(config, "SHIFT_NOISE", False)
+
+        self.shift_noise_percent = getattr(config.SHIFT, "NOISE_PERCENT", 0.0)
+
+        self.use_noisy_map = self.pad_noise or self.use_shift_noise
 
         self.n_dim = 1
         self.n_dim = (
@@ -1029,7 +1033,7 @@ class ContextMapSensor(ContextSensor):
                     agent_radius_px=min(rs.shape[0:2]) // 32,
                 )
 
-            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/shift_maps/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
             cv2.imwrite(
                 f"{save_name}",
                 rs,
@@ -1145,6 +1149,26 @@ class ContextMapSensor(ContextSensor):
         rr, cc = disk((row, col), self.disk_radius)
         return rr, cc
 
+    def shift_noise(self, top_down_map):
+        # shift every pixel in the map by a random amount
+        # generate random amount to shift by
+        h, w = top_down_map.shape[:2]
+        hor_pixel_shift_amt = int((self.shift_noise_percent / 100) * w)
+        vert_pixel_shift_amt = int((self.shift_noise_percent / 100) * h)
+        rand_shift_hor = np.random.randint(-hor_pixel_shift_amt, hor_pixel_shift_amt)
+        rand_shift_ver = np.random.randint(-vert_pixel_shift_amt, vert_pixel_shift_amt)
+
+        # shift the map [vertical, horizontal] ; negative horizontal is left; fill with zeros
+        shifted_top_down_map = shift(
+            top_down_map, [rand_shift_ver, rand_shift_hor], cval=0
+        )
+        self.save_map(
+            shifted_top_down_map,
+            f"shift_map_hor_{rand_shift_hor}_vert_{rand_shift_ver}",
+        )
+
+        return shifted_top_down_map
+
     def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
         self.ep_id = int(episode.episode_id)
         self.ctr += 1
@@ -1154,6 +1178,7 @@ class ContextMapSensor(ContextSensor):
         scene_name = os.path.basename(episode.scene_id).split(".")[0]
         if episode_uniq_id != self._current_episode_id:
             self._topdown_maps = []
+            self._noisy_topdown_maps = []
             for mpp in self.stacked_map_res:
                 if mpp < 0:
                     self.mpp = maps.calculate_meters_per_pixel(
@@ -1171,14 +1196,22 @@ class ContextMapSensor(ContextSensor):
                         "PATH DOES NOT EXIST: ",
                         os.path.join(MAPS_DIR, f"{tdm_name}.npy"),
                     )
-                    self._topdown_maps.append(
-                        maps.get_topdown_map_from_sim(
-                            self._sim,
-                            map_resolution=self._map_resolution,
-                            draw_border=False,
-                            meters_per_pixel=mpp,
-                        )
+                    tdm = maps.get_topdown_map_from_sim(
+                        self._sim,
+                        map_resolution=self._map_resolution,
+                        draw_border=False,
+                        meters_per_pixel=mpp,
                     )
+                    self._topdown_maps.append(tdm)
+                    if self.pad_noise:
+                        if self.p == 1.0:
+                            noisy_tdm = np.ones_like(tdm)
+                        else:
+                            noisy_tdm = self.occupied_cutout(tdm)
+                        self._noisy_topdown_maps.append(noisy_tdm)
+                    elif self.use_shift_noise:
+                        noisy_tdm = self.shift_noise(tdm)
+                        self._noisy_topdown_maps.append(noisy_tdm)
             self._current_episode_id = episode_uniq_id
             agent_position = self._sim.get_agent_state().position
             a_x, a_y = maps.to_grid(
@@ -1194,8 +1227,10 @@ class ContextMapSensor(ContextSensor):
                     dtype=np.uint8,
                 )
                 self._pad_noise_map = self.unoccupied_cutout(self._pad_noise_map)
-
+                if self.p == 1.0:
+                    self._pad_noise_map = np.ones_like(self._pad_noise_map)
                 self.save_map(self._pad_noise_map, "pad_map")
+
             self.traj_map = np.zeros((self._map_resolution, self._map_resolution))
         if self.prev_ep_id != self.ep_id:
             self.agent_traj_map = np.zeros_like(self._topdown_maps[0])
@@ -1209,7 +1244,11 @@ class ContextMapSensor(ContextSensor):
             self._previous_xy_location = (a_y, a_x)
             self.prev_ep_id = self.ep_id
         local_maps = []
-        for tdm in self._topdown_maps:
+        top_down_maps = (
+            self._topdown_maps if not self.use_noisy_map else self._noisy_topdown_maps
+        )
+
+        for tdm in top_down_maps:
             curr_top_down_map = tdm.copy()
             a_x, a_y = self.get_global_agent_coord(curr_top_down_map)
             local_top_down_map, pad_top, pad_left = self.get_local_map(
@@ -1219,7 +1258,8 @@ class ContextMapSensor(ContextSensor):
                 local_noise_map, pad_top, pad_left = self.get_local_map(
                     self._pad_noise_map
                 )
-
+            self.save_map(tdm, "noisy_tdm")
+            self.save_map(local_top_down_map, "local_top_down_map")
             lh, lw = local_top_down_map.shape[:2]
             # self.save_map(local_top_down_map_corroded, 'local_top_down_map_corroded')
             local_top_down_map_filled = np.zeros(
@@ -1239,6 +1279,7 @@ class ContextMapSensor(ContextSensor):
                     pad_top : pad_top + lh, pad_left : pad_left + lw
                 ] = local_top_down_map
 
+            self.save_map(local_top_down_map_filled, "local_top_down_map_filled")
             local_map = local_top_down_map_filled.astype(np.float32)
             if np.isnan(local_map).any():
                 local_map = np.zeros_like(local_map)
@@ -2140,9 +2181,8 @@ class VelocityAction(SimulatorTaskAction):
         # For acceleration penalty
         self.prev_ang_vel = 0.0
 
-        robot_spawn_offset = (
-            np.array([0.0, 0.25, 0]) if "0.1" in config.ROBOT_URDF else None
-        )
+        robot_spawn_offset = np.array([0.0, config.SPAWN_OFFSET, 0])
+
         self.robot = eval(task._config.ROBOT)(robot_spawn_offset)
         self.ctrl_freq = config.CTRL_FREQ
 
