@@ -193,6 +193,9 @@ _C.TASK.PROXIMITY_SENSOR.MAX_DETECTION_RADIUS = 2.0
 # -----------------------------------------------------------------------------
 _C.TASK.CONTEXT_WAYPOINT_SENSOR = CN()
 _C.TASK.CONTEXT_WAYPOINT_SENSOR.TYPE = "ContextWaypointSensor"
+_C.TASK.CONTEXT_WAYPOINT_SENSOR.USE_NOISE = False
+_C.TASK.CONTEXT_WAYPOINT_SENSOR.NOISE_AMT = 0.0
+_C.TASK.CONTEXT_WAYPOINT_SENSOR.GET_WPTS_OFFLINE = True
 # -----------------------------------------------------------------------------
 # CONTEXT MAP SENSOR
 # -----------------------------------------------------------------------------
@@ -200,15 +203,22 @@ _C.TASK.CONTEXT_MAP_SENSOR = CN()
 _C.TASK.CONTEXT_MAP_SENSOR.TYPE = "ContextMapSensor"
 _C.TASK.CONTEXT_MAP_SENSOR.MAP_RESOLUTION = 100
 _C.TASK.CONTEXT_MAP_SENSOR.METERS_PER_PIXEL = 0.5
+_C.TASK.CONTEXT_MAP_SENSOR.PAD_NOISE = False
+_C.TASK.CONTEXT_MAP_SENSOR.SHIFT_NOISE = False
 _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT = CN()
 _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.NOISE_PERCENT = 0.0
 _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.MIN_CUTOUT = 2.0
 _C.TASK.CONTEXT_MAP_SENSOR.CUTOUT.MAX_CUTOUT = 10.0
+_C.TASK.CONTEXT_MAP_SENSOR.SHIFT = CN()
+_C.TASK.CONTEXT_MAP_SENSOR.SHIFT.NOISE_PERCENT = 25.0
 # -----------------------------------------------------------------------------
 # CONTEXT MAP TRAJECTORY SENSOR
 # -----------------------------------------------------------------------------
 _C.TASK.CONTEXT_MAP_TRAJECTORY_SENSOR = CN()
 _C.TASK.CONTEXT_MAP_TRAJECTORY_SENSOR.TYPE = "ContextMapTrajectorySensor"
+_C.TASK.CONTEXT_MAP_SENSOR.SHIFT_NOISE = False
+_C.TASK.CONTEXT_MAP_SENSOR.SHIFT = CN()
+_C.TASK.CONTEXT_MAP_SENSOR.SHIFT.NOISE_PERCENT = 25.0
 # -----------------------------------------------------------------------------
 # SUCCESS MEASUREMENT
 # -----------------------------------------------------------------------------

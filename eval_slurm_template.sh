@@ -7,6 +7,7 @@
 #SBATCH --ntasks-per-node 1
 #SBATCH --cpus-per-task 7
 #SBATCH --partition $PARTITION
+#SBATCH --exclude calculon,alexa,cortana,bmo,hal
 # ACCOUNT
 
 #SBATCH --chdir $HABITAT_REPO_PATH

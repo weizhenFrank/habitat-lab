@@ -60,6 +60,7 @@ cv2 = try_cv2_import()
 
 MAP_THICKNESS_SCALAR: int = 128
 
+import matplotlib.pyplot as plt
 import scipy.ndimage
 import torch
 import torch.nn.functional as F
@@ -802,7 +803,14 @@ class ContextWaypointSensor(ContextSensor):
         self._map_resolution = getattr(config, "MAP_RESOLUTION", 100)
         self.thresh = getattr(config, "THRESHOLD", 1)
         self.n_wpts = getattr(config, "N_WAYPOINTS", 1)
+        self.use_noise = getattr(config, "USE_NOISE", False)
+        self.get_waypoints_offline = getattr(config, "GET_WPTS_OFFLINE", True)
+        self.noise_amt = getattr(config, "NOISE_AMT", 0.0)
+        self._current_episode_id = None
 
+        self.curr_waypoint = np.array([0.0, 0.0])
+        self.waypoints_list = []
+        self.ctr = 0
         super().__init__(sim=sim, config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -842,12 +850,12 @@ class ContextWaypointSensor(ContextSensor):
         for i in range(len(shortest_path_points) - 1):
             curr_pt = shortest_path_points[i]
             next_pt = shortest_path_points[i + 1]
-            all_wpts.extend(self.interp_pts(curr_pt, next_pt, self.thresh))
-            if len(all_wpts) > n:
+            all_wpts.extend(self.interp_pts(curr_pt, next_pt, self.thresh)[1:])
+            if len(all_wpts) > n and n != -1:
                 break
-        all_wpts = all_wpts[1:]
-        waypoints = all_wpts[:n] if n < len(all_wpts) else all_wpts
-        return waypoints
+        if n != -1:
+            all_wpts = all_wpts[:n] if n < len(all_wpts) else all_wpts
+        return all_wpts
 
     def get_next_shortest_path_point(self, episode):
         agent_position = self._sim.get_agent_state().position
@@ -868,19 +876,75 @@ class ContextWaypointSensor(ContextSensor):
         return np.array(goal_vectors)
         # return goal_vector
 
+    def get_goal_vector(self, waypoint):
+        agent_state = self._sim.get_agent_state()
+        agent_position = agent_state.position
+        rotation_world_agent = agent_state.rotation
+        goal_vector = self._compute_pointgoal(
+            agent_position, rotation_world_agent, waypoint
+        )
+        return goal_vector
+
+    def get_global_waypoints(self, episode):
+        agent_position = self._sim.get_agent_state().position
+
+        for goal in episode.goals:
+            _shortest_path_points = self._sim.get_straight_shortest_path_points(
+                agent_position, goal.position
+            )
+            waypoints = self.get_n_wpts(_shortest_path_points, -1)
+            # self._sim.offline_waypoints_list = waypoints
+            if self.use_noise:
+                # do not add noise to goal
+                for idx, pt in enumerate(waypoints[:-1]):
+                    noise = np.random.uniform(
+                        -self.noise_amt, self.noise_amt, waypoints[0].shape
+                    )
+                    noise[1] = 0.0
+                    waypoints[idx] = pt + noise
+                # self._sim.offline_waypoints_list_noisy = waypoints
+        return np.array(waypoints)
+        # return goal_vector
+
     def get_observation(self, observations, episode, task, *args: Any, **kwargs: Any):
         try:
-            waypoint_vectors = self.get_next_shortest_path_point(episode)
-        except:
-            waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
+            if self.get_waypoints_offline:
+                episode_uniq_id = f"{episode.scene_id}_{episode.episode_id}"
+                if episode_uniq_id != self._current_episode_id:
+                    self.waypoints_list = self.get_global_waypoints(episode)
+                    self.curr_waypoint = self.waypoints_list[0]
+                    self._current_episode_id = episode_uniq_id
+                waypoint_vector = self.get_goal_vector(self.curr_waypoint)
+                if np.exp(waypoint_vector[0]) < 0.5 and len(self.waypoints_list) > 1:
+                    self.waypoints_list = self.waypoints_list[1:]
+                    self.curr_waypoint = self.waypoints_list[0]
+                    waypoint_vector = self.get_goal_vector(self.curr_waypoint)
+                # self._sim.curr_waypoint = self.curr_waypoint
+            else:
+                waypoint_vector = self.get_next_shortest_path_point(episode)
+                if self.use_noise:
+                    noise = np.random.uniform(
+                        -self.noise_amt, self.noise_amt, waypoint_vector.shape
+                    )
+                    print(
+                        f"added noise: {noise}, waypoint_vectors: {waypoint_vector}, new waypoint: {waypoint_vector + noise}"
+                    )
+                    waypoint_vector += noise
+                # if self.ctr == 0:
+                #     waypoint_vectors = self.get_next_shortest_path_point(episode)
+                # else:
+                #     waypoint_vectors = waypoint_vectors[self.ctr]
+        except Exception as e:
+            print("error in waypoint sensor: ", e)
+            waypoint_vector = np.array([0.0, 0.0], dtype=np.float32)
             task.is_stop_called = True
-        if len(waypoint_vectors.flatten()) < 2:
-            waypoint_vectors = np.array([0.0, 0.0], dtype=np.float32)
+        if len(waypoint_vector.flatten()) < 2:
+            waypoint_vector = np.array([0.0, 0.0], dtype=np.float32)
             task.is_stop_called = True
-        if np.isnan(waypoint_vectors).any() or np.isinf(waypoint_vectors).any():
-            waypoint_vectors = np.zeros_like(waypoint_vectors)
+        if np.isnan(waypoint_vector).any() or np.isinf(waypoint_vector).any():
+            waypoint_vector = np.zeros_like(waypoint_vector)
             task.is_stop_called = True
-        return waypoint_vectors.flatten()
+        return waypoint_vector.flatten()
 
 
 @registry.register_sensor
@@ -1033,7 +1097,7 @@ class ContextMapSensor(ContextSensor):
                     agent_radius_px=min(rs.shape[0:2]) // 32,
                 )
 
-            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/shift_maps/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
+            save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/rebuttal_shift_traj/{name}_metersperpix_{self.meters_per_pixel}_mapsize_{self._map_resolution}_{self.ep_id}_{self.ctr}.png"
             cv2.imwrite(
                 f"{save_name}",
                 rs,
@@ -1288,61 +1352,62 @@ class ContextMapSensor(ContextSensor):
         local_maps_stacked = np.stack(np.array(local_maps), axis=2)
         # add a separate channel for agents
         if self.separate_channel:
-            # agent_map = np.zeros((self._map_resolution, self._map_resolution))
-            ## add agent current position
-            # rr, cc = self.get_local_agent_coord(agent_map)
-            # agent_map[rr, cc] = 1.0
-            #
-            # ## add goal position
-            # rr, cc = self.get_local_goal_coord(agent_map, episode)
-            # agent_map[rr, cc] = 1.0
-            # local_maps_stacked = np.concatenate(
-            #     [local_maps_stacked, agent_map[:, :, None]], axis=2
-            # )
             if self.draw_agent_trajectory:
                 agent_map = self.agent_traj_map.copy()
             else:
                 agent_map = np.zeros((self._map_resolution, self._map_resolution))
-            agent_position = self._sim.get_agent_state().position
-            a_x, a_y = maps.to_grid(
-                agent_position[2],
-                agent_position[0],
-                self._topdown_maps[0].shape[0:2],
-                sim=self._sim,
-            )
-            x_max, y_max = agent_map.shape[:2]
-            rr, cc = disk((a_x, a_y), self.disk_radius)
-            agent_map[np.clip(rr, 0, x_max - 1), np.clip(cc, 0, y_max - 1)] = 1.0
 
-            goal = episode.goals[0]
-            goal_position = goal.position
-            g_x, g_y = maps.to_grid(
-                goal_position[2],
-                goal_position[0],
-                curr_top_down_map.shape[:2],
-                sim=self._sim,
-            )
-            x_max, y_max = agent_map.shape[:2]
-            rr, cc = disk((g_x, g_y), self.disk_radius)
-            agent_map[np.clip(rr, 0, x_max - 1), np.clip(cc, 0, y_max - 1)] = 1.0
+            # add agent current position
+            rr, cc = self.get_local_agent_coord(agent_map)
+            agent_map[rr, cc] = 1.0
 
-            if self.draw_agent_trajectory:
-                self.draw_trajectory(episode, agent_map)
-                self.agent_traj_map = agent_map
-
-            local_agent_map, pad_top, pad_left = self.get_crop_map(agent_map, a_x, a_y)
-
-            local_top_down_map_filled = np.zeros(
-                (self._map_resolution, self._map_resolution), dtype=np.uint8
-            )
-            lh, lw = local_agent_map.shape[:2]
-            local_top_down_map_filled[
-                pad_top : pad_top + lh, pad_left : pad_left + lw
-            ] = local_agent_map
-
+            ## add goal position
+            rr, cc = self.get_local_goal_coord(agent_map, episode)
+            agent_map[rr, cc] = 1.0
             local_maps_stacked = np.concatenate(
-                [local_maps_stacked, local_top_down_map_filled[:, :, None]], axis=2
+                [local_maps_stacked, agent_map[:, :, None]], axis=2
             )
+
+            # agent_position = self._sim.get_agent_state().position
+            # a_x, a_y = maps.to_grid(
+            #     agent_position[2],
+            #     agent_position[0],
+            #     self._topdown_maps[0].shape[0:2],
+            #     sim=self._sim,
+            # )
+            # x_max, y_max = agent_map.shape[:2]
+            # rr, cc = disk((a_x, a_y), self.disk_radius)
+            # agent_map[np.clip(rr, 0, x_max - 1), np.clip(cc, 0, y_max - 1)] = 1.0
+            #
+            # goal = episode.goals[0]
+            # goal_position = goal.position
+            # g_x, g_y = maps.to_grid(
+            #     goal_position[2],
+            #     goal_position[0],
+            #     curr_top_down_map.shape[:2],
+            #     sim=self._sim,
+            # )
+            # x_max, y_max = agent_map.shape[:2]
+            # rr, cc = disk((g_x, g_y), self.disk_radius)
+            # agent_map[np.clip(rr, 0, x_max - 1), np.clip(cc, 0, y_max - 1)] = 1.0
+
+            # if self.draw_agent_trajectory:
+            #     self.draw_trajectory(episode, agent_map)
+            #     self.agent_traj_map = agent_map
+            #
+            # local_agent_map, pad_top, pad_left = self.get_crop_map(agent_map, a_x, a_y)
+            #
+            # local_top_down_map_filled = np.zeros(
+            #     (self._map_resolution, self._map_resolution), dtype=np.uint8
+            # )
+            # lh, lw = local_agent_map.shape[:2]
+            # local_top_down_map_filled[
+            #     pad_top : pad_top + lh, pad_left : pad_left + lw
+            # ] = local_agent_map
+
+            # local_maps_stacked = np.concatenate(
+            #     [local_maps_stacked, local_top_down_map_filled[:, :, None]], axis=2
+            # )
         self.prev_position = self._sim.get_agent_state().position
         return local_maps_stacked.astype(np.float32)
 
@@ -1362,6 +1427,8 @@ class ContextMapTrajectorySensor(ContextMapSensor):
         super().__init__(sim=sim, config=config)
 
         self.use_topdown_map = getattr(config, "USE_TOPDOWN_MAP", False)
+
+        self.use_shift_noise = getattr(config, "SHIFT_NOISE", False)
         self.blank_top_down_map = None
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -1377,16 +1444,27 @@ class ContextMapTrajectorySensor(ContextMapSensor):
     def save_map(self, top_down_map, name, agent_coord=None):
         if self.save_map_debug:
             if top_down_map.ndim > 2:
+                print(
+                    "top down map shape: ", top_down_map.shape, top_down_map.shape[-1]
+                )
                 for m in range(top_down_map.shape[-1]):
+                    print("m: ", m)
                     color_map = maps.colorize_topdown_map(
                         np.array(top_down_map[:, :, m], dtype=np.uint8)
                     )
-                    save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/maps2/{name}_{m}.png"
+                    save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/rebuttal_shift_traj/{name}_{m}.png"
                     cv2.imwrite(
                         f"{save_name}",
                         color_map,
                     )
                     print(f"saved: {save_name}")
+            else:
+                save_name = f"/coc/testnvme/jtruong33/google_nav/habitat-lab/rebuttal_shift_traj/{name}.png"
+                cv2.imwrite(
+                    f"{save_name}",
+                    top_down_map * 255.0,
+                )
+                print(f"saved: {save_name}")
 
     def draw_trajectory(self, episode, top_down_map):
         agent_position = self._sim.get_agent_state().position
@@ -1394,6 +1472,17 @@ class ContextMapTrajectorySensor(ContextMapSensor):
             _shortest_path_points = self._sim.get_straight_shortest_path_points(
                 agent_position, goal.position
             )
+            if self.use_shift_noise:
+                # do not add noise to goal
+                for idx, pt in enumerate(_shortest_path_points[:-1]):
+                    noise = np.random.uniform(
+                        -self.shift_noise_percent / 100,
+                        self.shift_noise_percent / 100,
+                        _shortest_path_points[0].shape,
+                    )
+                    noise[1] = 0.0
+                    _shortest_path_points[idx] = pt + noise
+
             self._shortest_path_points = [
                 maps.to_grid(
                     p[2],
@@ -1422,6 +1511,7 @@ class ContextMapTrajectorySensor(ContextMapSensor):
 
         if episode_uniq_id != self._current_episode_id:
             self._topdown_maps = []
+            self._noisy_topdown_maps = []
             for mpp in self.stacked_map_res:
                 if mpp < 0:
                     self.mpp = maps.calculate_meters_per_pixel(
@@ -1439,21 +1529,29 @@ class ContextMapTrajectorySensor(ContextMapSensor):
                         "PATH DOES NOT EXIST: ",
                         os.path.join(MAPS_DIR, f"{tdm_name}.npy"),
                     )
-                    self._topdown_maps.append(
-                        maps.get_topdown_map_from_sim(
-                            self._sim,
-                            map_resolution=self._map_resolution,
-                            draw_border=False,
-                            meters_per_pixel=mpp,
-                        )
+                    tdm = maps.get_topdown_map_from_sim(
+                        self._sim,
+                        map_resolution=self._map_resolution,
+                        draw_border=False,
+                        meters_per_pixel=mpp,
                     )
+                    self._topdown_maps.append(tdm)
+                    if self.use_shift_noise:
+                        self.blank_top_down_map_shift = np.zeros_like(tdm)
+                        self.draw_trajectory(episode, self.blank_top_down_map_shift)
+                        # self.blank_top_down_map_shift = self.shift_noise(
+                        #     self.blank_top_down_map_shift
+                        # )
+
             self._current_episode_id = episode_uniq_id
 
         local_maps = []
         for idx, tdm in enumerate(self._topdown_maps):
-            self.blank_top_down_map = np.zeros_like(tdm)
-            self.draw_trajectory(episode, self.blank_top_down_map)
-
+            if self.use_shift_noise:
+                self.blank_top_down_map = self.blank_top_down_map_shift.copy()
+            else:
+                self.blank_top_down_map = np.zeros_like(tdm)
+                self.draw_trajectory(episode, self.blank_top_down_map)
             a_x, a_y = self.get_global_agent_coord(self.blank_top_down_map)
 
             local_traj_map, pad_top, pad_left = self.get_local_map(
@@ -1480,6 +1578,7 @@ class ContextMapTrajectorySensor(ContextMapSensor):
                     pad_top : pad_top + lh, pad_left : pad_left + lw, 1
                 ] = local_top_down_map
             local_map = local_top_down_map_filled.astype(np.float32)
+
             if np.isnan(local_map).any():
                 local_map = np.zeros_like(map)
                 task.is_stop_called = True
@@ -1897,6 +1996,21 @@ class TopDownMap(Measure):
             self._sim.get_agent_state().position
         )
 
+        # for waypoint_pos in self._sim.offline_waypoints_list_noisy:
+        #     self._draw_point(
+        #         waypoint_pos,
+        #         maps.MAP_INVALID_POINT,
+        #     )
+        # for waypoint_pos in self._sim.offline_waypoints_list:
+        #     self._draw_point(
+        #         waypoint_pos,
+        #         maps.MAP_SOURCE_POINT_INDICATOR,
+        #     )
+        #
+        # self._draw_point(
+        #     self._sim.curr_waypoint,
+        #     maps.MAP_TARGET_POINT_INDICATOR,
+        # )
         self._metric = {
             "map": house_map,
             "fog_of_war_mask": self._fog_of_war_mask,
@@ -2507,7 +2621,7 @@ class VelocityAction(SimulatorTaskAction):
                 agent_observations["num_steps"] = kwargs["num_steps"]
 
             self.prev_ang_vel = 0.0
-            self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
+            # self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
             self.prev_rs = goal_rigid_state.translation
             agent_observations = self.check_nans_in_obs(task, agent_observations)
             return agent_observations
@@ -2549,7 +2663,7 @@ class VelocityAction(SimulatorTaskAction):
                     agent_observations["num_steps"] = kwargs["num_steps"]
 
                 self.prev_ang_vel = 0.0
-                self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
+                # self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
                 self.prev_rs = goal_rigid_state.translation
                 agent_observations = self.check_nans_in_obs(task, agent_observations)
                 return agent_observations
@@ -2574,7 +2688,7 @@ class VelocityAction(SimulatorTaskAction):
             agent_observations["num_steps"] = kwargs["num_steps"]
 
         self.prev_ang_vel = ang_vel
-        self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
+        # self.put_text(task, agent_observations, lin_vel, hor_vel, ang_vel)
         self.prev_rs = goal_rigid_state.translation
         agent_observations = self.check_nans_in_obs(task, agent_observations)
         return agent_observations

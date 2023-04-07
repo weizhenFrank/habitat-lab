@@ -492,6 +492,7 @@ def colorize_draw_local_map_and_fit_to_height(
     :param topdown_map_info: The output of the TopDownMap measure
     :param output_height: The desired output height
     """
+    print("LOCAL MAP NDIM: ", local_map.ndim)
     if local_map.ndim < 2:
         local_map = topdown_map_info["map"]
     elif local_map.ndim == 2:

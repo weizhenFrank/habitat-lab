@@ -37,6 +37,7 @@ parser.add_argument("-nap", "--no-avgpool", default=False, action="store_true")
 parser.add_argument(
     "-nvi", "--normalize-visual-inputs", default=False, action="store_true"
 )
+parser.add_argument("-so", "--spawn-offset", type=float, default=0.65)
 parser.add_argument("-cp", "--collision-penalty", type=float, default=0.003)
 parser.add_argument("-bp", "--backwards-penalty", type=float, default=0.03)
 parser.add_argument("-ap", "--acc-penalty", type=float, default=0.0)
@@ -75,6 +76,9 @@ parser.add_argument("-mpp", "--meters-per-pixel", type=float, default=0.5)
 parser.add_argument("-smpp", "--stacked-mpp", nargs="+")
 parser.add_argument("-rotm", "--rotate-map", default=False, action="store_true")
 parser.add_argument("-padn", "--pad-noise", default=False, action="store_true")
+parser.add_argument("-shiftn", "--shift-noise", default=False, action="store_true")
+parser.add_argument("-wptn", "--waypoint-noise", default=False, action="store_true")
+parser.add_argument("-wpto", "--waypoints-offline", default=False, action="store_true")
 parser.add_argument("-lpg", "--log-pointgoal", default=False, action="store_true")
 parser.add_argument("-normpg", "--norm-pointgoal", default=False, action="store_true")
 parser.add_argument("-lstd", "--log-std", default=False, action="store_true")
@@ -115,7 +119,9 @@ parser.add_argument("-rn", "--redwood_noise", default=False, action="store_true"
 parser.add_argument("-mb", "--median_blur", default=False, action="store_true")
 parser.add_argument("-ks", "--kernel_size", type=float, default=9)
 parser.add_argument("-np", "--noise_percent", type=float, default=0.4)
-parser.add_argument("-cn", "--cutout_noise", default=False, action="store_true")
+parser.add_argument("-snp", "--shift-noise-percent", type=float, default=20.0)
+parser.add_argument("-cn", "--cutout-noise", default=False, action="store_true")
+parser.add_argument("-ce", "--cutout-num-erasing", type=int, default=1)
 parser.add_argument("-curr", "--curriculum", default=False, action="store_true")
 
 # Evaluation
@@ -335,6 +341,18 @@ if not args.eval:
         elif i.startswith("    PAD_NOISE:"):
             if args.pad_noise:
                 task_yaml_data[idx] = f"    PAD_NOISE: True"
+        elif i.startswith("    SHIFT_NOISE:"):
+            if args.shift_noise:
+                task_yaml_data[idx] = f"    SHIFT_NOISE: True"
+        elif i.startswith("    USE_NOISE:"):
+            if args.waypoint_noise:
+                task_yaml_data[idx] = f"    USE_NOISE: True"
+        elif i.startswith("    NOISE_AMT:"):
+            if args.waypoint_noise:
+                task_yaml_data[idx] = f"    NOISE_AMT: {args.context_sensor_noise}"
+        elif i.startswith("    GET_WPTS_OFFLINE:"):
+            if args.waypoint_noise:
+                task_yaml_data[idx] = f"    GET_WPTS_OFFLINE: {args.waypoints_offline}"
         elif i.startswith("    USE_TOPDOWN_MAP:"):
             if args.use_topdown_map:
                 task_yaml_data[idx] = f"    USE_TOPDOWN_MAP: True"
@@ -348,7 +366,12 @@ if not args.eval:
             if args.multi_channel:
                 task_yaml_data[idx] = f"    MULTI_CHANNEL: True"
         elif i.startswith("      NOISE_PERCENT:"):
-            task_yaml_data[idx] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            if args.pad_noise:
+                task_yaml_data[
+                    idx
+                ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            elif args.shift_noise:
+                task_yaml_data[idx] = f"      NOISE_PERCENT: {args.shift_noise_percent}"
         elif i.startswith("    DEBUG:"):
             task_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("    CONTEXT_TYPE:"):
@@ -566,6 +589,10 @@ if not args.eval:
                 exp_yaml_data[idx] = "    name: PointNavContextSMTPolicy"
             if args.policy_name == "cma":
                 exp_yaml_data[idx] = "    name: PointNavContextCMAPolicy"
+            if args.policy_name == "cmas":
+                exp_yaml_data[idx] = "    name: PointNavContextCMASinglePolicy"
+            if args.policy_name == "double":
+                exp_yaml_data[idx] = "    name: PointNavContextDoublePolicy"
         elif i.startswith("      ENABLED_TRANSFORMS: [ ]"):
             if args.pepper_noise:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['PEPPER_NOISE']"
@@ -573,6 +600,8 @@ if not args.eval:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
             elif args.median_blur:
                 exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
+        elif i.startswith("        NUM_ERASING:"):
+            exp_yaml_data[idx] = f"        NUM_ERASING: {args.cutout_num_erasing}"
         elif i.startswith("        NOISE_PERCENT:"):
             exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
         elif i.startswith("        KERNEL_SIZE:"):
@@ -748,6 +777,18 @@ else:
         elif i.startswith("    PAD_NOISE:"):
             if args.pad_noise:
                 eval_yaml_data[idx] = f"    PAD_NOISE: True"
+        elif i.startswith("    SHIFT_NOISE:"):
+            if args.shift_noise:
+                eval_yaml_data[idx] = f"    SHIFT_NOISE: True"
+        elif i.startswith("    USE_NOISE:"):
+            if args.waypoint_noise:
+                eval_yaml_data[idx] = f"    USE_NOISE: True"
+        elif i.startswith("    NOISE_AMT:"):
+            if args.waypoint_noise:
+                eval_yaml_data[idx] = f"    NOISE_AMT: {args.context_sensor_noise}"
+        elif i.startswith("    GET_WPTS_OFFLINE:"):
+            if args.waypoint_noise:
+                eval_yaml_data[idx] = f"    GET_WPTS_OFFLINE: {args.waypoints_offline}"
         elif i.startswith("    SECOND_CHANNEL:"):
             if args.second_channel:
                 eval_yaml_data[idx] = f"    SECOND_CHANNEL: True"
@@ -758,7 +799,12 @@ else:
             if args.draw_trajectory:
                 eval_yaml_data[idx] = f"    DRAW_TRAJECTORY: True"
         elif i.startswith("      NOISE_PERCENT:"):
-            eval_yaml_data[idx] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            if args.pad_noise:
+                eval_yaml_data[
+                    idx
+                ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            elif args.shift_noise:
+                eval_yaml_data[idx] = f"      NOISE_PERCENT: {args.shift_noise_percent}"
         elif i.startswith("    DEBUG:"):
             eval_yaml_data[idx] = f'    DEBUG: "{args.context_debug}"'
         elif i.startswith("    USE_TOPDOWN_MAP:"):
@@ -848,6 +894,8 @@ else:
             eval_yaml_data[idx] = f"  SUCCESS_DISTANCE: {robot_goal}"
         elif i.startswith("    SUCCESS_DISTANCE:"):
             eval_yaml_data[idx] = f"    SUCCESS_DISTANCE: {robot_goal}"
+        elif i.startswith("      SPAWN_OFFSET:"):
+            eval_yaml_data[idx] = f"      SPAWN_OFFSET: {args.spawn_offset}"
         elif i.startswith("SEED:"):
             eval_yaml_data[idx] = f"SEED: {args.seed}"
         elif i.startswith("  DATA_PATH:"):
@@ -913,6 +961,10 @@ else:
                 data_path = (
                     "/coc/testnvme/jtruong33/data/datasets/blender/val/val.json.gz"
                 )
+            elif args.dataset == "blender_1157":
+                data_path = (
+                    "/coc/testnvme/jtruong33/data/datasets/blender/1157/1157.json.gz"
+                )
             eval_yaml_data[idx] = f"  DATA_PATH: {data_path}"
         elif i.startswith("      noise_multiplier:"):
             eval_yaml_data[idx] = f"      noise_multiplier: {args.noise_percent}"
@@ -957,6 +1009,10 @@ else:
                 eval_exp_yaml_data[idx] = "    name: PointNavContextSMTPolicy"
             if args.policy_name == "cma":
                 eval_exp_yaml_data[idx] = "    name: PointNavContextCMAPolicy"
+            if args.policy_name == "cmas":
+                eval_exp_yaml_data[idx] = "    name: PointNavContextCMASinglePolicy"
+            if args.policy_name == "double":
+                eval_exp_yaml_data[idx] = "    name: PointNavContextDoublePolicy"
         elif i.startswith("  COLLISION_PENALTY:"):
             eval_exp_yaml_data[idx] = f"  COLLISION_PENALTY: {args.collision_penalty}"
         elif i.startswith("CHECKPOINT_FOLDER:"):
@@ -1053,8 +1109,15 @@ else:
                 eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['CUTOUT']"
             elif args.median_blur:
                 eval_exp_yaml_data[idx] = "      ENABLED_TRANSFORMS: ['MEDIAN_BLUR']"
-        elif i.startswith("        NOISE_PERCENT:"):
-            eval_exp_yaml_data[idx] = f"        NOISE_PERCENT: {args.noise_percent}"
+        elif i.startswith("      NOISE_PERCENT:"):
+            if args.pad_noise:
+                eval_exp_yaml_data[
+                    idx
+                ] = f"      NOISE_PERCENT: {args.context_sensor_noise}"
+            elif args.shift_noise:
+                eval_exp_yaml_data[
+                    idx
+                ] = f"      NOISE_PERCENT: {args.shift_noise_percent}"
         elif i.startswith("        KERNEL_SIZE:"):
             eval_exp_yaml_data[idx] = f"        KERNEL_SIZE: {args.kernel_size}"
         elif i.startswith("    context_hidden_size:"):
@@ -1133,6 +1196,9 @@ else:
         slurm_data = slurm_data.replace("$PARTITION", args.partition)
         if args.partition == "overcap":
             slurm_data = slurm_data.replace("# ACCOUNT", "#SBATCH --account overcap")
+        if args.exclude != "":
+            orig = "#SBATCH --exclude calculon,alexa,cortana,bmo"
+            slurm_data = slurm_data.replace(orig, orig + f",{args.exclude}")
     slurm_path = os.path.join(eval_dst_dir, eval_experiment_name + ".sh")
     with open(slurm_path, "w") as f:
         f.write(slurm_data)
