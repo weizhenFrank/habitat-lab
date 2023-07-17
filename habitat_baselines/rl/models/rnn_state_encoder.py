@@ -292,7 +292,7 @@ class RNNStateEncoder(nn.Module):
         )
 
         x, hidden_states = self.rnn(
-            x.unsqueeze(0), self.unpack_hidden(hidden_states)
+            x.unsqueeze(0), self.unpack_hidden(hidden_states.contiguous()) # By FrankLiu, add .contiguous()
         )
         hidden_states = self.pack_hidden(hidden_states)
 

@@ -82,6 +82,7 @@ class BaseTrainer:
         """
         self.device = (
             torch.device("cuda", self.config.TORCH_GPU_ID)
+   
             if torch.cuda.is_available()
             else torch.device("cpu")
         )
