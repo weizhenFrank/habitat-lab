@@ -253,7 +253,8 @@ def init_distrib_slurm(
 
     local_rank, world_rank, world_size = get_distrib_size()
 
-    master_port = int(os.environ.get("MASTER_PORT", DEFAULT_PORT))
+    # master_port = int(os.environ.get("MASTER_PORT", DEFAULT_PORT))
+    master_port = 29600
     if SLURM_JOBID is not None:
         master_port += int(SLURM_JOBID) % int(
             os.environ.get("MASTER_PORT_RANGE", DEFAULT_PORT_RANGE)

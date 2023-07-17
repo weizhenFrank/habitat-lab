@@ -5,13 +5,13 @@ VERBOSE: False
 TRAINER_NAME: "ddppo"
 ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
-TORCH_GPU_ID: 0
-VIDEO_OPTION: []
-TENSORBOARD_DIR:    '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/tb'
-VIDEO_DIR:          '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/video_dir'
-EVAL_CKPT_PATH_DIR: '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
-CHECKPOINT_FOLDER:  '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/checkpoints'
-TXT_DIR:            '/coc/pskynet3/jtruong33/develop/flash_results/cont_ctrl_results/junk/txts'
+TORCH_GPU_ID:  0
+VIDEO_OPTION: ['disk', 'tensorboard']
+TENSORBOARD_DIR:    './results/tb'
+VIDEO_DIR:          './results/video_dir'
+EVAL_CKPT_PATH_DIR: './results/checkpoints'
+CHECKPOINT_FOLDER:  './results/checkpoints'
+TXT_DIR:            './results/checkpoints/txts'
 TEST_EPISODE_COUNT: -1
 NUM_ENVIRONMENTS: 8
 SENSORS: ["DEPTH_SENSOR"]
