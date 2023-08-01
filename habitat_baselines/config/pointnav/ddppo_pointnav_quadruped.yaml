@@ -1,3 +1,7 @@
+OVERRIDE:
+  NUM_CHECKPOINTS: 200
+  TOTAL_NUM_STEPS: 1000000000
+
 BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped.yaml"
 TOTAL_NUM_STEPS: 5e8
 
