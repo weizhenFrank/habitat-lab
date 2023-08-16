@@ -32,6 +32,11 @@ RL:
   POLICY:
     name: "PointNavResNetPolicy"
     action_distribution_type: "gaussian"
+  OBS_TRANSFORMS:
+      CENTER_CROPPER: 
+      HEIGHT: 240
+      WIDTH: 320
+        
   PPO:
     # ppo params
     clip_param: 0.2
