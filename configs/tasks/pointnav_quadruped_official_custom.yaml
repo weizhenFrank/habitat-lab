@@ -12,7 +12,7 @@ SIMULATOR:
   RGB_SENSOR:
     WIDTH: 480
     HEIGHT: 424
-    HFOV: 70
+    HFOV: 90
     ORIENTATION: [-0.7, 0.0, 0.0]
     # ORIENTATION: [0, 0, 0]
     # POSITION: [0, 0.69, -0.1778]
@@ -22,7 +22,7 @@ SIMULATOR:
     HEIGHT: 424
     MAX_DEPTH: 10.0
     MIN_DEPTH: 0.1
-    HFOV: 70
+    HFOV: 90
     ORIENTATION: [0.0, 0.0, 0.0]
     POSITION: [0.0, 0.0, 0.0]
 TASK:
