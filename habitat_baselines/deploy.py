@@ -279,6 +279,8 @@ class Deploy(BaseRLTrainer):
         goal = torch.tensor(goal, dtype=torch.float32, device='cpu').unsqueeze(0)
         
         return TensorDict({'depth':img, 'pointgoal_with_gps_compass': goal})
+    
+
 
 
 
