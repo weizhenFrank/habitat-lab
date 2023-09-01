@@ -639,7 +639,14 @@ class PPOTrainer(BaseRLTrainer):
             deltas["reward"] / deltas["count"],
             self.num_steps_done,
         )
-
+        # import pdb; pdb.set_trace()
+        #### add images to tensorboard
+        writer.add_image(
+            "depth",
+            (self.rollouts.buffers["observations"]['depth'][0][0]).permute(2, 0, 1).cpu(),
+            self.num_steps_done,
+        )
+        
         # Check to see if there are any metrics
         # that haven't been logged yet
         metrics = {

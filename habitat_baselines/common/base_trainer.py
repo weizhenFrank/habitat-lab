@@ -122,11 +122,11 @@ class BaseTrainer:
                     current_ckpt = None
                     while current_ckpt is None:
                         current_ckpt = poll_checkpoint_folder(
-                            self.config.EVAL_CKPT_PATH_DIR, prev_ckpt_ind
+                            self.config.EVAL_CKPT_PATH_DIR, prev_ckpt_ind, step_freq=10
                         )
                         time.sleep(2)  # sleep for 2 secs before polling again
                     logger.info(f"=======current_ckpt: {current_ckpt}=======")
-                    prev_ckpt_ind += 1
+                    prev_ckpt_ind += 10
                     self._eval_checkpoint(
                         checkpoint_path=current_ckpt,
                         writer=writer,

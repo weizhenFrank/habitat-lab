@@ -1,4 +1,4 @@
-BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped_official_debug.yaml"
+BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped_official_depth.yaml"
 TOTAL_NUM_STEPS: 5e8
 
 VERBOSE: False
@@ -7,13 +7,13 @@ ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID:  0
 VIDEO_OPTION: ['disk', 'tensorboard']
-TENSORBOARD_DIR:    './results/tb/official_debug_depth2'
-VIDEO_DIR:          './results/video_dir/official_debug_depth2'
-EVAL_CKPT_PATH_DIR: './results/checkpoints/official/ckpt.71.pth'
-CHECKPOINT_FOLDER:  './results/checkpoints/official_debug_depth2'
-TXT_DIR:            './results/checkpoints/txts/official_debug_depth2'
+TENSORBOARD_DIR:    './results/tb/official_depth'
+VIDEO_DIR:          './results/video_dir/official_depth'
+EVAL_CKPT_PATH_DIR: './results/checkpoints/official_depth'
+CHECKPOINT_FOLDER:  './results/checkpoints/official_depth'
+TXT_DIR:            './results/checkpoints/txts/official_depth'
 TEST_EPISODE_COUNT: -1
-NUM_ENVIRONMENTS: 2
+NUM_ENVIRONMENTS: 8
 SENSORS: ["DEPTH_SENSOR"]
 NUM_UPDATES: -1
 LOG_INTERVAL: 10

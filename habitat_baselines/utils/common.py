@@ -238,7 +238,7 @@ def get_checkpoint_id(ckpt_path: str) -> Optional[int]:
 
 
 def poll_checkpoint_folder(
-    checkpoint_folder: str, previous_ckpt_ind: int
+    checkpoint_folder: str, previous_ckpt_ind: int, step_freq: int = 1
 ) -> Optional[str]:
     r"""Return (previous_ckpt_ind + 1)th checkpoint in checkpoint folder
     (sorted by time of last modification).
@@ -258,7 +258,7 @@ def poll_checkpoint_folder(
         filter(os.path.isfile, glob.glob(checkpoint_folder + "/*"))
     )
     models_paths.sort(key=os.path.getmtime)
-    ind = previous_ckpt_ind + 1
+    ind = previous_ckpt_ind + step_freq
     if ind < len(models_paths):
         return models_paths[ind]
     return None
