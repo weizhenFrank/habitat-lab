@@ -209,7 +209,7 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
             egocentric_view_l.append(rgb)
 
     # draw depth map if observation has depth info
-    for k in ["depth", "spot_right_depth", "spot_left_depth"]:
+    for k in ["depth", "spot_right_depth", "spot_left_depth", "l_depth", "r_depth", "b_depth"]:
         if k in observation:
             depth_map = observation[k].squeeze() * 255.0
             if not isinstance(depth_map, np.ndarray):

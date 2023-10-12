@@ -335,7 +335,8 @@ class Spot(A1):
         # self.robot_spawn_offset = np.array([0.0, 0.60, 0])
         self.robot_spawn_offset = np.array([0.0, 0.625, 0])
         self.robot_dist_to_goal = 0.425
-        self.camera_spawn_offset = np.array([0.0, 0.325, -0.325])
+        self.camera_spawn_offset = np.array([0.0, 0.625, -0.4164])
+        # self.camera_spawn_offset = np.array([0.0, 0, 0])
         self.urdf_params = np.array([32.70, 0.88, 1.10, 0.50])
 
         self.pos_gain = 0.4

@@ -4,7 +4,7 @@ ENVIRONMENT:
   CURRICULUM: False
 SIMULATOR:
   AGENT_0:
-    SENSORS: ['DEPTH_SENSOR']
+    SENSORS: ['DEPTH_SENSOR', 'L_DEPTH', 'R_DEPTH', 'B_DEPTH']
     HEIGHT: 0.60
     RADIUS: 0.3
   HABITAT_SIM_V0:
@@ -12,19 +12,44 @@ SIMULATOR:
   RGB_SENSOR:
     WIDTH: 320
     HEIGHT: 240
-    HFOV: 70
-    ORIENTATION: [-0.7, 0.0, 0.0]
-    # ORIENTATION: [0, 0, 0]
-    # POSITION: [0, 0.69, -0.1778]
-    POSITION: [0.0, 1.1, 1.0]
+    HFOV: 90
+    ORIENTATION: [0.0,0, 0]
+    # POSITION: [0.0, 0.325, -0.325]
+    POSITION: [0.0, 0.625, -0.4164]
+  L_DEPTH:
+    WIDTH: 320
+    HEIGHT: 240
+    MAX_DEPTH: 5.0
+    MIN_DEPTH: 0.1
+    HFOV: 90
+    ORIENTATION: [0.0, 1.5708, 0.0] # 90 degree
+    POSITION: [-0.1, 0.625, 0.1]
+  R_DEPTH:
+    WIDTH: 320
+    HEIGHT: 240
+    MAX_DEPTH: 5.0
+    MIN_DEPTH: 0.1
+    HFOV: 90
+    ORIENTATION: [0.0, -1.5708, 0.0] # 90 degree
+    POSITION: [0.1, 0.625, 0.1]
+
+  B_DEPTH:
+    WIDTH: 320
+    HEIGHT: 240
+    MAX_DEPTH: 5.0
+    MIN_DEPTH: 0.1
+    HFOV: 90
+    ORIENTATION: [0.0, 3.1416, 0.0] # 180 degree
+    POSITION: [0.0, 0.625, 0.4164]
+  
   DEPTH_SENSOR:
     WIDTH: 320
     HEIGHT: 240
-    MAX_DEPTH: 1.0
+    MAX_DEPTH: 5.0
     MIN_DEPTH: 0.1
     HFOV: 90
     ORIENTATION: [0.0, 0.0, 0.0]
-    POSITION: [0.0, 0.0, 0.0]
+    POSITION:  [0.0, 0.625, -0.4164]
 TASK:
   TYPE: MultiNav-v0
   ROBOT: 'Spot'

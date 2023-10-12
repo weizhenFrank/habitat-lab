@@ -7,3 +7,8 @@
 habitat-sim/
 results/
 data/
+*.png
+*.jpg
+core.*
+*.log
+train.log

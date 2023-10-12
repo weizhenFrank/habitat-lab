@@ -74,6 +74,7 @@ habitat/utils/visualizations/utils.py
 habitat/utils/visualizations/assets/human.png
 habitat/utils/visualizations/assets/maps_topdown_agent_sprite/100x100.png
 habitat_baselines/__init__.py
+habitat_baselines/deploy.py
 habitat_baselines/py.typed
 habitat_baselines/run.py
 habitat_baselines/agents/__init__.py

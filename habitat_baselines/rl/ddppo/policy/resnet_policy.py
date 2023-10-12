@@ -114,9 +114,11 @@ class ResNetEncoder(nn.Module):
             [k.endswith("_gray") for k in observation_space.spaces.keys()]
         )
 
-        self.using_one_depth_camera = "depth" in observation_space.spaces
-        self.using_two_depth_cameras = any(
+        self.using_one_depth_camera = "depth" in observation_space.spaces and not any(
             [k.endswith("_depth") for k in observation_space.spaces.keys()]
+        )
+        self.using_two_depth_cameras = any(
+            [k.startswith("spot_") for k in observation_space.spaces.keys()]
         )
 
         self._n_input_rgb, self._n_input_depth, self._n_input_gray = [
@@ -229,7 +231,13 @@ class ResNetEncoder(nn.Module):
                     dim=2,
                 )
             else:
-                raise Exception("Not implemented")
+                
+                # Extract all keys in observations that end with "_depth" or are equal to "depth"
+                depth_keys = [k for k in observations.keys() if k.endswith("_depth") or k == "depth"]
+                
+                # Extract the corresponding depth observations and concatenate them along the channel dimension
+                depth_observations = torch.cat([observations[k] for k in depth_keys], dim=3)
+                
 
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             depth_observations = depth_observations.permute(0, 3, 1, 2)

@@ -7,14 +7,16 @@ ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID:  0
 VIDEO_OPTION: ['disk', 'tensorboard']
-TENSORBOARD_DIR:    './results/tb/official_debug_depth2'
-VIDEO_DIR:          './results/video_dir/official_debug_depth2'
-EVAL_CKPT_PATH_DIR: './results/checkpoints/official/ckpt.71.pth'
-CHECKPOINT_FOLDER:  './results/checkpoints/official_debug_depth2'
-TXT_DIR:            './results/checkpoints/txts/official_debug_depth2'
+TENSORBOARD_DIR:    './results/tb/official_mulcam_debug_1'
+VIDEO_DIR:          './results/video_dir/official_mulcam_debug_1'
+EVAL_CKPT_PATH_DIR: './results/checkpoints/official_mulcam/ckpt.30.pth'
+CHECKPOINT_FOLDER:  './results/checkpoints/official_mulcam_debug_1'
+TXT_DIR:            './results/checkpoints/txts/official_mulcam_debug_1'
 TEST_EPISODE_COUNT: -1
-NUM_ENVIRONMENTS: 2
-SENSORS: ["DEPTH_SENSOR"]
+NUM_ENVIRONMENTS: 8
+# SENSORS: ['DEPTH_SENSOR']
+SENSORS: ['DEPTH_SENSOR', 'L_DEPTH', 'R_DEPTH', 'B_DEPTH']
+# SENSORS: ['DEPTH_SENSOR', 'RGB_SENSOR']
 NUM_UPDATES: -1
 LOG_INTERVAL: 10
 NUM_CHECKPOINTS: 100

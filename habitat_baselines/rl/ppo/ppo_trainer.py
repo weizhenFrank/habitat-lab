@@ -111,13 +111,12 @@ class PPOTrainer(BaseRLTrainer):
     def obs_space(self):
         if self._obs_space is None and self.envs is not None:
             self._obs_space = self.envs.observation_spaces[0]
-
         return self._obs_space
 
     @obs_space.setter
     def obs_space(self, new_obs_space):
         self._obs_space = new_obs_space
-
+        
     def _all_reduce(self, t: torch.Tensor) -> torch.Tensor:
         r"""All reduce helper method that moves things to the correct
         device and only runs if distributed
@@ -145,6 +144,7 @@ class PPOTrainer(BaseRLTrainer):
 
         policy = baseline_registry.get_policy(self.config.RL.POLICY.name)
         observation_space = self.obs_space
+        
         self.obs_transforms = get_active_obs_transforms(self.config)
         observation_space = apply_obs_transforms_obs_space(
             observation_space, self.obs_transforms
@@ -323,6 +323,7 @@ class PPOTrainer(BaseRLTrainer):
         self.rollouts.to(self.device)
 
         observations = self.envs.reset()
+
         batch = batch_obs(
             observations, device=self.device, cache=self._obs_batching_cache
         )
@@ -932,6 +933,7 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = self.agent.actor_critic
 
         observations = self.envs.reset()
+
         batch = batch_obs(
             observations, device=self.device, cache=self._obs_batching_cache
         )

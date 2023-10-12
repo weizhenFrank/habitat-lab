@@ -313,6 +313,29 @@ SIMULATOR_SENSOR.ORIENTATION = [0.0, 0.0, 0.0]  # Euler's angles
 _C.SIMULATOR.RGB_SENSOR = SIMULATOR_SENSOR.clone()
 _C.SIMULATOR.RGB_SENSOR.TYPE = "HabitatSimRGBSensor"
 # -----------------------------------------------------------------------------
+# MultiDepthSensor
+# -----------------------------------------------------------------------------
+_C.SIMULATOR.L_DEPTH = SIMULATOR_SENSOR.clone()
+_C.SIMULATOR.L_DEPTH.TYPE = "HabitatSimDepthSensor"
+_C.SIMULATOR.L_DEPTH.UUID = "l_depth"
+_C.SIMULATOR.L_DEPTH.MIN_DEPTH = 0.0
+_C.SIMULATOR.L_DEPTH.MAX_DEPTH = 5.0
+_C.SIMULATOR.L_DEPTH.NORMALIZE_DEPTH = True
+
+_C.SIMULATOR.R_DEPTH = SIMULATOR_SENSOR.clone()
+_C.SIMULATOR.R_DEPTH.TYPE = "HabitatSimDepthSensor"
+_C.SIMULATOR.R_DEPTH.UUID = "r_depth"
+_C.SIMULATOR.R_DEPTH.MIN_DEPTH = 0.0
+_C.SIMULATOR.R_DEPTH.MAX_DEPTH = 5.0
+_C.SIMULATOR.R_DEPTH.NORMALIZE_DEPTH = True
+
+_C.SIMULATOR.B_DEPTH = SIMULATOR_SENSOR.clone()
+_C.SIMULATOR.B_DEPTH.TYPE = "HabitatSimDepthSensor"
+_C.SIMULATOR.B_DEPTH.UUID = "b_depth"
+_C.SIMULATOR.B_DEPTH.MIN_DEPTH = 0.0
+_C.SIMULATOR.B_DEPTH.MAX_DEPTH = 5.0
+_C.SIMULATOR.B_DEPTH.NORMALIZE_DEPTH = True
+
 # DEPTH SENSOR
 # -----------------------------------------------------------------------------
 _C.SIMULATOR.DEPTH_SENSOR = SIMULATOR_SENSOR.clone()
