@@ -49,7 +49,7 @@ SIMULATOR:
     MIN_DEPTH: 0.1
     HFOV: 90
     ORIENTATION: [0.0, 0.0, 0.0]
-    POSITION:  [0.0, 0.625, -0.4164]
+    POSITION:  [0.0, 0, 0]
 TASK:
   TYPE: MultiNav-v0
   ROBOT: 'Spot'
