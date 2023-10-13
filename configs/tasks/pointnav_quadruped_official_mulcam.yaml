@@ -14,8 +14,8 @@ SIMULATOR:
     HEIGHT: 240
     HFOV: 90
     ORIENTATION: [0.0,0, 0]
-    # POSITION: [0.0, 0.325, -0.325]
-    POSITION: [0.0, 0.625, -0.4164]
+    POSITION: [0.0, 0.325, -0.325]
+    # POSITION: [0.0, 0.625, -0.4164]
   L_DEPTH:
     WIDTH: 320
     HEIGHT: 240
