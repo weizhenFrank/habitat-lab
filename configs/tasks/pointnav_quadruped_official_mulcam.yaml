@@ -53,7 +53,7 @@ SIMULATOR:
 TASK:
   TYPE: MultiNav-v0
   ROBOT: 'Spot'
-  ROBOT_URDF: "/legged_nav/habitat-lab/data/URDF_demo_assets/spot_base_urdf/model.urdf"
+  ROBOT_URDF: "./data/URDF_demo_assets/spot_base_urdf/model.urdf"
 
   SUCCESS_DISTANCE: 0.425
 
