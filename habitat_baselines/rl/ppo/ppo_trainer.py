@@ -328,11 +328,12 @@ class PPOTrainer(BaseRLTrainer):
             observations, device=self.device, cache=self._obs_batching_cache
         )
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
+        batch = {key: batch[key] for key in sorted(batch.keys())}
+        
         if self._static_encoder:
             with torch.no_grad():
                 batch["visual_features"] = self._encoder(batch)
-        import pdb; pdb.set_trace()
+        
         self.rollouts.buffers["observations"][0] = batch
 
         self.current_episode_reward = torch.zeros(self.envs.num_envs, 1)
@@ -510,7 +511,7 @@ class PPOTrainer(BaseRLTrainer):
             observations, device=self.device, cache=self._obs_batching_cache
         )
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
+        batch = {key: batch[key] for key in sorted(batch.keys())}
         rewards = torch.tensor(
             rewards_l,
             dtype=torch.float,
@@ -939,7 +940,7 @@ class PPOTrainer(BaseRLTrainer):
             observations, device=self.device, cache=self._obs_batching_cache
         )
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
+        batch = {key: batch[key] for key in sorted(batch.keys())}
         current_episode_reward = torch.zeros(self.envs.num_envs, 1, device="cpu")
 
         test_recurrent_hidden_states = torch.zeros(
@@ -1033,7 +1034,7 @@ class PPOTrainer(BaseRLTrainer):
                 cache=self._obs_batching_cache,
             )
             batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
+            batch = {key: batch[key] for key in sorted(batch.keys())}
             not_done_masks = torch.tensor(
                 [[not done] for done in dones],
                 dtype=torch.bool,

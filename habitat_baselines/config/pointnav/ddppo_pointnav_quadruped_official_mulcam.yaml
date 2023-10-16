@@ -7,11 +7,11 @@ ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID:  0
 VIDEO_OPTION: ['disk', 'tensorboard']
-TENSORBOARD_DIR:    './results/tb/official_mulcam_height'
-VIDEO_DIR:          './results/video_dir/official_mulcam_rgb_10_height'
-EVAL_CKPT_PATH_DIR: './results/checkpoints/official_mulcam/ckpt.10.pth'
-CHECKPOINT_FOLDER:  './results/checkpoints/official_mulcam'
-TXT_DIR:            './results/checkpoints/txts/official_mulcam_height'
+TENSORBOARD_DIR:    './results/tb/official_mulcam_sort_dict'
+VIDEO_DIR:          './results/video_dir/official_mulcam_sort_dict'
+EVAL_CKPT_PATH_DIR: './results/checkpoints/official_mulcam_sort_dict/'
+CHECKPOINT_FOLDER:  './results/checkpoints/official_mulcam_sort_dict'
+TXT_DIR:            './results/checkpoints/txts/official_mulcam_sort_dict'
 TEST_EPISODE_COUNT: -1
 NUM_ENVIRONMENTS: 8
 # SENSORS: ['DEPTH_SENSOR']

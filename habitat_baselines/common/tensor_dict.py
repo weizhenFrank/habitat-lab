@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+
+# Copyright (c) Facebook, Inc. and its affiliates.
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+
 import copy
 import numbers
 from typing import Callable, Dict, Optional, Tuple, Union, overload
@@ -12,25 +19,17 @@ TensorIndexType = Union[int, slice, Tuple[Union[int, slice], ...]]
 
 class TensorDict(Dict[str, Union["TensorDict", torch.Tensor]]):
     r"""A dictionary of tensors that can be indexed like a tensor or like a dictionary.
-    ...
+
+    .. code:: py
+        t = TensorDict(a=torch.randn(2, 2), b=TensorDict(c=torch.randn(3, 3)))
+
+        print(t)
+
+        print(t[0, 0])
+
+        print(t["a"])
+
     """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._sort_keys()
-
-    def _sort_keys(self):
-        sorted_items = sorted(self.items())  # This sorts the items based on the keys
-        super().clear()  # Clear the existing dictionary
-        super().update(sorted_items)  # Update the dictionary with sorted items
-
-    def __setitem__(self, key: Union[str, TensorIndexType], value: Union[torch.Tensor, "TensorDict"]):
-        super().__setitem__(key, value)
-        self._sort_keys()  # Sort the keys whenever a new item is set
-
-    def __iter__(self):
-        # Ensure that iteration through keys is in alphabetical order
-        return iter(sorted(super().keys()))
 
     @classmethod
     def from_tree(cls, tree: DictTree) -> "TensorDict":
@@ -116,6 +115,13 @@ class TensorDict(Dict[str, Union["TensorDict", torch.Tensor]]):
                     self[k].set(index, v, strict=strict)
                 else:
                     self[k][index].copy_(torch.as_tensor(v))
+
+    def __setitem__(
+        self,
+        index: Union[str, TensorIndexType],
+        value: Union[torch.Tensor, "TensorDict"],
+    ):
+        self.set(index, value)
 
     @classmethod
     def map_func(
