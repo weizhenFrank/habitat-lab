@@ -6,8 +6,8 @@ TRAINER_NAME: "ddppo"
 ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID:  0
-VIDEO_OPTION: ['disk', 'tensorboard']
-TENSORBOARD_DIR:    './results/tb/official_depth_6h4b'
+VIDEO_OPTION: ['disk']
+TENSORBOARD_DIR:    './results/tb/official_depth'
 VIDEO_DIR:          './results/video_dir/official_depth'
 EVAL_CKPT_PATH_DIR: './results/checkpoints/official_depth/ckpt.20.pth'
 CHECKPOINT_FOLDER:  './results/checkpoints/official_depth'
