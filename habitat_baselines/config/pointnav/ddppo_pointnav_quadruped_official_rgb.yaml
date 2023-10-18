@@ -1,4 +1,4 @@
-BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped_official_mulcam.yaml"
+BASE_TASK_CONFIG_PATH: "configs/tasks/pointnav_quadruped_official_rgb.yaml"
 TOTAL_NUM_STEPS: 5e8
 
 VERBOSE: False
@@ -6,17 +6,15 @@ TRAINER_NAME: "ddppo"
 ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID:  0
-VIDEO_OPTION: ['disk', 'tensorboard']
-TENSORBOARD_DIR:    './results/tb/official_mulcam_single'
-VIDEO_DIR:          './results/video_dir/official_mulcam_single'
-EVAL_CKPT_PATH_DIR: './results/checkpoints/official_mulcam_single'
-CHECKPOINT_FOLDER:  './results/checkpoints/official_mulcam_single'
-TXT_DIR:            './results/checkpoints/txts/official_mulcam_single'
+VIDEO_OPTION: ['disk']
+TENSORBOARD_DIR:    './results/tb/official_rgb_debug'
+VIDEO_DIR:          './results/video_dir/official_rgb_debug'
+EVAL_CKPT_PATH_DIR: './results/checkpoints/official_rgb_debug'
+CHECKPOINT_FOLDER:  './results/checkpoints/official_rgb_debug'
+TXT_DIR:            './results/checkpoints/txts/official_rgb_debug'
 TEST_EPISODE_COUNT: -1
 NUM_ENVIRONMENTS: 8
-# SENSORS: ['DEPTH_SENSOR']
-SENSORS: ['DEPTH_SENSOR']
-# SENSORS: ['DEPTH_SENSOR', 'RGB_SENSOR']
+SENSORS: ["RGB_SENSOR"]
 NUM_UPDATES: -1
 LOG_INTERVAL: 10
 NUM_CHECKPOINTS: 100

@@ -150,8 +150,6 @@ class PPOTrainer(BaseRLTrainer):
             observation_space, self.obs_transforms
         )
         # hack to prevent training with RGB; but still be able to evaluate / generate videos with RGB
-        if "rgb" in observation_space.spaces:
-            del observation_space.spaces["rgb"]
 
         self.actor_critic = policy.from_config(
             self.config, observation_space, self.policy_action_space
@@ -308,7 +306,6 @@ class PPOTrainer(BaseRLTrainer):
             )
 
         self._nbuffers = 2 if ppo_cfg.use_double_buffered_sampler else 1
-
         self.rollouts = RolloutStorage(
             ppo_cfg.num_steps,
             self.envs.num_envs,
@@ -644,11 +641,13 @@ class PPOTrainer(BaseRLTrainer):
         )
         # import pdb; pdb.set_trace()
         #### add images to tensorboard
-        writer.add_image(
-            "depth",
-            (self.rollouts.buffers["observations"]['depth'][0][0]).permute(2, 0, 1).cpu(),
-            self.num_steps_done,
-        )
+        info_keys = [ob_name for ob_name in self.rollouts.buffers["observations"].keys() if 'depth' in ob_name or 'rgb' in ob_name]
+        for i in info_keys:
+            writer.add_image(
+                i,
+                (self.rollouts.buffers["observations"][i][0][0]).permute(2, 0, 1).cpu(),
+                self.num_steps_done,
+            )
         
         # Check to see if there are any metrics
         # that haven't been logged yet
