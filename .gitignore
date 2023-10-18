@@ -12,3 +12,4 @@ data/
 core.*
 *.log
 train.log
+pymp*
