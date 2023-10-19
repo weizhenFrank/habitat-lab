@@ -641,13 +641,14 @@ class PPOTrainer(BaseRLTrainer):
         )
         # import pdb; pdb.set_trace()
         #### add images to tensorboard
-        info_keys = [ob_name for ob_name in self.rollouts.buffers["observations"].keys() if 'depth' in ob_name or 'rgb' in ob_name]
-        for i in info_keys:
-            writer.add_image(
-                i,
-                (self.rollouts.buffers["observations"][i][0][0]).permute(2, 0, 1).cpu(),
-                self.num_steps_done,
-            )
+        if self.num_steps_done % 100000 == 0:
+            info_keys = [ob_name for ob_name in self.rollouts.buffers["observations"].keys() if 'depth' in ob_name or 'rgb' in ob_name]
+            for i in info_keys:
+                writer.add_image(
+                    i,
+                    (self.rollouts.buffers["observations"][i][0][0]).permute(2, 0, 1).cpu(),
+                    self.num_steps_done,
+                )
         
         # Check to see if there are any metrics
         # that haven't been logged yet

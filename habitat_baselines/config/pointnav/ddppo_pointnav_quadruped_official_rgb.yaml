@@ -7,11 +7,11 @@ ENV_NAME: "MultiNavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID:  0
 VIDEO_OPTION: ['disk']
-TENSORBOARD_DIR:    './results/tb/official_rgb_debug'
-VIDEO_DIR:          './results/video_dir/official_rgb_debug'
-EVAL_CKPT_PATH_DIR: './results/checkpoints/official_rgb_debug'
-CHECKPOINT_FOLDER:  './results/checkpoints/official_rgb_debug'
-TXT_DIR:            './results/checkpoints/txts/official_rgb_debug'
+TENSORBOARD_DIR:    './results/tb/official_rgb'
+VIDEO_DIR:          './results/video_dir/official_rgb'
+EVAL_CKPT_PATH_DIR: './results/checkpoints/official_rgb'
+CHECKPOINT_FOLDER:  './results/checkpoints/official_rgb'
+TXT_DIR:            './results/checkpoints/txts/official_rgb'
 TEST_EPISODE_COUNT: -1
 NUM_ENVIRONMENTS: 8
 SENSORS: ["RGB_SENSOR"]
