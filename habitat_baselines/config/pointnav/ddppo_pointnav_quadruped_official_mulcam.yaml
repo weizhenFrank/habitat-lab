@@ -13,7 +13,7 @@ EVAL_CKPT_PATH_DIR: './results/checkpoints/official_mulcam'
 CHECKPOINT_FOLDER:  './results/checkpoints/official_mulcam'
 TXT_DIR:            './results/txts/official_mulcam'
 TEST_EPISODE_COUNT: -1
-NUM_ENVIRONMENTS: 64
+NUM_ENVIRONMENTS: 32
 # SENSORS: ['DEPTH_SENSOR']
 SENSORS: ['DEPTH_SENSOR', 'L_DEPTH', 'R_DEPTH', 'B_DEPTH']
 # SENSORS: ['DEPTH_SENSOR', 'RGB_SENSOR']
