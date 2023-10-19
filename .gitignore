@@ -14,3 +14,4 @@ core.*
 train.log
 pymp*
 .tensorboard-info
+*torchelastic_8mp55lgm*
