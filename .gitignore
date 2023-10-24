@@ -8,6 +8,7 @@ habitat-sim/
 results/checkpoints
 results/official_check
 results/video_dir
+results/txts
 data/
 *.png
 *.jpg
