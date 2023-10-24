@@ -9,7 +9,7 @@ TORCH_GPU_ID:  0
 VIDEO_OPTION: ['disk']
 TENSORBOARD_DIR:    './results/tb/official_depth'
 VIDEO_DIR:          './results/video_dir/official_depth'
-EVAL_CKPT_PATH_DIR: './results/checkpoints/official_depth/ckpt.20.pth'
+EVAL_CKPT_PATH_DIR: './results/checkpoints/official_depth'
 CHECKPOINT_FOLDER:  './results/checkpoints/official_depth'
 TXT_DIR:            './results/checkpoints/txts/official_depth'
 TEST_EPISODE_COUNT: -1

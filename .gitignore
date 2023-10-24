@@ -6,6 +6,8 @@
 .DS_Store
 habitat-sim/
 results/checkpoints
+results/official_check
+results/video_dir
 data/
 *.png
 *.jpg
