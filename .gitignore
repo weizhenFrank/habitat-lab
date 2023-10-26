@@ -5,7 +5,8 @@
 **.pyc
 .DS_Store
 habitat-sim/
-results/checkpoints
+results/checkpoints/*
+!results/checkpoints/official_depth/.habitat-resume-state.pth
 results/official_check
 results/video_dir
 data/
@@ -17,3 +18,4 @@ train.log
 pymp*
 .tensorboard-info
 *torchelastic_8mp55lgm*
+
