@@ -339,6 +339,7 @@ class RNNStateEncoder(nn.Module):
     def forward(
         self, x, hidden_states, masks
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        import pdb; pdb.set_trace()
         hidden_states = hidden_states.permute(1, 0, 2)
         if x.size(0) == hidden_states.size(1):
             x, hidden_states = self.single_forward(x, hidden_states, masks)
