@@ -194,8 +194,13 @@ class ResNetEncoder(nn.Module):
 
         cnn_input = []
         if self._n_input_rgb > 0:
-            rgb_observations = observations["rgb"]
+            # Extract all keys in observations that has 'rgb' in it
+            rgb_keys = [k for k in observations.keys() if 'rgb' in k]
+            # Extract the corresponding rgb observations and concatenate them along the channel dimension
+            rgb_observations = torch.cat([observations[k] for k in rgb_keys], dim=3)
+
             rgb_observations = rgb_observations.permute(0, 3, 1, 2)
+
             rgb_observations = rgb_observations.float() / 255.0  # normalize RGB
             cnn_input.append(rgb_observations)
 

@@ -200,7 +200,7 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
         generated image of a single frame.
     """
     egocentric_view_l: List[np.ndarray] = []
-    for k in ["rgb", "spot_right_rgb", "spot_left_rgb"]:
+    for k in ["rgb", "spot_right_rgb", "spot_left_rgb", 'l_rgb', 'r_rgb', 'b_rgb']:
         if k in observation:
             rgb = observation[k]
             if not isinstance(rgb, np.ndarray):
