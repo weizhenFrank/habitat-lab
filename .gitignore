@@ -10,4 +10,8 @@ results/
 *npy
 *png
 data/
-habitat-lab_bp
+habitat-lab_bp/
+
+**/datasets/*
+
+habitat-lab/habitat/datasets
