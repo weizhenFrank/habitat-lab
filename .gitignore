@@ -6,4 +6,6 @@
 .DS_Store
 habitat-sim/
 results/
-
+*jpg
+*npy
+*png

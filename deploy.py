@@ -45,11 +45,26 @@ from habitat_baselines.utils.common import (ObservationBatchingCache,
                                             batch_obs, generate_video)
 from habitat_baselines.utils.env_utils import construct_envs
 from gym import spaces
-
-
+import cv2
 
 from spot_wrapper.spot import Spot
 from spot_wrapper import deploy_spot
+
+import argparse
+import time
+from collections import deque
+
+import cv2
+import numpy as np
+from spot_wrapper.spot import (
+    Spot,
+    SpotCamIds,
+    draw_crosshair,
+    image_response_to_cv2,
+    scale_depth_img,
+)
+from spot_wrapper.utils.utils import color_bbox, resize_to_tallest
+from spot_wrapper import depth_filter
 
 @baseline_registry.register_trainer(name="ddppo")
 @baseline_registry.register_trainer(name="ppo")
@@ -64,17 +79,17 @@ class Deploy(BaseRLTrainer):
     agent: PPO
     actor_critic: Policy
 
-    def __init__(self, checkpoint_path=None, spot=None, target=None):
+    def __init__(self, checkpoint_path=None, spot=None, target=None, save_dir=None):
 
 
         self.spot = spot
         self.spot.power_on()
         self.spot.stand(timeout_sec=None)
-        time.sleep(10)
+        time.sleep(5)
         self.target = target
         self.checkpoint_path = checkpoint_path
         ckpt_dict = self.load_checkpoint(map_location="cpu")
-
+        print(f"Loading {ckpt_dict['extra_state']['step']/1000000:.2f}M step checkpoint")
         self.config = ckpt_dict["config"]
         self.actor_critic = None
         self.agent = None
@@ -94,6 +109,8 @@ class Deploy(BaseRLTrainer):
         
         self.device = 'cpu'
         self.step_num = 0
+        os.makedirs(save_dir, exist_ok=True)
+        self.save_dir = save_dir
         super().__init__(ckpt_dict["config"])
     def _setup_actor_critic_agent(self, ppo_cfg: Config) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -188,21 +205,6 @@ class Deploy(BaseRLTrainer):
         config = ckpt_dict["config"]
 
         ppo_cfg = config.RL.PPO
-
-        # if self.config.RL.POLICY.action_distribution_type == "gaussian":
-        #     self.policy_action_space = self.envs.action_spaces[0][self.action_type]
-        #     action_shape = self.policy_action_space.n
-        #     action_type = torch.float
-            
-        # else:
-        #     if len(self.discrete_actions) > 0:
-        #         self.policy_action_space = ActionSpace(
-        #             {str(i): EmptySpace() for i in range(len(self.discrete_actions))}
-        #         )
-        #     else:
-        #         self.policy_action_space = self.envs.action_spaces[0]
-        #     action_shape = 1
-        #     action_type = torch.long
         
         action_shape = 3
         action_type = torch.float
@@ -211,13 +213,7 @@ class Deploy(BaseRLTrainer):
         self.agent.load_state_dict(ckpt_dict["state_dict"])
         self.actor_critic = self.agent.actor_critic
 
-        img, goal, done, self.step_num = deploy_spot.command_spot(self.spot, goal_position=self.target, step_num=self.step_num)
-        # batch = batch_obs(
-        #     observations, device=self.device, cache=self._obs_batching_cache
-        # )
-        # batch = apply_obs_transforms_batch(batch, self.obs_transforms)
-
-
+        img, rgb, img_raw, goal, done, self.step_num = deploy_spot.command_spot(self.spot, goal_position=self.target, step_num=self.step_num, return_rgb=True)
         test_recurrent_hidden_states = torch.zeros(
             1,
             self.actor_critic.net.num_recurrent_layers,
@@ -237,10 +233,10 @@ class Deploy(BaseRLTrainer):
             dtype=torch.bool,
         )
 
-
         self.actor_critic.eval()
 
         batch = self.to_tensor(img, goal)
+        self.show_obs(img, rgb, destroy=True)
         while not done:
 
             with torch.no_grad():
@@ -259,6 +255,12 @@ class Deploy(BaseRLTrainer):
             # in the subprocesses.
             # For backwards compatibility, we also call .item() to convert to
             # an int
+            # import pdb; pdb.set_trace()
+            image = batch['depth'].squeeze().numpy() * 255
+            cv2.imwrite(os.path.join(self.save_dir, f'{self.step_num}_depth.jpg'), image)
+            cv2.imwrite(os.path.join(self.save_dir, f'{self.step_num}_grey.jpg'), rgb)
+            np.save(os.path.join(self.save_dir, f'{self.step_num}_raw.npy'), img_raw)
+
             if self.config.RL.POLICY.action_distribution_type == "gaussian":
                 step_data = [
                     action_to_velocity_control(a, self.action_type)
@@ -277,22 +279,49 @@ class Deploy(BaseRLTrainer):
                 ]
             else:
                 step_data = [a.item() for a in actions.to(device="cpu")]
-                
-            img, goal, done, self.step_num = deploy_spot.command_spot(self.spot, step_data, done, goal_position=self.target, step_num=self.step_num)
-            batch = self.to_tensor(img, goal)
             
-            # batch = batch_obs(
-            #     observations,
-            #     device=self.device,
-            #     cache=self._obs_batching_cache,
-            # )
-            # batch = apply_obs_transforms_batch(batch, self.obs_transforms)
+            self.show_obs(img, rgb, destroy=False, done=done)
+            img, rgb, img_raw, goal, done, self.step_num = deploy_spot.command_spot(self.spot, step_data, done, goal_position=self.target, step_num=self.step_num, return_rgb=True)
+            batch = self.to_tensor(img, goal)
+        self.show_obs(img, rgb, destroy=False, done=done)
+            
 
     def to_tensor(self, img, goal):
         img = torch.tensor(img, dtype=torch.float32, device='cpu').unsqueeze(0).unsqueeze(-1)
         goal = torch.tensor(goal, dtype=torch.float32, device='cpu').unsqueeze(0)
-        
+        # noise = torch.rand_like(img)
         return TensorDict({'depth':img, 'pointgoal_with_gps_compass': goal})
+
+    def show_obs(self, depth_image, rgb_image, destroy=False, done=False):
+        depth_image = cv2.cvtColor((255.0 * depth_image).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        # Resize the depth image to have the same height as the RGB image
+        scaling_factor = rgb_image.shape[0] / depth_image.shape[0]
+        depth_resized = cv2.resize(depth_image, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
+
+        # Make sure both images are 3-channel for visualization (optional)
+        # rgb_colored = cv2.cvtColor(rgb_image, cv2.COLOR_GRAY2BGR)
+
+        # Concatenate images horizontally
+        concatenated_image = np.hstack((rgb_image, depth_resized))
+
+        # Add dynamic step information on the top-left corner
+        if done:
+            height, width, _ = concatenated_image.shape
+            (text_width, text_height), _ = cv2.getTextSize("Success!", cv2.FONT_HERSHEY_SIMPLEX, 2, 2)
+            startX = int((width - text_width) / 2)
+            startY = int((height + text_height) / 2)
+            # cv2.putText(concatenated_image, f"Step: {self.step_num}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(concatenated_image, "Success!", (startX, startY), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2)
+            cv2.imwrite("/Users/weizhenliu/VScodeProjects/legged_nav/assis/captured_image.jpg", rgb_image)
+        else:
+            cv2.putText(concatenated_image, f"Step: {self.step_num}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        # Display the concatenated image
+        cv2.imshow('RGB and Depth', concatenated_image)
+        cv2.waitKey(1)
+        # if destroy:
+        #     cv2.destroyAllWindows()
+
 
 
 if __name__ == "__main__":
@@ -300,6 +329,7 @@ if __name__ == "__main__":
 
     with spot.get_lease() as lease:
         run_spot = Deploy(spot=spot, 
-                    checkpoint_path="/Users/weizhenliu/VScodeProjects/legged_nav/habitat-lab/results/checkpoints/official/ckpt.71.pth", 
-                    target=np.array([5, 0, -5])) # right, up, back
+                    checkpoint_path="/Users/weizhenliu/Downloads/official_depth/ckpt.20.pth",
+                    target=np.array([-3, 0, 3]), # right, up, back
+                    save_dir = "/Users/weizhenliu/VScodeProjects/legged_nav/habitat-lab/deploy_results/back/save_raw_depth/5max/005") 
         run_spot.deploy()
