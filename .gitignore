@@ -9,9 +9,5 @@ results/
 *jpg
 *npy
 *png
-data/
-habitat-lab_bp/
-
-**/datasets/*
-
-habitat-lab/habitat/datasets
+./data
+./results
